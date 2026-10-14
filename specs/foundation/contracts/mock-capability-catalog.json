@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1.0.0",
+  "profile": "poc-mock",
+  "connectors": [
+    {
+      "connectorId": "notification_mock",
+      "operations": [
+        {
+          "operationId": "notify_rejection",
+          "capability": "notification.send",
+          "sideEffectLevel": "write",
+          "mode": "simulate"
+        }
+      ]
+    },
+    {
+      "connectorId": "people_api",
+      "operations": [
+        {
+          "operationId": "lookup_request",
+          "capability": "http.request",
+          "sideEffectLevel": "read",
+          "mode": "simulate"
+        }
+      ]
+    },
+    {
+      "connectorId": "hr_db",
+      "operations": [
+        {
+          "operationId": "set_request_status",
+          "capability": "database.record.update",
+          "sideEffectLevel": "write",
+          "mode": "simulate"
+        }
+      ]
+    }
+  ],
+  "notes": "Catálogo somente fictício. Não contém endpoints, tabelas reais, credenciais nem autorização de executar."
+}

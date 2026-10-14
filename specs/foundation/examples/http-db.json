@@ -1,0 +1,244 @@
+{
+  "schemaVersion": "1.0.0",
+  "locale": "pt-BR",
+  "targetProfile": "generic-bpmn2",
+  "status": "draft",
+  "pendingQuestions": [],
+  "assumptions": [
+    {
+      "id": "as_1",
+      "text": "Conectores são apenas mock na POC; operação real depende de provisionamento e aprovação.",
+      "confirmed": true,
+      "origin": "catalog"
+    }
+  ],
+  "policies": {
+    "manualApprovalRequired": true,
+    "allowExecution": false
+  },
+  "metadata": {
+    "knowledgeVersion": "1.0.0",
+    "revision": 0
+  },
+  "id": "processo_integracao",
+  "name": "Consultar e atualizar registro por conectores aprovados",
+  "description": "Exemplo fictício declarativo: consumir endpoint, revisar retorno e atualizar um registro por operação controlada.",
+  "roles": [
+    {
+      "id": "operador",
+      "label": "Operador autorizado",
+      "resolution": "group",
+      "groupKey": "operations"
+    }
+  ],
+  "variables": [
+    {
+      "key": "requestId",
+      "type": "string",
+      "required": false,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "form",
+        "formId": "frm_param",
+        "fieldKey": "requestId"
+      }
+    },
+    {
+      "key": "approved",
+      "type": "boolean",
+      "required": false,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "form",
+        "formId": "frm_approve",
+        "fieldKey": "approved"
+      }
+    },
+    {
+      "key": "currentStatus",
+      "type": "string",
+      "required": false,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "action",
+        "nodeId": "fetch",
+        "outputKey": "status"
+      }
+    },
+    {
+      "key": "updateSuccess",
+      "type": "boolean",
+      "required": false,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "action",
+        "nodeId": "update",
+        "outputKey": "updated"
+      }
+    }
+  ],
+  "forms": [
+    {
+      "id": "frm_param",
+      "name": "Consulta inicial",
+      "usage": "start",
+      "fields": [
+        {
+          "key": "requestId",
+          "label": "ID da solicitação",
+          "type": "text",
+          "required": true,
+          "bindTo": "requestId"
+        }
+      ]
+    },
+    {
+      "id": "frm_approve",
+      "name": "Conferir consulta",
+      "usage": "task",
+      "fields": [
+        {
+          "key": "approved",
+          "label": "Autorizar atualização",
+          "type": "boolean",
+          "required": true,
+          "bindTo": "approved"
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "inicio",
+      "type": "startEvent",
+      "name": "Solicitar atualização",
+      "formId": "frm_param"
+    },
+    {
+      "id": "fetch",
+      "type": "serviceTask",
+      "name": "Consultar API",
+      "action": {
+        "capability": "http.request",
+        "connectorId": "people_api",
+        "operationId": "lookup_request",
+        "inputMapping": {
+          "requestId": {
+            "var": "requestId"
+          }
+        },
+        "outputMapping": {
+          "status": "currentStatus"
+        },
+        "timeoutMs": 3000,
+        "retryPolicy": {
+          "maxAttempts": 2,
+          "backoffMs": 200
+        },
+        "sideEffectLevel": "read"
+      }
+    },
+    {
+      "id": "human",
+      "type": "userTask",
+      "name": "Aprovar alteração",
+      "roleId": "operador",
+      "formId": "frm_approve"
+    },
+    {
+      "id": "route",
+      "type": "exclusiveGateway",
+      "name": "Autorizado?"
+    },
+    {
+      "id": "update",
+      "type": "serviceTask",
+      "name": "Atualizar registro",
+      "action": {
+        "capability": "database.record.update",
+        "connectorId": "hr_db",
+        "operationId": "set_request_status",
+        "inputMapping": {
+          "requestId": {
+            "var": "requestId"
+          },
+          "status": {
+            "literal": "approved"
+          }
+        },
+        "outputMapping": {
+          "updated": "updateSuccess"
+        },
+        "timeoutMs": 4000,
+        "retryPolicy": {
+          "maxAttempts": 1,
+          "backoffMs": 500
+        },
+        "sideEffectLevel": "write",
+        "idempotencyKey": {
+          "var": "requestId"
+        },
+        "approvalRequired": true
+      }
+    },
+    {
+      "id": "fim",
+      "type": "endEvent",
+      "name": "Finalizar"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f_1",
+      "source": "inicio",
+      "target": "fetch"
+    },
+    {
+      "id": "f_2",
+      "source": "fetch",
+      "target": "human"
+    },
+    {
+      "id": "f_3",
+      "source": "human",
+      "target": "route"
+    },
+    {
+      "id": "f_4",
+      "source": "route",
+      "target": "update",
+      "condition": {
+        "op": "eq",
+        "left": {
+          "var": "approved"
+        },
+        "right": {
+          "literal": true
+        }
+      }
+    },
+    {
+      "id": "f_5",
+      "source": "route",
+      "target": "fim",
+      "condition": {
+        "op": "eq",
+        "left": {
+          "var": "approved"
+        },
+        "right": {
+          "literal": false
+        }
+      }
+    },
+    {
+      "id": "f_6",
+      "source": "update",
+      "target": "fim"
+    }
+  ]
+}

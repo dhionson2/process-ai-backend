@@ -1,0 +1,343 @@
+{
+  "schemaVersion": "1.0.0",
+  "locale": "pt-BR",
+  "targetProfile": "generic-bpmn2",
+  "status": "draft",
+  "pendingQuestions": [
+    {
+      "id": "pq_1",
+      "question": "Como identificar o gestor responsável na base da 1Doc?",
+      "blocking": true,
+      "relatedNodeId": "aprovacao"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "as_1",
+      "text": "O RH apenas registra e não reprova pedidos.",
+      "confirmed": false,
+      "origin": "inference"
+    }
+  ],
+  "policies": {
+    "manualApprovalRequired": true,
+    "allowExecution": false
+  },
+  "metadata": {
+    "knowledgeVersion": "1.0.0",
+    "revision": 0
+  },
+  "id": "processo_ferias",
+  "name": "Solicitação de Férias",
+  "description": "Rascunho fictício: gestor aprova ou rejeita; RH registra aprovada; notificação de rejeição proposta, não executável.",
+  "roles": [
+    {
+      "id": "solicitante",
+      "label": "Servidor solicitante",
+      "resolution": "requester"
+    },
+    {
+      "id": "gestor",
+      "label": "Gestor aprovador",
+      "resolution": "manager-of-requester"
+    },
+    {
+      "id": "rh",
+      "label": "Equipe de RH",
+      "resolution": "group",
+      "groupKey": "rh"
+    }
+  ],
+  "variables": [
+    {
+      "key": "startDate",
+      "type": "date",
+      "required": true,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "form",
+        "formId": "form_inicio",
+        "fieldKey": "startDate"
+      }
+    },
+    {
+      "key": "endDate",
+      "type": "date",
+      "required": true,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "form",
+        "formId": "form_inicio",
+        "fieldKey": "endDate"
+      }
+    },
+    {
+      "key": "notes",
+      "type": "string",
+      "required": false,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "form",
+        "formId": "form_inicio",
+        "fieldKey": "notes"
+      }
+    },
+    {
+      "key": "decision",
+      "type": "string",
+      "required": true,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "form",
+        "formId": "form_gestor",
+        "fieldKey": "decision"
+      },
+      "enumValues": [
+        "approved",
+        "rejected"
+      ]
+    },
+    {
+      "key": "reason",
+      "type": "string",
+      "required": false,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "form",
+        "formId": "form_gestor",
+        "fieldKey": "reason"
+      }
+    },
+    {
+      "key": "registered",
+      "type": "boolean",
+      "required": false,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "form",
+        "formId": "form_rh",
+        "fieldKey": "registered"
+      }
+    },
+    {
+      "key": "instanceId",
+      "type": "string",
+      "required": true,
+      "sensitive": false,
+      "scope": "process",
+      "source": {
+        "kind": "system",
+        "systemKey": "processInstanceId"
+      }
+    }
+  ],
+  "forms": [
+    {
+      "id": "form_inicio",
+      "name": "Solicitação",
+      "usage": "start",
+      "fields": [
+        {
+          "key": "startDate",
+          "label": "Início das férias",
+          "type": "date",
+          "required": true,
+          "bindTo": "startDate"
+        },
+        {
+          "key": "endDate",
+          "label": "Fim das férias",
+          "type": "date",
+          "required": true,
+          "bindTo": "endDate"
+        },
+        {
+          "key": "notes",
+          "label": "Observações",
+          "type": "textarea",
+          "required": false,
+          "bindTo": "notes"
+        }
+      ]
+    },
+    {
+      "id": "form_gestor",
+      "name": "Decisão do gestor",
+      "usage": "task",
+      "fields": [
+        {
+          "key": "decision",
+          "label": "Decisão",
+          "type": "select",
+          "required": true,
+          "bindTo": "decision",
+          "options": [
+            {
+              "label": "Aprovar",
+              "value": "approved"
+            },
+            {
+              "label": "Rejeitar",
+              "value": "rejected"
+            }
+          ]
+        },
+        {
+          "key": "reason",
+          "label": "Motivo da rejeição",
+          "type": "textarea",
+          "required": false,
+          "bindTo": "reason",
+          "requiredWhen": {
+            "op": "eq",
+            "left": {
+              "var": "decision"
+            },
+            "right": {
+              "literal": "rejected"
+            }
+          },
+          "visibleWhen": {
+            "op": "eq",
+            "left": {
+              "var": "decision"
+            },
+            "right": {
+              "literal": "rejected"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "form_rh",
+      "name": "Registro do RH",
+      "usage": "task",
+      "fields": [
+        {
+          "key": "registered",
+          "label": "Registrado no RH",
+          "type": "boolean",
+          "required": true,
+          "bindTo": "registered"
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "inicio",
+      "name": "Pedido de férias",
+      "type": "startEvent",
+      "formId": "form_inicio"
+    },
+    {
+      "id": "aprovacao",
+      "name": "Analisar solicitação",
+      "type": "userTask",
+      "roleId": "gestor",
+      "formId": "form_gestor"
+    },
+    {
+      "id": "decisao",
+      "name": "Aprovado?",
+      "type": "exclusiveGateway"
+    },
+    {
+      "id": "registro",
+      "name": "Registrar férias no RH",
+      "type": "userTask",
+      "roleId": "rh",
+      "formId": "form_rh"
+    },
+    {
+      "id": "notificar",
+      "name": "Comunicar rejeição",
+      "type": "serviceTask",
+      "action": {
+        "capability": "notification.send",
+        "connectorId": "notification_mock",
+        "operationId": "notify_rejection",
+        "inputMapping": {
+          "reason": {
+            "var": "reason"
+          }
+        },
+        "outputMapping": {},
+        "timeoutMs": 5000,
+        "retryPolicy": {
+          "maxAttempts": 1,
+          "backoffMs": 1000
+        },
+        "sideEffectLevel": "write",
+        "idempotencyKey": {
+          "var": "instanceId"
+        },
+        "approvalRequired": true
+      }
+    },
+    {
+      "id": "fim",
+      "name": "Processo encerrado",
+      "type": "endEvent"
+    }
+  ],
+  "flows": [
+    {
+      "id": "fl_1",
+      "source": "inicio",
+      "target": "aprovacao"
+    },
+    {
+      "id": "fl_2",
+      "source": "aprovacao",
+      "target": "decisao"
+    },
+    {
+      "id": "fl_3",
+      "source": "decisao",
+      "target": "registro",
+      "label": "Aprovado",
+      "condition": {
+        "op": "eq",
+        "left": {
+          "var": "decision"
+        },
+        "right": {
+          "literal": "approved"
+        }
+      }
+    },
+    {
+      "id": "fl_4",
+      "source": "decisao",
+      "target": "notificar",
+      "label": "Rejeitado",
+      "condition": {
+        "op": "eq",
+        "left": {
+          "var": "decision"
+        },
+        "right": {
+          "literal": "rejected"
+        }
+      }
+    },
+    {
+      "id": "fl_5",
+      "source": "registro",
+      "target": "fim"
+    },
+    {
+      "id": "fl_6",
+      "source": "notificar",
+      "target": "fim"
+    }
+  ]
+}

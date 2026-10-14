@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "components": [
+    {
+      "type": "checkbox",
+      "key": "approved",
+      "label": "Autorizar atualização",
+      "id": "Field_frm_approve_0",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "type": "button",
+      "key": "submit",
+      "label": "Enviar",
+      "action": "submit",
+      "id": "Submit_frm_approve"
+    }
+  ]
+}

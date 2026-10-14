@@ -1,0 +1,16 @@
+{
+  "specId": "processo_integracao",
+  "targetProfile": "generic-bpmn2",
+  "previewOnly": true,
+  "isExecutable": false,
+  "formArtifacts": {
+    "frm_param": "http-db-frm_param.form.json",
+    "frm_approve": "http-db-frm_approve.form.json"
+  },
+  "uncompiledRules": [],
+  "pendingQuestions": [],
+  "notes": [
+    "BPMN gerado somente para design; serviceTask e conditions NÃO são executáveis.",
+    "Formulários NÃO foram importados em browser; teste com versão real é obrigatório."
+  ]
+}

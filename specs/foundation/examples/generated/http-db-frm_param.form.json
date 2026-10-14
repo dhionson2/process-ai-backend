@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "components": [
+    {
+      "type": "textfield",
+      "key": "requestId",
+      "label": "ID da solicitação",
+      "id": "Field_frm_param_0",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "type": "button",
+      "key": "submit",
+      "label": "Enviar",
+      "action": "submit",
+      "id": "Submit_frm_param"
+    }
+  ]
+}

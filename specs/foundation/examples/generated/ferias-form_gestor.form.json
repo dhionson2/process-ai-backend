@@ -1,0 +1,37 @@
+{
+  "type": "default",
+  "components": [
+    {
+      "type": "select",
+      "key": "decision",
+      "label": "Decisão",
+      "id": "Field_form_gestor_0",
+      "validate": {
+        "required": true
+      },
+      "values": [
+        {
+          "label": "Aprovar",
+          "value": "approved"
+        },
+        {
+          "label": "Rejeitar",
+          "value": "rejected"
+        }
+      ]
+    },
+    {
+      "type": "textarea",
+      "key": "reason",
+      "label": "Motivo da rejeição",
+      "id": "Field_form_gestor_1"
+    },
+    {
+      "type": "button",
+      "key": "submit",
+      "label": "Enviar",
+      "action": "submit",
+      "id": "Submit_form_gestor"
+    }
+  ]
+}

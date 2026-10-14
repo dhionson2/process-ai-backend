@@ -1,0 +1,30 @@
+{
+  "specId": "processo_ferias",
+  "targetProfile": "generic-bpmn2",
+  "previewOnly": true,
+  "isExecutable": false,
+  "formArtifacts": {
+    "form_inicio": "ferias-form_inicio.form.json",
+    "form_gestor": "ferias-form_gestor.form.json",
+    "form_rh": "ferias-form_rh.form.json"
+  },
+  "uncompiledRules": [
+    {
+      "code": "DYNAMIC_FORM_RULE_NOT_COMPILED",
+      "field": "reason",
+      "reason": "Requer compilador FEEL e teste na versão form-js alvo"
+    }
+  ],
+  "pendingQuestions": [
+    {
+      "id": "pq_1",
+      "question": "Como identificar o gestor responsável na base da 1Doc?",
+      "blocking": true,
+      "relatedNodeId": "aprovacao"
+    }
+  ],
+  "notes": [
+    "BPMN gerado somente para design; serviceTask e conditions NÃO são executáveis.",
+    "Formulários NÃO foram importados em browser; teste com versão real é obrigatório."
+  ]
+}

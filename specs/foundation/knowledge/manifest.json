@@ -1,0 +1,87 @@
+{
+  "version": "1.0.0",
+  "status": "design-proposal",
+  "locale": "pt-BR",
+  "selectionPolicy": "deterministic-tags-first",
+  "modules": [
+    {
+      "id": "policy",
+      "path": "system-policy.md",
+      "always": true,
+      "tags": [
+        "any"
+      ]
+    },
+    {
+      "id": "bpmn",
+      "path": "bpmn-20.md",
+      "always": true,
+      "tags": [
+        "any"
+      ]
+    },
+    {
+      "id": "forms",
+      "path": "forms.md",
+      "always": false,
+      "tags": [
+        "form",
+        "approval",
+        "input",
+        "userTask"
+      ]
+    },
+    {
+      "id": "integrations",
+      "path": "integrations.md",
+      "always": false,
+      "tags": [
+        "http",
+        "api",
+        "database",
+        "write",
+        "notification",
+        "serviceTask",
+        "integration"
+      ]
+    },
+    {
+      "id": "patterns",
+      "path": "padroes-avancados.md",
+      "always": false,
+      "tags": [
+        "timer",
+        "exception",
+        "gateway",
+        "parallel",
+        "subprocess",
+        "multiInstance",
+        "integration"
+      ]
+    },
+    {
+      "id": "few-shots",
+      "path": "exemplos-intencoes.md",
+      "always": false,
+      "tags": [
+        "examples",
+        "training",
+        "evaluation"
+      ]
+    }
+  ],
+  "sourcePrecedence": [
+    "official-standard",
+    "target-engine-supported",
+    "product-profile-supported",
+    "tenant-policies",
+    "examples"
+  ],
+  "mustValidateWith": [
+    "contracts/process-spec.v1.schema.json",
+    "runtime-capabilities",
+    "security-policy",
+    "human-review"
+  ],
+  "notes": "Manifesto de design; selecao de trechos e versões devem ser implementados no backend."
+}

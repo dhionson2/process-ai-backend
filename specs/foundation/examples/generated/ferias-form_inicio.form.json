@@ -1,0 +1,38 @@
+{
+  "type": "default",
+  "components": [
+    {
+      "type": "datetime",
+      "key": "startDate",
+      "label": "Início das férias",
+      "id": "Field_form_inicio_0",
+      "validate": {
+        "required": true
+      },
+      "subtype": "date"
+    },
+    {
+      "type": "datetime",
+      "key": "endDate",
+      "label": "Fim das férias",
+      "id": "Field_form_inicio_1",
+      "validate": {
+        "required": true
+      },
+      "subtype": "date"
+    },
+    {
+      "type": "textarea",
+      "key": "notes",
+      "label": "Observações",
+      "id": "Field_form_inicio_2"
+    },
+    {
+      "type": "button",
+      "key": "submit",
+      "label": "Enviar",
+      "action": "submit",
+      "id": "Submit_form_inicio"
+    }
+  ]
+}

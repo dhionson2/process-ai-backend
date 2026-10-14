@@ -1,0 +1,108 @@
+openapi: 3.1.0
+info:
+  title: Process AI — API Bootstrap
+  version: 0.1.0
+  description: Apenas desenvolvimento local. Sem autenticação, persistência ou IA; não publicar.
+servers:
+  - url: http://127.0.0.1:3333
+paths:
+  /health:
+    get:
+      summary: Healthcheck local
+      responses:
+        '200':
+          description: API ativa
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, version]
+                properties:
+                  status: {type: string, const: ok}
+                  service: {type: string}
+                  version: {type: string}
+  /api/v1/capabilities:
+    get:
+      summary: Capacidades declarativas da POC
+      responses:
+        '200':
+          description: Perfil e catálogo ilustrativo
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+  /api/v1/examples:
+    get:
+      summary: Lista fixa de cenários fictícios
+      responses:
+        '200':
+          description: Cenários de referência
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, name, description]
+                  properties:
+                    id: {type: string, enum: [ferias, http-db]}
+                    name: {type: string}
+                    description: {type: string}
+  /api/v1/examples/{id}:
+    get:
+      summary: ProcessSpec e artefatos de prévia estáticos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, enum: [ferias, http-db]}
+      responses:
+        '200':
+          description: Dados fictícios de referência
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [spec, bpmnXml, forms, manifest, notice]
+                properties:
+                  spec: {type: object, additionalProperties: true}
+                  bpmnXml: {type: string}
+                  forms:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, schema]
+                      properties:
+                        id: {type: string}
+                        schema: {type: object, additionalProperties: true}
+                  manifest: {type: object, additionalProperties: true}
+                  notice: {type: string}
+        '404': {description: Exemplo inexistente}
+  /api/v1/validate:
+    post:
+      summary: Validação inicial de ProcessSpec v1
+      description: JSON Schema 2020-12 e checagens semânticas parciais, sem I/O externo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '200':
+          description: Diagnósticos e resultado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid, diagnostics]
+                properties:
+                  valid: {type: boolean}
+                  diagnostics:
+                    type: array
+                    items:
+                      type: object
+                      required: [code, path, message, severity]
+                      properties:
+                        code: {type: string}
+                        path: {type: string}
+                        message: {type: string}
+                        severity: {type: string, enum: [error, warning]}

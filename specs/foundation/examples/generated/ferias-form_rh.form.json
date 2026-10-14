@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "components": [
+    {
+      "type": "checkbox",
+      "key": "registered",
+      "label": "Registrado no RH",
+      "id": "Field_form_rh_0",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "type": "button",
+      "key": "submit",
+      "label": "Enviar",
+      "action": "submit",
+      "id": "Submit_form_rh"
+    }
+  ]
+}
