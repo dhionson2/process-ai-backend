@@ -30,7 +30,7 @@ export const graphIrV1Schema = {
     } } },
     requirements: { type: 'array', maxItems: 2000, items: { type: 'object', additionalProperties: false, required: ['id', 'kind', 'mandatory'], properties: {
       id: { $ref: '#/$defs/id' }, kind: { enum: ['activity', 'condition', 'consequence', 'loop', 'actor', 'form-field', 'structure'] }, mandatory: { type: 'boolean' },
-      sourceNodeId: { $ref: '#/$defs/id' }, targetNodeId: { $ref: '#/$defs/id' }, roleId: { $ref: '#/$defs/id' }, variableId: { $ref: '#/$defs/id' }, formRef: { $ref: '#/$defs/id' }, fieldKey: { $ref: '#/$defs/id' },
+      nodeId: { $ref: '#/$defs/id' }, sourceNodeId: { $ref: '#/$defs/id' }, targetNodeId: { $ref: '#/$defs/id' }, roleId: { $ref: '#/$defs/id' }, variableId: { $ref: '#/$defs/id' }, formRef: { $ref: '#/$defs/id' }, fieldKey: { $ref: '#/$defs/id' },
       operator: { enum: ['eq', 'ne', 'gt', 'gte', 'lt', 'lte'] }, value: { type: ['string', 'number', 'boolean', 'null'] },
     } } },
     nodes: { type: 'array', minItems: 2, maxItems: 1000, items: { type: 'object', additionalProperties: false, required: ['id', 'type', 'name', 'requirementRefs'], properties: {
@@ -85,7 +85,7 @@ export interface GraphIRV1 {
   process: { id: string; name: string; description?: string; locale: string; targetProfile: 'generic-bpmn2' | 'flowable-oss' | 'unique-future' };
   roles: Array<{ id: string; label: string; resolution: string; groupKey?: string }>;
   variables: Array<{ id: string; key: string; type: string; required?: boolean; sensitive?: boolean; scope?: string; enumValues?: Array<string | number | boolean>; source?: Record<string, unknown> }>;
-  requirements: Array<{ id: string; kind: string; mandatory: boolean; sourceNodeId?: string; targetNodeId?: string; roleId?: string; variableId?: string; formRef?: string; fieldKey?: string; operator?: string; value?: unknown }>;
+  requirements: Array<{ id: string; kind: string; mandatory: boolean; nodeId?: string; sourceNodeId?: string; targetNodeId?: string; roleId?: string; variableId?: string; formRef?: string; fieldKey?: string; operator?: string; value?: unknown }>;
   nodes: Array<{ id: string; type: string; name: string; roleId?: string; formRef?: string; defaultEdgeId?: string; action?: Record<string, unknown>; requirementRefs: string[]; provenance?: Record<string, unknown> }>;
   edges: Array<{ id: string; source: string; target: string; kind: 'sequence' | 'loop-back'; gatewayId?: string; condition?: Record<string, unknown>; isDefault?: boolean; label?: string; requirementRefs: string[]; provenance?: Record<string, unknown> }>;
   formRefs: Array<{ id: string; name: string; usage: 'start' | 'task'; fields: Array<Record<string, unknown>> }>;
@@ -95,8 +95,14 @@ export interface GraphIRV1 {
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const checkSchema = ajv.compile(graphIrV1Schema);
 const error = (code: string, path: string, message: string): Diagnostic => ({ code, path, message, severity: 'error' });
-const stable = (diagnostics: Diagnostic[]): Diagnostic[] => diagnostics.sort((a, b) => a.path.localeCompare(b.path) || a.code.localeCompare(b.code) || a.message.localeCompare(b.message));
+const lexical = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
+const stable = (diagnostics: Diagnostic[]): Diagnostic[] => diagnostics.sort((a, b) => lexical(a.path, b.path) || lexical(a.code, b.code) || lexical(a.message, b.message));
 const result = (diagnostics: Diagnostic[]): ValidationResult => ({ valid: !diagnostics.some(item => item.severity === 'error'), diagnostics: stable(diagnostics) });
+function canonicalJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).sort(([a], [b]) => lexical(a, b)).map(([key, child]) => [key, canonicalJson(child)]));
+}
 
 export function validateGraphIRStructure(value: unknown): ValidationResult {
   if (checkSchema(value)) return { valid: true, diagnostics: [] };
@@ -133,7 +139,7 @@ export function validateGraphIRSemantics(value: unknown): ValidationResult {
     const path = `/edges/${edge.id}`;
     if (!nodes.has(edge.source)) add('GRAPHIR_NODE_REFERENCE_MISSING', `${path}/source`, `Nó inexistente: ${edge.source}`);
     if (!nodes.has(edge.target)) add('GRAPHIR_NODE_REFERENCE_MISSING', `${path}/target`, `Nó inexistente: ${edge.target}`);
-    const pair = `${edge.source}\0${edge.target}\0${edge.gatewayId || ''}\0${JSON.stringify(edge.condition || null)}\0${edge.isDefault === true}`;
+    const pair = `${edge.source}\0${edge.target}\0${edge.gatewayId || ''}\0${JSON.stringify(canonicalJson(edge.condition || null))}\0${edge.isDefault === true}`;
     if (pairs.has(pair)) add('GRAPHIR_DUPLICATE_EDGE', path, 'Conexão duplicada com a mesma origem, destino e regra');
     pairs.add(pair);
     outgoing.set(edge.source, [...(outgoing.get(edge.source) || []), edge]);
@@ -236,13 +242,16 @@ export function validateGraphIRSemantics(value: unknown): ValidationResult {
   }
   for (const requirement of graph.requirements) {
     const path = `/requirements/${requirement.id}`;
+    if (requirement.nodeId && !nodes.has(requirement.nodeId)) add('GRAPHIR_REQUIREMENT_REFERENCE_MISSING', `${path}/nodeId`, `Nó inexistente: ${requirement.nodeId}`);
     if (requirement.sourceNodeId && !nodes.has(requirement.sourceNodeId)) add('GRAPHIR_REQUIREMENT_REFERENCE_MISSING', `${path}/sourceNodeId`, `Nó inexistente: ${requirement.sourceNodeId}`);
     if (requirement.targetNodeId && !nodes.has(requirement.targetNodeId)) add('GRAPHIR_REQUIREMENT_REFERENCE_MISSING', `${path}/targetNodeId`, `Nó inexistente: ${requirement.targetNodeId}`);
     if (requirement.roleId && !roles.has(requirement.roleId)) add('GRAPHIR_REQUIREMENT_REFERENCE_MISSING', `${path}/roleId`, `Papel inexistente: ${requirement.roleId}`);
     if (requirement.variableId && !variables.has(requirement.variableId)) add('GRAPHIR_REQUIREMENT_REFERENCE_MISSING', `${path}/variableId`, `Variável inexistente: ${requirement.variableId}`);
     if (requirement.formRef && !forms.has(requirement.formRef)) add('GRAPHIR_REQUIREMENT_REFERENCE_MISSING', `${path}/formRef`, `Formulário inexistente: ${requirement.formRef}`);
     if (requirement.kind === 'loop' && (!requirement.sourceNodeId || !requirement.targetNodeId)) add('GRAPHIR_LOOP_REQUIREMENT_INCOMPLETE', path, 'Requisito de ciclo precisa declarar origem e destino');
-    if (requirement.kind === 'actor' && !requirement.roleId) add('GRAPHIR_ACTOR_REQUIREMENT_INCOMPLETE', path, 'Requisito de ator precisa declarar roleId');
+    if (requirement.kind === 'activity' && !requirement.nodeId) add('GRAPHIR_ACTIVITY_REQUIREMENT_INCOMPLETE', path, 'Requisito de atividade precisa declarar nodeId');
+    if (requirement.kind === 'actor' && (!requirement.nodeId || !requirement.roleId)) add('GRAPHIR_ACTOR_REQUIREMENT_INCOMPLETE', path, 'Requisito de ator precisa declarar nodeId e roleId');
+    if (requirement.kind === 'structure' && !requirement.nodeId) add('GRAPHIR_STRUCTURE_REQUIREMENT_INCOMPLETE', path, 'Requisito estrutural precisa declarar nodeId');
     if (requirement.kind === 'condition' && (!requirement.variableId || !requirement.operator || !Object.hasOwn(requirement, 'value'))) add('GRAPHIR_CONDITION_REQUIREMENT_INCOMPLETE', path, 'Requisito de condição precisa declarar variável, operador e valor');
     if (requirement.kind === 'consequence' && (!requirement.sourceNodeId || !requirement.targetNodeId)) add('GRAPHIR_CONSEQUENCE_REQUIREMENT_INCOMPLETE', path, 'Requisito de consequência precisa declarar origem e destino');
     if (requirement.kind === 'form-field' && (!requirement.formRef || !requirement.fieldKey)) add('GRAPHIR_FORM_REQUIREMENT_INCOMPLETE', path, 'Requisito de formulário precisa declarar formRef e fieldKey');
@@ -301,8 +310,12 @@ export function validateGraphIRCoverage(value: unknown): ValidationResult {
       if (!exact) diagnostics.push(error('GRAPHIR_LOOP_DESTINATION_DIVERGENCE', `/requirements/${requirement.id}`, 'Ciclo não corresponde à origem e destino exigidos'));
     }
     if (requirement.kind === 'actor' && requirement.roleId) {
-      const exact = graph.nodes.some(node => node.type === 'humanTask' && node.roleId === requirement.roleId && node.requirementRefs.includes(requirement.id));
+      const exact = graph.nodes.some(node => node.id === requirement.nodeId && node.type === 'humanTask' && node.roleId === requirement.roleId && node.requirementRefs.includes(requirement.id));
       if (!exact) diagnostics.push(error('GRAPHIR_ROLE_REQUIREMENT_DIVERGENCE', `/requirements/${requirement.id}`, 'Tarefa coberta não usa o papel exigido'));
+    }
+    if ((requirement.kind === 'activity' || requirement.kind === 'structure') && requirement.nodeId) {
+      const exact = graph.nodes.some(node => node.id === requirement.nodeId && node.requirementRefs.includes(requirement.id));
+      if (!exact) diagnostics.push(error('GRAPHIR_NODE_REQUIREMENT_DIVERGENCE', `/requirements/${requirement.id}`, 'Nó não corresponde ao requisito de atividade/estrutura'));
     }
     if (requirement.kind === 'consequence' && requirement.sourceNodeId && requirement.targetNodeId) {
       const exact = graph.edges.some(edge => edge.source === requirement.sourceNodeId && edge.target === requirement.targetNodeId && edge.requirementRefs.includes(requirement.id));

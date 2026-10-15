@@ -10,7 +10,7 @@ function linear(): GraphIRV1 {
     schemaVersion: '1.0.0', process: { id: 'leave_process', name: 'Solicitação de férias', locale: 'pt-BR', targetProfile: 'generic-bpmn2' },
     roles: [{ id: 'role_requester', label: 'Solicitante', resolution: 'requester' }],
     variables: [{ id: 'var_days', key: 'days', type: 'integer', source: { kind: 'constant', value: 1 } }],
-    requirements: [{ id: 'req_submit', kind: 'activity', mandatory: true }],
+    requirements: [{ id: 'req_submit', kind: 'activity', mandatory: true, nodeId: 'submit' }],
     nodes: [
       { id: 'start', type: 'start', name: 'Início', requirementRefs: [] },
       { id: 'submit', type: 'humanTask', name: 'Enviar solicitação', roleId: 'role_requester', requirementRefs: ['req_submit'] },
@@ -27,8 +27,9 @@ function linear(): GraphIRV1 {
 function approval(operator: 'gt' | 'lte' | 'gte' = 'gt'): GraphIRV1 {
   const graph = linear();
   graph.variables[0] = { id: 'var_amount', key: 'amount', type: 'decimal', source: { kind: 'constant', value: 0 } };
+  graph.requirements[0].nodeId = 'approve';
   graph.requirements.push(
-    { id: 'req_gateway', kind: 'structure', mandatory: true },
+    { id: 'req_gateway', kind: 'structure', mandatory: true, nodeId: 'gateway' },
     { id: 'req_high', kind: 'condition', mandatory: true, variableId: 'var_amount', operator, value: 100 },
     { id: 'req_low', kind: 'condition', mandatory: true, variableId: 'var_amount', operator: operator === 'gt' ? 'lte' : 'gt', value: 100 },
   );
@@ -52,7 +53,7 @@ function dualLoops(): GraphIRV1 {
   const graph = approval();
   graph.requirements = [];
   graph.requirements.push(
-    { id: 'req_review_a', kind: 'activity', mandatory: true }, { id: 'req_review_b', kind: 'activity', mandatory: true },
+    { id: 'req_review_a', kind: 'activity', mandatory: true, nodeId: 'review_a' }, { id: 'req_review_b', kind: 'activity', mandatory: true, nodeId: 'review_b' },
     { id: 'req_loop_a', kind: 'loop', mandatory: true, sourceNodeId: 'decision_a', targetNodeId: 'review_a' },
     { id: 'req_loop_b', kind: 'loop', mandatory: true, sourceNodeId: 'decision_b', targetNodeId: 'review_b' },
   );
@@ -98,6 +99,9 @@ test('GraphIR rejeita versão, campos, IDs, arestas e referências inválidas', 
   assert.ok(codes(deadEnd).includes('GRAPHIR_NO_PATH_TO_END'));
   const duplicateEdge = linear(); duplicateEdge.edges.push({ ...duplicateEdge.edges[0], id: 'another_edge' });
   assert.ok(codes(duplicateEdge).includes('GRAPHIR_DUPLICATE_EDGE'));
+  const reorderedCondition = approval();
+  reorderedCondition.edges.push({ ...reorderedCondition.edges[2], id: 'same_route_reordered_condition', condition: { right: { literal: 100 }, left: { var: 'var_amount' }, op: 'gt' } });
+  assert.ok(codes(reorderedCondition).includes('GRAPHIR_DUPLICATE_EDGE'));
 });
 
 test('GraphIR verifica XOR numérico > / <= e rejeita fronteira >= / <= sobreposta', () => {
