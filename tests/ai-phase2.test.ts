@@ -14,6 +14,8 @@ import { InMemoryConversationRepository } from '../src/modules/projects/conversa
 import { OllamaProvider, OpenAICompatibleProvider, ProviderFailure, toStrictProviderSchema, type ModelProvider, type StructuredRequest, type StructuredResponse } from '../src/modules/providers/model-provider.js';
 import { configuredProvider } from '../src/modules/ai/provider.factory.js';
 import { semanticIntentSchema } from '../src/modules/ai/semantic-process.js';
+import { identityForQuestion, latestSemanticFactEvents } from '../src/modules/ai/semantic-grounding.js';
+import { requirementFromEvidence, type RequirementLedgerV1 } from '../src/modules/ai/requirement-coverage.js';
 
 async function fixture(): Promise<any> { return JSON.parse(await readFile('specs/foundation/examples/ferias.json', 'utf8')); }
 function compactExpression(value: any): any {
@@ -42,7 +44,7 @@ function semanticVacationIntent() {
 }
 const supportedVacationRequest = 'O servidor solicitante faz a solicitação informando a data inicial e a data final das férias. O gestor é selecionado manualmente pelo operador autorizado e aprova ou reprova. O RH é grupo RH e registra se houver aprovação. Se reprovado, o servidor deve ser informado do motivo.';
 function environment(overrides: Partial<Environment> = {}): Environment {
-  return { host: '127.0.0.1', port: 3333, corsOrigins: [], logLevel: 'silent', localTenantId: 'test-tenant', aiProvider: 'disabled', ollamaBaseUrl: 'http://127.0.0.1:11434', externalAiApproved: false, aiTimeoutMs: 400, aiContextTokens: 8192, aiMaxOutputTokens: 2048, aiMaxInputChars: 24000, aiMaxConcurrency: 2, externalAiStructuredOutput: 'json-object', aiMaxProviderCalls: 0, aiMaxProviderTokens: 0, ...overrides };
+  return { host: '127.0.0.1', port: 3333, corsOrigins: [], logLevel: 'silent', localTenantId: 'test-tenant', aiProvider: 'disabled', ollamaBaseUrl: 'http://127.0.0.1:11434', externalAiApproved: false, aiTimeoutMs: 400, aiContextTokens: 8192, aiMaxOutputTokens: 2048, aiMaxInputChars: 24000, aiMaxConcurrency: 2, externalAiStructuredOutput: 'json-object', aiMaxProviderCalls: 0, aiMaxProviderTokens: 0, aiSemanticGroundingMode: 'legacy', ...overrides };
 }
 class QueueProvider implements ModelProvider {
   readonly id = 'queue-test';
@@ -481,14 +483,299 @@ test('paráfrase de pergunta já respondida também usa uma única recuperação
   assert.match(provider.prompts[1].prompt, /O diretor da unidade será escolhido manualmente/);
 });
 
+test('modo controlado evita perguntas exatas e parafraseadas por semanticSlot com uma recuperação limitada', async () => {
+  const priorQuestion = 'Quem executa a segunda aprovação e qual é sua atribuição?';
+  const questions = [priorQuestion, 'Como atribuir o papel ao segundo aprovador solicitado?'];
+  const newQuestion = { kind: 'need_clarification', questions: [{ question: 'Qual campo deve registrar a decisão final?', blocking: true }] };
+  const fact = { question: priorQuestion, answer: 'O segundo aprovador é escolhido manualmente por operador.', confirmedAt: new Date().toISOString(), ...identityForQuestion(priorQuestion), state: 'confirmed' as const, sourceId: 'answer-turn-1' };
+  for (const question of questions) {
+    const provider = new QueueProvider([{ kind: 'need_clarification', questions: [{ question, blocking: true }] }, newQuestion]);
+    const result = await new AiOrchestrator(provider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: supportedVacationRequest, history: [], confirmedFacts: [fact] });
+    assert.equal(result.kind, 'need_clarification');
+    if (result.kind === 'need_clarification') assert.match(result.questions[0].question, /campo deve registrar/);
+    assert.equal(provider.prompts.length, 2, 'semantic matching does not make a provider call; one existing bounded recovery continues generation');
+    assert.match(provider.prompts[1].prompt, /escolhido manualmente por operador/i);
+  }
+});
+
+test('resposta recém-confirmada é reutilizada antes do único retry de recuperação, sem chamada de identificação semântica', async () => {
+  const nextQuestion = { kind: 'need_clarification', questions: [{ question: 'Qual campo deve registrar a decisão final?', blocking: true }] };
+  const repository = new InMemoryConversationRepository();
+  const provider = new QueueProvider([clarification, clarification, nextQuestion]);
+  const app = await buildApp(environment({ aiSemanticGroundingMode: 'controlled' }), { conversationRepository: repository, modelProvider: provider });
+  try {
+    const project = await app.inject({ method: 'POST', url: '/api/v1/projects', payload: { name: 'Answered slot', targetProfile: 'generic-bpmn2' } });
+    const sessionId = project.json().sessionId;
+    const asked = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload: { text: supportedVacationRequest, baseRevision: 0 } });
+    assert.equal(asked.json().questions[0].question, clarification.questions[0].question);
+    const answered = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/answers`, payload: { answers: ['O Diretor da unidade será escolhido manualmente por operador.'], baseRevision: 0 } });
+    assert.equal(answered.statusCode, 200);
+    assert.equal(answered.json().questions[0].question, nextQuestion.questions[0].question);
+    assert.equal(provider.prompts.length, 3, 'one initial question, one normal answer-turn generation, and one bounded corrective retry');
+    assert.match(provider.prompts[2].prompt, /escolhido manualmente por operador/i);
+    assert.equal(provider.prompts.filter(prompt => /semanticSlot|questionId/.test(prompt.prompt)).length, 0, 'no provider call is made to compute semantic identity');
+  } finally { await app.close(); }
+});
+
+test('provider simulado percorre o orquestrador e mantém Verificação de completude com proveniência nos dois modos', async () => {
+  const evidence = 'O Gestor executa Verificar completude da solicitação.';
+  const intent = {
+    kind: 'business_intent', name: 'Verificação da solicitação', purpose: evidence,
+    actors: [{ name: 'Gestor', resolution: 'unresolved', evidence }], startFields: [],
+    activities: [{ kind: 'task', name: 'Verificação de completude da solicitação', actor: 'Gestor', evidence }],
+    rules: [], suggestions: [], pendingConfiguration: [],
+  };
+  for (const mode of ['legacy', 'controlled'] as const) {
+    const provider = new QueueProvider([intent]);
+    const result = await new AiOrchestrator(provider, 'local-model', environment({ aiSemanticGroundingMode: mode })).generate({ text: evidence, history: [] });
+    assert.equal(result.kind, 'proposed_spec', `${mode} must produce the explicitly requested activity`);
+    if (result.kind === 'proposed_spec') {
+      assert.ok(result.spec.nodes.some((node: any) => node.type === 'userTask' && node.name === 'Verificação de completude da solicitação'));
+      assert.ok((result.intermediate as any).activities[0].provenance.confirmed);
+      assert.ok(result.diagnostics?.some(item => item.stage === 'requirement-coverage-shadow' && item.status === 'audited'));
+    }
+    assert.equal(provider.prompts.length, 1, 'equivalence is resolved without an extra provider call');
+  }
+});
+
+test('orquestrador audita Ledger completo em shadow: atividade inventada rejeitada e requisito omitido medido', async () => {
+  const source = 'O Gestor analisa o pedido. O RH registra o protocolo obrigatório.';
+  const messageId = 'complete-ledger-source';
+  const activityQuote = 'O Gestor analisa o pedido.';
+  const fieldQuote = 'O RH registra o protocolo obrigatório.';
+  const ledger: RequirementLedgerV1 = {
+    schemaVersion: '1.0.0',
+    extraction: { complete: true, method: 'independent-review-fixture', diagnostics: [] },
+    requirements: [
+      requirementFromEvidence({ messageId, text: source, type: 'activity', start: source.indexOf(activityQuote), end: source.indexOf(activityQuote) + activityQuote.length }),
+      requirementFromEvidence({ messageId, text: source, type: 'field', start: source.indexOf(fieldQuote), end: source.indexOf(fieldQuote) + fieldQuote.length }),
+    ],
+  };
+  const intent = {
+    kind: 'business_intent', name: 'Análise de pedido', purpose: source,
+    actors: [{ name: 'Gestor', resolution: 'unresolved', evidence: activityQuote }], startFields: [],
+    activities: [{ kind: 'task', name: 'Analisar pedido', actor: 'Gestor', evidence: activityQuote }],
+    rules: [], suggestions: [], pendingConfiguration: [],
+  };
+  const provider = new QueueProvider([intent]);
+  const generated = await new AiOrchestrator(provider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: source, sourceMessageId: messageId, history: [], requirementLedger: ledger });
+  assert.equal(generated.kind, 'proposed_spec');
+  const shadow = generated.diagnostics?.find(item => item.stage === 'requirement-coverage-shadow');
+  assert.equal(shadow?.details.extractionComplete, true);
+  assert.equal((shadow?.details.coverage as any)?.proven, 1);
+  assert.equal((shadow?.details.coverage as any)?.missing, 1, 'the complete independent Ledger exposes the omitted field as missing');
+  assert.equal(provider.prompts.length, 1);
+
+  const inventedIntent = structuredClone(intent);
+  inventedIntent.activities.push({ kind: 'task', name: 'Autorizar pagamento', actor: 'Gestor', evidence: activityQuote });
+  const inventedProvider = new QueueProvider([inventedIntent]);
+  await assert.rejects(
+    () => new AiOrchestrator(inventedProvider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: source, sourceMessageId: messageId, history: [], requirementLedger: { ...ledger, requirements: [ledger.requirements[0]] } }),
+    (error: any) => {
+      assert.equal(error.code, 'SEMANTIC_GROUNDING_DIVERGENT');
+      const rawIntentAudit = error.diagnostics?.find((item: any) => item.stage === 'requirement-coverage-shadow');
+      assert.equal(rawIntentAudit?.details.extractionComplete, true);
+      assert.equal(rawIntentAudit?.details.unsupportedActivityCount, 1);
+      return true;
+    },
+  );
+  assert.equal(inventedProvider.prompts.length, 1, 'the shadow audit adds no provider call and does not relax the compiler rejection');
+});
+
+test('orquestrador controlado aceita o papel correto com paráfrase e rejeita papel divergente, negação e inconclusão', async () => {
+  const source = 'O Gestor aprova a solicitação.';
+  const base = {
+    kind: 'business_intent', name: 'Análise da solicitação', purpose: source,
+    actors: [{ name: 'Gestor', resolution: 'unresolved', evidence: source }], startFields: [],
+    activities: [{ kind: 'task', name: 'Aprovação da solicitação', actor: 'Gestor', evidence: source }],
+    rules: [], suggestions: [], pendingConfiguration: [],
+  };
+  const validProvider = new QueueProvider([base]);
+  const valid = await new AiOrchestrator(validProvider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: source, history: [] });
+  assert.equal(valid.kind, 'proposed_spec');
+  assert.equal(validProvider.prompts.length, 1);
+
+  for (const mutate of [
+    (intent: any) => { intent.activities[0].actor = 'Diretor'; },
+    (intent: any) => { intent.activities[0].name = 'Não aprovar a solicitação'; },
+    (intent: any) => { intent.activities[0].name = 'Etapa operacional'; },
+  ]) {
+    const candidate = structuredClone(base);
+    mutate(candidate);
+    const provider = new QueueProvider([candidate]);
+    await assert.rejects(() => new AiOrchestrator(provider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: source, history: [] }));
+    assert.equal(provider.prompts.length, 1);
+  }
+  const deniedSource = 'O Gestor não aprova a solicitação.';
+  const deniedIntent = structuredClone(base);
+  deniedIntent.purpose = deniedSource;
+  deniedIntent.actors[0].evidence = deniedSource;
+  deniedIntent.activities[0].evidence = deniedSource;
+  const deniedProvider = new QueueProvider([deniedIntent]);
+  await assert.rejects(() => new AiOrchestrator(deniedProvider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: deniedSource, history: [] }));
+  assert.equal(deniedProvider.prompts.length, 1, 'explicit source negation cannot confirm the positive activity');
+});
+
+test('reconciliação numérica no modo controlado marca o limite substituído e preserva o novo valor', async () => {
+  const provider = new QueueProvider([clarification]);
+  const result = await new AiOrchestrator(provider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({
+    text: 'Altere o limite para R$ 5.000.',
+    history: [{ role: 'user', content: 'O Diretor aprova solicitações acima de R$ 2.000.' }],
+  });
+  assert.equal(result.kind, 'need_clarification');
+  assert.match(provider.prompts[0].prompt, /gt:2000 foi substituído por gt:5000/);
+  assert.ok(result.diagnostics?.some(item => item.stage === 'semantic-reconciliation' && item.status === 'reconciled'));
+});
+
+test('contradição numérica sem verbo de correção permanece explícita e não recebe diretiva de substituição', async () => {
+  const provider = new QueueProvider([clarification]);
+  const result = await new AiOrchestrator(provider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({
+    text: 'O Diretor aprova solicitações acima de R$ 5.000.',
+    history: [{ role: 'user', content: 'O Diretor aprova solicitações acima de R$ 2.000.' }],
+  });
+  assert.equal(result.kind, 'need_clarification');
+  assert.match(provider.prompts[0].prompt, /acima de R\$ 2\.000/i);
+  assert.match(provider.prompts[0].prompt, /acima de R\$ 5\.000/i);
+  assert.doesNotMatch(provider.prompts[0].prompt, /foi substituído por/);
+  assert.ok(result.diagnostics?.some(item => item.stage === 'semantic-reconciliation' && item.status === 'unchanged'));
+});
+
+test('reconciliação de limite persiste eventos superseded/confirmed no JSONB existente entre turnos', async () => {
+  const repository = new InMemoryConversationRepository();
+  const provider = new QueueProvider([clarification, clarification, clarification, clarification]);
+  const app = await buildApp(environment({ aiSemanticGroundingMode: 'controlled' }), { conversationRepository: repository, modelProvider: provider });
+  try {
+    const project = await app.inject({ method: 'POST', url: '/api/v1/projects', payload: { name: 'Threshold reconciliation', targetProfile: 'generic-bpmn2' } });
+    const sessionId = project.json().sessionId;
+    await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload: { text: 'O Diretor aprova solicitações acima de R$ 2.000.', baseRevision: 0 } });
+    await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload: { text: 'Altere o limite para R$ 5.000.', baseRevision: 0 } });
+    const afterFirstCorrection = await repository.listConfirmedFacts('test-tenant', sessionId);
+    assert.ok(afterFirstCorrection.some(item => item.semanticFact?.value === 'gt:2000' && item.semanticFact.state === 'superseded'));
+    assert.ok(afterFirstCorrection.some(item => item.semanticFact?.value === 'gt:5000' && item.semanticFact.state === 'confirmed'));
+    await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload: { text: 'Altere o limite para R$ 8.000.', baseRevision: 0 } });
+    const latest = await repository.listConfirmedFacts('test-tenant', sessionId);
+    assert.ok(latest.some(item => item.semanticFact?.value === 'gt:5000' && item.semanticFact.state === 'superseded'));
+    assert.ok(latest.some(item => item.semanticFact?.value === 'gt:8000' && item.semanticFact.state === 'confirmed'));
+    assert.match(provider.prompts[2].prompt, /gt:5000 foi substituído por gt:8000/);
+    assert.doesNotMatch(provider.prompts[2].prompt, /acima de R\$ 5\.000/i, 'a superseded threshold is masked in effective model context while stored history remains intact');
+    const activeThresholds = latestSemanticFactEvents(latest).filter(item => item.semanticFact?.attribute === 'numeric-threshold' && item.state === 'confirmed');
+    assert.equal(activeThresholds.length, 1);
+    assert.equal(activeThresholds[0].semanticFact?.value, 'gt:8000');
+    const beforeIdempotentRepeat = latest.length;
+    await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload: { text: 'Altere o limite para R$ 8.000.', baseRevision: 0 } });
+    const afterIdempotentRepeat = await repository.listConfirmedFacts('test-tenant', sessionId);
+    assert.equal(afterIdempotentRepeat.length, beforeIdempotentRepeat, 'repeating the current correction adds no semantic event');
+  } finally { await app.close(); }
+});
+
+test('identidade interna de esclarecimento persiste com a resposta mesmo após falha do provider sem mudar contrato público', async () => {
+  const repository = new InMemoryConversationRepository();
+  const provider = new QueueProvider([clarification, new ProviderFailure('PROVIDER_UNAVAILABLE', 'provider offline', undefined, { category: 'network' })]);
+  const app = await buildApp(environment(), { conversationRepository: repository, modelProvider: provider });
+  try {
+    const project = await app.inject({ method: 'POST', url: '/api/v1/projects', payload: { name: 'Semantic identity', targetProfile: 'generic-bpmn2' } });
+    const sessionId = project.json().sessionId;
+    const asked = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload: { text: supportedVacationRequest, baseRevision: 0 } });
+    assert.equal(asked.json().questions.length, 1);
+    assert.deepEqual(Object.keys(asked.json().questions[0]).sort(), ['blocking', 'question']);
+    const beforeAnswer = await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}` });
+    assert.deepEqual(Object.keys(beforeAnswer.json().pendingQuestions[0]).sort(), ['blocking', 'question']);
+    const answer = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/answers`, payload: { answers: ['Não há regra adicional.'], baseRevision: 0 } });
+    assert.equal(answer.statusCode, 503);
+    const facts = await repository.listConfirmedFacts('test-tenant', sessionId);
+    assert.equal(facts.length, 1);
+    assert.ok(facts[0].questionId && facts[0].requirementId && facts[0].semanticSlot && facts[0].semanticFactId);
+    assert.equal(facts[0].state, 'confirmed');
+    assert.equal(facts[0].questionStatus, 'answered');
+    assert.equal(facts[0].sourceId, (await repository.listMessages('test-tenant', sessionId, 10)).find(item => item.role === 'user' && item.content === 'Não há regra adicional.')?.id);
+  } finally { await app.close(); }
+});
+
+test('turno conversacional é idempotente por operationId e publica identificador estável do question set', async () => {
+  const repository = new InMemoryConversationRepository();
+  const provider = new QueueProvider([clarification]);
+  const app = await buildApp(environment(), { conversationRepository: repository, modelProvider: provider });
+  try {
+    const project = await app.inject({ method: 'POST', url: '/api/v1/projects', payload: { name: 'Idempotency', targetProfile: 'generic-bpmn2' } });
+    const sessionId = project.json().sessionId;
+    const payload = { text: supportedVacationRequest, baseRevision: 0, operationId: 'turn-000001' };
+    const first = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload });
+    const replay = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload });
+    assert.equal(first.statusCode, 200);
+    assert.equal(replay.statusCode, 200);
+    assert.equal(replay.json().generationRunId, first.json().generationRunId);
+    assert.equal(replay.json().replayed, true);
+    assert.equal(provider.prompts.length, 1);
+    const session = await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}` });
+    assert.equal(session.json().questionSetId, first.json().questionSetId);
+  } finally { await app.close(); }
+});
+
+test('resposta com questionSetId antigo é recusada sem gravar mensagem nem fato', async () => {
+  const repository = new InMemoryConversationRepository();
+  const provider = new QueueProvider([clarification]);
+  const app = await buildApp(environment(), { conversationRepository: repository, modelProvider: provider });
+  try {
+    const project = await app.inject({ method: 'POST', url: '/api/v1/projects', payload: { name: 'Stale answer', targetProfile: 'generic-bpmn2' } });
+    const sessionId = project.json().sessionId;
+    const asked = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload: { text: supportedVacationRequest, baseRevision: 0 } });
+    const before = await repository.listMessages('test-tenant', sessionId, 20);
+    const stale = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/answers`, payload: { answers: ['Resposta antiga'], baseRevision: 0, questionSetId: 'qs_obsolete_000000000000' } });
+    assert.equal(stale.statusCode, 409);
+    assert.equal(stale.json().code, 'QUESTION_SET_STALE');
+    assert.deepEqual(await repository.listMessages('test-tenant', sessionId, 20), before);
+    assert.deepEqual(await repository.listConfirmedFacts('test-tenant', sessionId), []);
+    assert.equal(asked.json().status, 'needs-input');
+  } finally { await app.close(); }
+});
+
+test('duas submissões concorrentes serializam por sessão e provider não roda duas vezes', async () => {
+  const repository = new InMemoryConversationRepository();
+  const provider = new QueueProvider([clarification, clarification]);
+  const app = await buildApp(environment(), { conversationRepository: repository, modelProvider: provider });
+  try {
+    const project = await app.inject({ method: 'POST', url: '/api/v1/projects', payload: { name: 'Concurrent', targetProfile: 'generic-bpmn2' } });
+    const sessionId = project.json().sessionId;
+    const submit = (operationId: string) => app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload: { text: supportedVacationRequest, baseRevision: 0, operationId } });
+    const results = await Promise.all([submit('turn-concurrent-1'), submit('turn-concurrent-2')]);
+    assert.equal(results.filter(response => response.statusCode === 200).length, 1);
+    assert.equal(results.filter(response => response.statusCode === 409).length, 1);
+    assert.equal(provider.prompts.length, 1);
+    assert.equal((await repository.listMessages('test-tenant', sessionId, 20)).filter(message => message.role === 'user').length, 1);
+  } finally { await app.close(); }
+});
+
+test('run interrompido é reconciliado sem chamar provider e mensagem fica disponível', async () => {
+  const repository = new InMemoryConversationRepository();
+  const project = await repository.createProject('test-tenant', 'Interrupted', 'generic-bpmn2');
+  const begun = await repository.beginTurn('test-tenant', project.sessionId, { baseRevision: 0, role: 'user', content: 'Synthetic durable turn', operationId: 'interrupted-0001' }, 'queue-test', 'local-model');
+  assert.equal(begun.run.status, 'generating');
+  assert.equal(await repository.reconcileInterruptedRuns('test-tenant', project.sessionId, 0), 1);
+  const run = await repository.getRun('test-tenant', begun.run.id);
+  assert.equal(run?.status, 'failed');
+  assert.equal(run?.errorCode, 'GENERATION_INTERRUPTED');
+  assert.equal((await repository.listMessages('test-tenant', project.sessionId, 10))[0].content, 'Synthetic durable turn');
+  assert.equal((await repository.getSession('test-tenant', project.sessionId))?.status, 'failed');
+});
+
+test('histórico extenso mantém fatos confirmados dentro do orçamento e sem depender das mensagens antigas', async () => {
+  const facts = Array.from({ length: 45 }, (_, index) => ({ question: `Pergunta de ator ${index}`, answer: `Resposta confirmada ${index}`, confirmedAt: new Date(index).toISOString(), semanticSlot: `slot:actor-assignment:entity_${index}`, state: 'confirmed' as const }));
+  const provider = new QueueProvider([clarification]);
+  await new AiOrchestrator(provider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: supportedVacationRequest, history: [], confirmedFacts: facts });
+  const prompt = provider.prompts[0].prompt;
+  assert.doesNotMatch(prompt, /slot:actor-assignment:entity_0\b/);
+  assert.match(prompt, /slot:actor-assignment:entity_44/);
+  assert.ok(prompt.length < 24000);
+});
+
 test('falha de plano registra keywords do schema e remove esclarecimentos respondidos da sessão', async () => {
   const provider = new QueueProvider([clarification, { kind: 'business_intent', name: 'incomplete' }]);
   class TracingRepository extends InMemoryConversationRepository {
     latestRunId?: string;
-    override async createRun(tenantId: string, sessionId: string, providerId: string, model: string) {
-      const run = await super.createRun(tenantId, sessionId, providerId, model);
-      this.latestRunId = run.id;
-      return run;
+    override async beginTurn(tenantId: string, sessionId: string, input: any, providerId: string, model: string) {
+      const result = await super.beginTurn(tenantId, sessionId, input, providerId, model);
+      this.latestRunId = result.run.id;
+      return result;
     }
   }
   const repository = new TracingRepository();

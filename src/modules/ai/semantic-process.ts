@@ -3,6 +3,7 @@ import { readFoundationJson } from '../../shared/files.js';
 import { businessPatternForActivity } from './business-patterns.js';
 import { technicalIntent } from '../knowledge/capability-context.js';
 import type { ProjectTarget } from '../projects/conversation.repository.js';
+import { evaluateActivityGrounding } from './semantic-grounding.js';
 
 type Json = Record<string, any>;
 export type BusinessIntentProvenance = { source: 'user' | 'confirmed-answer' | 'catalog' | 'knowledge' | 'inference'; evidence?: string; confirmed: boolean };
@@ -123,8 +124,11 @@ export function semanticRefinementSchema(): Json {
 export class IntentCompilationError extends Error {
   constructor(readonly question: string, message = question) { super(message); this.name = 'IntentCompilationError'; }
 }
+export class SemanticGroundingError extends Error {
+  constructor(readonly status: 'divergent' | 'inconclusive', message: string) { super(message); this.name = 'SemanticGroundingError'; }
+}
 
-type BusinessCompileOptions = { targetProfile: ProjectTarget; knowledgeVersion: string; model: string; sourceText?: string; activitySourceText?: string; confirmedAnswerText?: string; knowledgeText?: string };
+type BusinessCompileOptions = { targetProfile: ProjectTarget; knowledgeVersion: string; model: string; sourceText?: string; activitySourceText?: string; confirmedAnswerText?: string; knowledgeText?: string; semanticGroundingMode?: 'legacy' | 'controlled' };
 type DraftQuestion = { question: string; blocking: boolean; scope?: string };
 
 /** Add machine-verifiable provenance and compile only facts grounded in the conversation. */
@@ -218,9 +222,14 @@ export async function compileBusinessIntent(value: BusinessIntentV1 | Json, opti
       }
     activity.provenance = provenance(activity.evidence);
       const sourceSupported = !activitySource || (activity.provenance.confirmed && adequateQuote(activitySource, activity.evidence));
-      const nameSupported = !activitySource || Boolean(activity.evidence && stepEvidenceMatchesName(activity.name, activity.evidence));
+      const mentionedActor = [...actors.values()].find((actor: Json) => activity.evidence && containsQuote(activity.evidence, actor.name));
+      const grounding = options.semanticGroundingMode === 'controlled' && activitySource && activity.evidence
+        ? evaluateActivityGrounding({ name: activity.name, evidence: activity.evidence, expectedActor: mentionedActor?.name, actualActor: activity.actor })
+        : undefined;
+      const nameSupported = !activitySource || (grounding ? grounding.status === 'equivalent' : Boolean(activity.evidence && stepEvidenceMatchesName(activity.name, activity.evidence)));
       if (!sourceSupported || !nameSupported) {
         addSuggestion(`A atividade “${activity.name}” não tem suporte literal suficiente e não foi incluída no fluxo confirmado.`, activity.evidence);
+        if (grounding && grounding.status !== 'equivalent') throw new SemanticGroundingError(grounding.status, grounding.reason);
         ask(`A atividade “${activity.name}” deve fazer parte deste processo?`, `activity:${activity.name}`);
         throw new IntentCompilationError(`A atividade “${activity.name}” não está sustentada por uma citação literal suficiente da conversa. Confirme se ela deve compor o fluxo.`);
       }

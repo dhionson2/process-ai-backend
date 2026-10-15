@@ -19,6 +19,8 @@ export interface Environment {
   externalAiStructuredOutput: 'json-object' | 'json-schema-strict';
   aiMaxProviderCalls: number;
   aiMaxProviderTokens: number;
+  /** Opt-in semantic grounding/reconciliation; legacy remains the default for comparison. */
+  aiSemanticGroundingMode?: 'legacy' | 'controlled';
 }
 function boundedInteger(raw: string | undefined, fallback: number, minimum: number, maximum: number, name: string): number {
   const value = Number(raw ?? fallback);
@@ -32,6 +34,8 @@ export function readEnvironment(env: NodeJS.ProcessEnv = process.env): Environme
   if (!['disabled', 'ollama', 'openai-compatible'].includes(aiProvider)) throw new Error('AI_PROVIDER inválido');
   const externalAiStructuredOutput = env.EXTERNAL_AI_STRUCTURED_OUTPUT || 'json-object';
   if (!['json-object', 'json-schema-strict'].includes(externalAiStructuredOutput)) throw new Error('EXTERNAL_AI_STRUCTURED_OUTPUT inválido');
+  const aiSemanticGroundingMode = env.AI_SEMANTIC_GROUNDING_MODE || 'legacy';
+  if (!['legacy', 'controlled'].includes(aiSemanticGroundingMode)) throw new Error('AI_SEMANTIC_GROUNDING_MODE inválido');
   const ollamaBaseUrl = env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
   const externalAiBaseUrl = env.EXTERNAL_AI_BASE_URL;
   for (const candidate of [ollamaBaseUrl, externalAiBaseUrl].filter(Boolean) as string[]) {
@@ -59,5 +63,6 @@ export function readEnvironment(env: NodeJS.ProcessEnv = process.env): Environme
     externalAiStructuredOutput: externalAiStructuredOutput as Environment['externalAiStructuredOutput'],
     aiMaxProviderCalls: boundedInteger(env.AI_MAX_PROVIDER_CALLS, 0, 0, 100, 'AI_MAX_PROVIDER_CALLS'),
     aiMaxProviderTokens: boundedInteger(env.AI_MAX_PROVIDER_TOKENS, 0, 0, 1000000, 'AI_MAX_PROVIDER_TOKENS'),
+    aiSemanticGroundingMode: aiSemanticGroundingMode as Environment['aiSemanticGroundingMode'],
   };
 }

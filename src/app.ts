@@ -11,7 +11,7 @@ import { readFoundationJson as readSchema } from './shared/files.js';
 import { generateArtifacts } from './modules/generation/artifact-generator.js';
 import { validateFormSubmission, validatePublicationReadiness } from './modules/validation/validation.service.js';
 import { ConversationService, ConversationServiceFailure } from './modules/ai/conversation.service.js';
-import { ConversationNotFound, PostgresConversationRepository, RevisionConflict, type ConversationRepository } from './modules/projects/conversation.repository.js';
+import { ConversationNotFound, OperationConflict, PostgresConversationRepository, RevisionConflict, StaleQuestionSet, type ConversationRepository } from './modules/projects/conversation.repository.js';
 import type { ModelProvider } from './modules/providers/model-provider.js';
 
 export type AppDependencies = { conversationRepository?: ConversationRepository; modelProvider?: ModelProvider; apiContract?: Record<string, any> };
@@ -49,19 +49,19 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
     try { return await conversations.session(request.params.sessionId); }
     catch (error) { return sendConversationError(reply, error); }
   });
-  app.post<{ Params: { sessionId: string }; Body: { text: string; baseRevision: number; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/messages', async (request, reply) => {
-    try { return await conversations.submitMessage(request.params.sessionId, request.body?.text, request.body?.baseRevision, request.body?.dataClassification); }
+  app.post<{ Params: { sessionId: string }; Body: { text: string; baseRevision: number; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/messages', async (request, reply) => {
+    try { return await conversations.submitMessage(request.params.sessionId, request.body?.text, request.body?.baseRevision, request.body?.dataClassification, request.body?.operationId); }
     catch (error) { return sendConversationError(reply, error); }
   });
-  app.post<{ Params: { sessionId: string }; Body: { answers: string[]; baseRevision: number; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/answers', async (request, reply) => {
-    try { return await conversations.answerQuestions(request.params.sessionId, request.body?.answers, request.body?.baseRevision, request.body?.dataClassification); }
+  app.post<{ Params: { sessionId: string }; Body: { answers: string[]; baseRevision: number; questionSetId?: string; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/answers', async (request, reply) => {
+    try { return await conversations.answerQuestions(request.params.sessionId, request.body?.answers, request.body?.baseRevision, request.body?.dataClassification, request.body?.questionSetId, request.body?.operationId); }
     catch (error) { return sendConversationError(reply, error); }
   });
-  app.post<{ Params: { sessionId: string }; Body: { text: string; baseRevision: number; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/refinements', async (request, reply) => {
+  app.post<{ Params: { sessionId: string }; Body: { text: string; baseRevision: number; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/refinements', async (request, reply) => {
     try {
       const draft = await conversations.currentDraft(request.params.sessionId);
       if (!draft.processSpec) return reply.code(409).send({ code: 'DRAFT_NOT_FOUND', message: 'Aceite ou gere uma revisão inicial antes de refiná-la' });
-      return await conversations.submitMessage(request.params.sessionId, request.body?.text, request.body?.baseRevision, request.body?.dataClassification);
+      return await conversations.submitMessage(request.params.sessionId, request.body?.text, request.body?.baseRevision, request.body?.dataClassification, request.body?.operationId);
     } catch (error) { return sendConversationError(reply, error); }
   });
   app.get<{ Params: { sessionId: string } }>('/api/v1/design-sessions/:sessionId/history', async (request, reply) => {
@@ -120,6 +120,8 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
 
 function sendConversationError(reply: { code: (status: number) => { send: (payload: unknown) => unknown } }, error: unknown) {
   if (error instanceof RevisionConflict) return reply.code(409).send({ code: 'REVISION_CONFLICT', message: error.message });
+  if (error instanceof OperationConflict) return reply.code(409).send({ code: 'OPERATION_ID_CONFLICT', message: error.message });
+  if (error instanceof StaleQuestionSet) return reply.code(409).send({ code: 'QUESTION_SET_STALE', message: error.message });
   if (error instanceof ConversationNotFound) return reply.code(404).send({ code: 'SESSION_NOT_FOUND', message: error.message });
   if (error instanceof ConversationServiceFailure) return reply.code(error.statusCode).send({ code: error.code, message: error.message, ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}) });
   return reply.code(503).send({ code: 'PERSISTENCE_UNAVAILABLE', message: 'Não foi possível acessar a persistência configurada' });

@@ -10,13 +10,15 @@ import type { ConfirmedFact } from '../projects/conversation.repository.js';
 import { interpretationSchema, normalizeInterpretation } from './interpretation-context.js';
 import { technicalIntent } from '../knowledge/capability-context.js';
 import { createHash } from 'node:crypto';
-import { evaluateRequirementCoverage, extractRequirementLedger, proposeLiteralCoverageLinks, type CoverageElement, type RequirementType } from './requirement-coverage.js';
+import { evaluateRequirementCoverage, extractRequirementLedger, proposeLiteralCoverageLinks, type CoverageElement, type RequirementLedgerV1, type RequirementType } from './requirement-coverage.js';
+import { extractNumericThresholdFacts, identityForQuestion, latestSemanticFactEvents, reconcileExplicitNumericCorrection, semanticSlotForQuestion } from './semantic-grounding.js';
+import { SemanticGroundingError } from './semantic-process.js';
 
 export type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 export type PipelineDiagnostic = { stage: string; status: string; details: Record<string, unknown> };
-type GenerationArguments = { text: string; history: ConversationTurn[]; sourceMessageId?: string; sourceMessageType?: 'user' | 'confirmed-answer'; currentSpec?: Record<string, unknown>; targetProfile?: ProjectTarget; confirmedFacts?: ConfirmedFact[] };
+type GenerationArguments = { text: string; history: ConversationTurn[]; sourceMessageId?: string; sourceMessageType?: 'user' | 'confirmed-answer'; currentSpec?: Record<string, unknown>; targetProfile?: ProjectTarget; confirmedFacts?: ConfirmedFact[]; requirementLedger?: RequirementLedgerV1; onProviderCallStart?: () => Promise<void> | void };
 export type GenerationOutcome = (
-  | { kind: 'need_clarification'; questions: Array<{ question: string; blocking: boolean }>; summary?: string; provider: string; model: string; latencyMs: number; usage: ProviderUsage; knowledgeVersion: string; knowledgeModules: string[]; intermediate?: Json }
+  | { kind: 'need_clarification'; questions: Array<{ question: string; blocking: boolean; questionId?: string; requirementId?: string; semanticSlot?: string; status?: 'pending' | 'answered' }>; summary?: string; provider: string; model: string; latencyMs: number; usage: ProviderUsage; knowledgeVersion: string; knowledgeModules: string[]; intermediate?: Json }
   | { kind: 'proposed_spec'; spec: Record<string, unknown>; changeSummary: string; validation: { valid: boolean; diagnostics: Array<{ code: string; path: string; message: string; severity: string }> }; artifacts?: Awaited<ReturnType<typeof generateArtifacts>>; provider: string; model: string; latencyMs: number; usage: ProviderUsage; repairAttempts: number; knowledgeVersion: string; knowledgeModules: string[]; intermediate?: Json }) & { diagnostics?: PipelineDiagnostic[] };
 
 export class OrchestrationFailure extends Error {
@@ -45,7 +47,7 @@ type Json = Record<string, any>;
 export class AiOrchestrator {
   private readonly concurrency: ProviderConcurrencyLimit;
   private readonly knowledge = new BpmKnowledgeEngine();
-  constructor(private readonly provider: ModelProvider, private readonly model: string, private readonly environment: Pick<Environment, 'aiTimeoutMs' | 'aiContextTokens' | 'aiMaxOutputTokens' | 'aiMaxInputChars' | 'aiMaxConcurrency' | 'externalAiStructuredOutput'>) {
+  constructor(private readonly provider: ModelProvider, private readonly model: string, private readonly environment: Pick<Environment, 'aiTimeoutMs' | 'aiContextTokens' | 'aiMaxOutputTokens' | 'aiMaxInputChars' | 'aiMaxConcurrency' | 'externalAiStructuredOutput' | 'aiSemanticGroundingMode'>) {
     this.concurrency = new ProviderConcurrencyLimit(environment.aiMaxConcurrency);
   }
   get providerId(): string { return this.provider.id; }
@@ -70,18 +72,51 @@ export class AiOrchestrator {
     for (let index = recentHistory.length - 1; index >= 0; index--) if (recentHistory[index].role === 'user') { latestUserTurn = index; break; }
     if (latestUserTurn >= 0 && recentHistory[latestUserTurn].content === args.text) recentHistory.splice(latestUserTurn, 1);
     while (recentHistory.length > 1 && recentHistory.reduce((size, turn) => size + turn.content.length, 0) > 3000) recentHistory.shift();
-    const history = recentHistory.map(turn => `${turn.role === 'user' ? 'Solicitante' : 'Assistente'}: ${turn.content}`).join('\n');
+    const groundingMode = this.environment.aiSemanticGroundingMode || 'legacy';
+    const confirmedFacts = latestSemanticFactEvents(args.confirmedFacts || []).filter(fact => fact.state !== 'superseded' && fact.state !== 'removed').slice(-40);
+    const persistedThresholdFacts = confirmedFacts.flatMap(fact => fact.semanticFact?.attribute === 'numeric-threshold' && fact.semanticFact.state === 'confirmed' ? [fact.semanticFact] : []);
+    const priorThresholdFacts = groundingMode === 'controlled'
+      ? persistedThresholdFacts.length ? persistedThresholdFacts : extractNumericThresholdFacts(recentHistory.filter(turn => turn.role === 'user').map((turn, index) => ({ sourceId: `history_${createHash('sha256').update(`${index}\0${turn.content}`).digest('hex').slice(0, 16)}`, text: turn.content })))
+      : [];
+    const numericReconciliation = groundingMode === 'controlled'
+      ? reconcileExplicitNumericCorrection(priorThresholdFacts, args.text, args.sourceMessageId || `message_${createHash('sha256').update(args.text).digest('hex').slice(0, 16)}`)
+      : { facts: priorThresholdFacts, status: 'unchanged' as const };
+    const history = recentHistory.map(turn => {
+      const content = groundingMode === 'controlled' && numericReconciliation.status === 'reconciled' && turn.role === 'user'
+        ? maskSupersededNumericThresholds(turn.content)
+        : turn.content;
+      return `${turn.role === 'user' ? 'Solicitante' : 'Assistente'}: ${content}`;
+    }).join('\n');
+    const reconciliationPrompt = numericReconciliation.directive ? `\n\nReconciliação de fatos estruturada (modo controlado):\n${numericReconciliation.directive}\n` : '';
     const currentSpecText = args.currentSpec ? JSON.stringify(args.currentSpec) : '';
-    const confirmedFacts = (args.confirmedFacts || []).slice(-40);
     let factChars = 0;
     const factText = confirmedFacts.slice().reverse().filter(fact => {
-      const size = fact.question.length + fact.answer.length + 16;
+      const size = fact.question.length + fact.answer.length + (fact.semanticSlot?.length || 0) + 32;
       if (factChars + size > 6000) return false;
       factChars += size; return true;
-    }).reverse().map(fact => `Pergunta: ${fact.question}\nResposta confirmada: ${fact.answer}`).join('\n');
+    }).reverse().map(fact => fact.semanticFact
+      ? `Identidade: ${fact.semanticSlot || semanticSlotForQuestion(fact.question)}\nEstado: ${fact.semanticFact.state}\nFato estruturado: ${fact.semanticFact.type}/${fact.semanticFact.entity}/${fact.semanticFact.attribute}/${fact.semanticFact.context}\nValor confirmado: ${fact.semanticFact.value}\nRequirementId: ${fact.semanticFact.requirementId || fact.requirementId || 'indisponível'}`
+      : `Identidade: ${fact.semanticSlot || semanticSlotForQuestion(fact.question)}\nEstado: ${fact.state || 'confirmed'}\nPergunta: ${fact.question}\nResposta confirmada: ${fact.answer}`).join('\n');
     const targetProfile = args.targetProfile || 'generic-bpmn2';
     const refinementMode = Boolean(args.currentSpec);
     const userSource = [args.text, ...recentHistory.filter(turn => turn.role === 'user').map(turn => turn.content), ...confirmedFacts.map(fact => fact.answer)].join('\n');
+    const coverageMessages = [
+      { id: args.sourceMessageId || `message_${createHash('sha256').update(args.text).digest('hex').slice(0, 16)}`, text: args.text },
+      ...confirmedFacts.map((fact, index) => ({ id: `answer_${createHash('sha256').update(`${fact.confirmedAt}\0${index}\0${fact.answer}`).digest('hex').slice(0, 16)}`, text: fact.answer })),
+    ];
+    const coverageLedger = args.requirementLedger || extractRequirementLedger({
+      messages: [{ ...coverageMessages[0], source: args.sourceMessageType || 'user' }],
+      confirmedAnswers: confirmedFacts.map((fact, index) => ({ messageId: coverageMessages[index + 1].id, text: fact.answer })),
+    });
+    let coverageAudited = false;
+    const auditCoverage = (intent: Json) => {
+      const elements = businessIntentCoverageElements(intent);
+      const links = proposeLiteralCoverageLinks(coverageLedger, elements, groundingMode);
+      const coverage = evaluateRequirementCoverage({ ledger: coverageLedger, elements, links, messages: coverageMessages });
+      trace.push({ stage: 'requirement-coverage-shadow', status: 'audited', details: { ledgerVersion: coverageLedger.schemaVersion, requirementCount: coverageLedger.requirements.length, extractionComplete: coverageLedger.extraction.complete, coverage: coverage.totals, unsupportedElementCount: coverage.findings.filter(item => item.status === 'unsupported-element').length, unsupportedActivityCount: coverage.findings.filter(item => item.status === 'unsupported-element' && item.elementId?.startsWith('activity:')).length } });
+      coverageAudited = true;
+      return coverage;
+    };
     const integrationsRequested = technicalIntent(userSource);
     const outputSchema = refinementMode ? semanticRefinementSchema() : interpretationSchema(integrationsRequested);
     const validator = new Ajv2020({ allErrors: true, strict: false }).compile(refinementMode ? outputSchema : semanticIntentSchema());
@@ -97,6 +132,7 @@ export class AiOrchestrator {
     const composePrompt = (selectedKnowledge: string) => {
       let value = `Contexto do projeto: targetProfile=${targetProfile}. Preserve este perfil.\n\nConhecimento selecionado (versão ${knowledge.version}; módulos ${knowledge.moduleIds.join(', ')}). Ele contém exemplos explicativos, não fatos do processo atual. Nunca copie atividades, papéis, campos, prazos, regras ou perguntas dos exemplos para a intenção sem trecho literal na solicitação ou em resposta confirmada.\n${selectedKnowledge}\n\nHistórico recente:\n${history || '(início da conversa)'}\n\nSolicitação atual:\n${args.text}`;
       value += `\n\nFatos confirmados pelo solicitante (autoridade para esta sessão; não repita perguntas já respondidas):\n${factText || '(nenhum)'}`;
+      value += reconciliationPrompt;
       if (args.currentSpec) value += `\n\nProcessSpec atual a preservar e refinar:\n${currentSpecText}`;
       return value;
     };
@@ -108,7 +144,9 @@ export class AiOrchestrator {
     const providerSchema = externalStrict ? toStrictProviderSchema(outputSchema) : undefined;
     const providerSchemaText = providerSchema ? JSON.stringify(providerSchema) : undefined;
     trace.push({ stage: 'context', status: 'selected', details: { integrationsRequested, knowledgeModules: knowledge.moduleIds, systemChars: systemInstruction.length, schemaChars, promptChars: prompt.length, promptSha256: createHash('sha256').update(prompt).digest('hex'), responseFormat: this.provider.id === 'openai-compatible' ? (externalStrict ? 'json_schema_strict' : 'json_object') : this.provider.id, ...(providerSchemaText ? { providerSchemaChars: providerSchemaText.length, providerSchemaSha256: createHash('sha256').update(providerSchemaText).digest('hex') } : {}), confirmedFactCount: confirmedFacts.length, refinementMode } });
+    if (groundingMode === 'controlled') trace.push({ stage: 'semantic-reconciliation', status: numericReconciliation.status, details: { priorThresholdCount: priorThresholdFacts.length, activeFactCount: numericReconciliation.facts.filter(fact => fact.state === 'confirmed').length, supersededFactCount: numericReconciliation.facts.filter(fact => fact.state === 'superseded').length } });
     let completion;
+    await args.onProviderCallStart?.();
     try { completion = await this.concurrency.run(() => this.provider.generateStructured(request)); }
     catch (error) { throw mapProviderError(error); }
     trace.push({ stage: 'provider', status: 'received', details: { kind: (completion.value as Json)?.kind, latencyMs: completion.latencyMs, usage: completion.usage } });
@@ -124,9 +162,10 @@ export class AiOrchestrator {
     let first = completion.value as Json;
     enforcePlanBounds(first);
     let recoveryAttempts = 0;
-    const repeatedFact = first.kind === 'need_clarification' ? findRepeatedQuestion(first.questions, confirmedFacts) : undefined;
+    const repeatedFact = first.kind === 'need_clarification' ? findRepeatedQuestion(first.questions, confirmedFacts, this.environment.aiSemanticGroundingMode || 'legacy') : undefined;
     if (repeatedFact) {
       const recoveryPrompt = `${prompt}\n\nCorreção obrigatória: você repetiu uma pergunta já respondida. Fato confirmado:\nPergunta: ${repeatedFact.question}\nResposta: ${repeatedFact.answer}\nEste fato resolve a pergunta. Não retorne need_clarification para o mesmo assunto, nem com uma paráfrase. Continue a geração/refinamento usando a resposta confirmada. Se faltar outra informação independente, pergunte somente essa informação.`;
+      await args.onProviderCallStart?.();
       try { completion = await this.concurrency.run(() => this.provider.generateStructured({ ...request, prompt: recoveryPrompt })); }
       catch (error) { throw mapProviderError(error); }
       accumulatedLatencyMs += completion.latencyMs;
@@ -141,7 +180,7 @@ export class AiOrchestrator {
       }
       first = completion.value as Json;
       enforcePlanBounds(first);
-      if (first.kind === 'need_clarification' && findRepeatedQuestion(first.questions, confirmedFacts)) throw new OrchestrationFailure('MODEL_REPEATED_QUESTION', 'O modelo voltou a repetir uma pergunta já respondida; a sessão e a revisão atual foram preservadas');
+      if (first.kind === 'need_clarification' && findRepeatedQuestion(first.questions, confirmedFacts, this.environment.aiSemanticGroundingMode || 'legacy')) throw new OrchestrationFailure('MODEL_REPEATED_QUESTION', 'O modelo voltou a repetir uma pergunta já respondida; a sessão e a revisão atual foram preservadas');
     }
     if (first.kind === 'need_clarification') return clarificationOutcome(first, completion.model, accumulatedLatencyMs, accumulatedUsage, this.provider.id, knowledge.version, knowledge.moduleIds, first);
 
@@ -158,20 +197,16 @@ export class AiOrchestrator {
           activitySourceText,
           confirmedAnswerText: confirmedFacts.map(fact => fact.answer).join('\n'),
           knowledgeText: knowledge.text,
+          semanticGroundingMode: this.environment.aiSemanticGroundingMode || 'legacy',
         });
         compiledBusinessIntent = compiled.businessIntent as Json;
-        const ledger = extractRequirementLedger({
-          messages: [{ id: args.sourceMessageId || `message_${createHash('sha256').update(args.text).digest('hex').slice(0, 16)}`, text: args.text, source: args.sourceMessageType || 'user' }],
-          confirmedAnswers: confirmedFacts.map((fact, index) => ({ messageId: `answer_${createHash('sha256').update(`${fact.confirmedAt}\0${index}\0${fact.answer}`).digest('hex').slice(0, 16)}`, text: fact.answer })),
-        });
-        const elements = businessIntentCoverageElements(compiledBusinessIntent);
-        const links = proposeLiteralCoverageLinks(ledger, elements);
-        const coverage = evaluateRequirementCoverage({ ledger, elements, links, messages: [{ id: args.sourceMessageId || `message_${createHash('sha256').update(args.text).digest('hex').slice(0, 16)}`, text: args.text }, ...confirmedFacts.map((fact, index) => ({ id: `answer_${createHash('sha256').update(`${fact.confirmedAt}\0${index}\0${fact.answer}`).digest('hex').slice(0, 16)}`, text: fact.answer }))] });
-        trace.push({ stage: 'requirement-coverage-shadow', status: 'audited', details: { ledgerVersion: ledger.schemaVersion, requirementCount: ledger.requirements.length, extractionComplete: ledger.extraction.complete, coverage: coverage.totals } });
+        auditCoverage(compiledBusinessIntent);
         return compiled.spec;
       } catch (error) {
-        trace.push({ stage: 'compilation', status: 'rejected', details: { code: error instanceof IntentCompilationError ? 'INTENT_INCOMPLETE' : 'REFINEMENT_AMBIGUOUS' } });
+        if (!coverageAudited && !refinementMode) auditCoverage(value);
+        trace.push({ stage: 'compilation', status: 'rejected', details: { code: error instanceof IntentCompilationError ? 'INTENT_INCOMPLETE' : error instanceof SemanticGroundingError ? `SEMANTIC_GROUNDING_${error.status.toUpperCase()}` : 'REFINEMENT_AMBIGUOUS' } });
         if (error instanceof IntentCompilationError) throw error;
+        if (error instanceof SemanticGroundingError) throw new OrchestrationFailure(`SEMANTIC_GROUNDING_${error.status.toUpperCase()}`, error.message);
         throw new OrchestrationFailure('REFINEMENT_AMBIGUOUS', error instanceof Error ? error.message : 'Refinamento não aplicável sem ambiguidade');
       }
     };
@@ -200,6 +235,7 @@ export class AiOrchestrator {
         repairKnowledge = repairKnowledge.slice(0, availableKnowledgeChars).replace(/\n[^\n]*$/, '').trim();
         repairPrompt = `${composePrompt(repairKnowledge)}${repairDetails}`;
       }
+      await args.onProviderCallStart?.();
       try { completion = await this.concurrency.run(() => this.provider.generateStructured({ ...request, prompt: repairPrompt })); }
       catch (error) { throw mapProviderError(error); }
       latencyMs += completion.latencyMs;
@@ -260,9 +296,21 @@ function businessIntentCoverageElements(intent: Json): CoverageElement[] {
 }
 
 function clarificationOutcome(value: Json, model: string, latencyMs: number, usage: ProviderUsage, provider: string, knowledgeVersion: string, knowledgeModules: string[], intermediate?: Json): GenerationOutcome {
-  return { kind: 'need_clarification', questions: value.questions, summary: value.summary, provider, model, latencyMs, usage, knowledgeVersion, knowledgeModules, intermediate };
+  const questions = (value.questions || []).map((question: Json) => ({ ...question, ...identityForQuestion(question.question, question.requirementId) }));
+  return { kind: 'need_clarification', questions, summary: value.summary, provider, model, latencyMs, usage, knowledgeVersion, knowledgeModules, intermediate };
 }
-function findRepeatedQuestion(questions: Array<{ question: string }>, facts: ConfirmedFact[]): ConfirmedFact | undefined {
+function maskSupersededNumericThresholds(text: string): string {
+  return text.replace(/\b(?:acima de|maior que|superiores? a|greater than|over)\s+(?:R\$\s*)?(?:[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:\.[0-9]+)?)/gi, '[limite numérico anterior supersedido]');
+}
+function findRepeatedQuestion(questions: Array<{ question: string; semanticSlot?: string }>, facts: ConfirmedFact[], mode: 'legacy' | 'controlled' = 'legacy'): ConfirmedFact | undefined {
+  if (mode === 'controlled') {
+    for (const question of questions) {
+      const slot = question.semanticSlot || semanticSlotForQuestion(question.question);
+      const matched = facts.find(fact => fact.state !== 'contradictory' && (fact.semanticSlot || semanticSlotForQuestion(fact.question)) === slot);
+      if (matched) return matched;
+    }
+    return undefined;
+  }
   const stopWords = new Set(['como', 'qual', 'quais', 'quem', 'onde', 'quando', 'para', 'deve', 'de', 'do', 'da', 'o', 'a', 'e', 'em', 'um', 'uma', 'que', 'ser', 'sua', 'seu', 'solicitado']);
   const tokens = (value: string) => new Set(value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').match(/[a-z0-9]+/g)?.filter(token => token.length > 2 && !stopWords.has(token)) || []);
   const similarity = (left: Set<string>, right: Set<string>) => {

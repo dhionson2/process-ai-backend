@@ -376,6 +376,12 @@
                     "type": "integer",
                     "minimum": 0
                   },
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128,
+                    "description": "Identificador estável do retry deste turno; reutilize o mesmo valor ao repetir a requisição."
+                  },
                   "dataClassification": {
                     "type": "string",
                     "enum": [
@@ -518,6 +524,16 @@
                   "baseRevision": {
                     "type": "integer",
                     "minimum": 0
+                  },
+                  "questionSetId": {
+                    "type": "string",
+                    "description": "Use o identificador retornado pela sessão para impedir aplicar respostas a perguntas substituídas."
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128,
+                    "description": "Identificador estável do retry deste turno; reutilize o mesmo valor ao repetir a requisição."
                   },
                   "dataClassification": {
                     "type": "string",
@@ -666,6 +682,16 @@
                   "baseRevision": {
                     "type": "integer",
                     "minimum": 0
+                  },
+                  "questionSetId": {
+                    "type": "string",
+                    "description": "Copie o identificador retornado pela sessão para impedir responder a perguntas substituídas."
+                  },
+                  "operationId": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128,
+                    "description": "Identificador estável do retry deste turno; reutilize o mesmo valor ao repetir a requisição."
                   },
                   "dataClassification": {
                     "type": "string",
@@ -2323,6 +2349,13 @@
           "currentRevision": {
             "type": "integer",
             "minimum": 0
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "questionSetId": {
+            "type": "string"
           },
           "pendingQuestions": {
             "type": "array",

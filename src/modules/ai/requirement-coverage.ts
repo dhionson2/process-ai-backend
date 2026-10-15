@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { evaluateActivityGrounding } from './semantic-grounding.js';
 
 export const REQUIREMENT_LEDGER_VERSION = '1.0.0' as const;
 export type RequirementType = 'actor' | 'activity' | 'field' | 'decision' | 'condition' | 'consequence' | 'loop' | 'business-rule' | 'integration';
@@ -66,7 +67,7 @@ export function verifyRequirementEvidence(requirement: Requirement, messages: Ar
 }
 
 /** Propose links only when a produced element carries a literal span from that exact requirement. */
-export function proposeLiteralCoverageLinks(ledger: RequirementLedgerV1, elements: CoverageElement[]): CoverageLink[] {
+export function proposeLiteralCoverageLinks(ledger: RequirementLedgerV1, elements: CoverageElement[], semanticGroundingMode: 'legacy' | 'controlled' = 'legacy'): CoverageLink[] {
   const links: CoverageLink[] = [];
   for (const requirement of ledger.requirements) {
     if (requirement.structure) {
@@ -78,8 +79,15 @@ export function proposeLiteralCoverageLinks(ledger: RequirementLedgerV1, element
     const evidence = requirement.evidence?.quote;
     if (!evidence) continue;
     const matches = elements.filter(element => element.evidence && norm(element.evidence) === norm(evidence));
-    if (matches.length !== 1) continue;
-    links.push({ requirementId: requirement.id, elementId: matches[0].id, basis: 'literal-grounding', verified: true, details: 'Candidate link from a unique literal evidence span; Gate still verifies structure and meaning.' });
+    const literalMeaningMatches = matches.length === 1 && norm(matches[0].meaning) === norm(requirement.meaning);
+    if (literalMeaningMatches || (matches.length === 1 && !(semanticGroundingMode === 'controlled' && requirement.type === 'activity'))) {
+      links.push({ requirementId: requirement.id, elementId: matches[0].id, basis: 'literal-grounding', verified: true, details: 'Candidate link from a unique literal evidence span; Gate still verifies structure and meaning.' });
+      continue;
+    }
+    if (semanticGroundingMode === 'controlled' && requirement.type === 'activity') {
+      const equivalent = elements.filter(element => element.type === 'activity' && activityGrounding(element, evidence, elements).status === 'equivalent');
+      if (equivalent.length === 1) links.push({ requirementId: requirement.id, elementId: equivalent[0].id, basis: 'structural-equivalence', verified: true, details: 'Ação, objeto, polaridade e papel explícito foram comparados pelo grounding controlado; proveniência literal permanece validada pelo Gate.' });
+    }
   }
   return links;
 }
@@ -134,7 +142,7 @@ export function evaluateRequirementCoverage(input: { ledger: RequirementLedgerV1
       continue;
     }
     if (requirement.type === 'actor' && element.actor && norm(requirement.meaning) !== norm(element.actor) && !norm(requirement.meaning).includes(norm(element.actor))) { findings.push({ requirementId: requirement.id, elementId: element.id, status: 'wrong-role', details: 'Papel do elemento diverge do papel requerido.' }); continue; }
-    const meaningMatches = norm(requirement.meaning) === norm(element.meaning);
+    const meaningMatches = norm(requirement.meaning) === norm(element.meaning) || (link.basis === 'structural-equivalence' && requirement.type === 'activity' && activityGrounding(element, requirement.evidence!.quote, input.elements).status === 'equivalent');
     const next = { ...link, verified: link.verified && meaningMatches && (link.basis === 'literal-grounding' || link.basis === 'structural-equivalence'), details: link.details };
     links.push(next);
     if (next.verified) { linkedReqs.add(requirement.id); linkedElements.add(element.id); }
@@ -167,6 +175,20 @@ export function evaluateRequirementCoverage(input: { ledger: RequirementLedgerV1
   for (const id of missingIds) inconclusiveIds.delete(id);
   const inconclusive = inconclusiveIds.size;
   return { schemaVersion: '1.0.0', extractionComplete: input.ledger.extraction.complete, totals: { proven, missing, partial, inconclusive, invalidEvidence, divergences }, findings, links };
+}
+
+/** Compare an assigned activity role with roles explicitly present in the source sentence. */
+function activityGrounding(element: CoverageElement, evidence: string, elements: CoverageElement[]) {
+  const namedActors = [...new Set(elements
+    .filter(candidate => candidate.type === 'actor')
+    .map(candidate => candidate.meaning.trim())
+    .filter(actor => actor.length > 0 && norm(evidence).includes(norm(actor))))];
+  if (namedActors.length > 1) return { status: 'inconclusive' as const, matched: [], divergent: [], reason: 'Mais de um papel aparece na evidência; a atribuição não é inequívoca.' };
+  return evaluateActivityGrounding({
+    name: element.meaning,
+    evidence,
+    ...(namedActors.length === 1 && element.actor ? { expectedActor: namedActors[0], actualActor: element.actor } : {}),
+  });
 }
 
 function verifyStructuralRequirement(requirement: Requirement, element: CoverageElement, spec: Json | undefined, processSpecValid?: boolean): { status?: CoverageFinding['status']; details: string } {

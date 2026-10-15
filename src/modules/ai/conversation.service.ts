@@ -1,8 +1,10 @@
 import type { Environment } from '../../config/env.js';
 import type { ModelProvider } from '../providers/model-provider.js';
-import { ConversationNotFound, RevisionConflict, type ConfirmedFact, type ConversationRepository, type GenerationRun, type ProjectTarget, type StoredRevision } from '../projects/conversation.repository.js';
+import { ConversationNotFound, OperationConflict, RevisionConflict, StaleQuestionSet, type ConfirmedFact, type ConversationRepository, type GenerationRun, type ProjectTarget, type StoredRevision } from '../projects/conversation.repository.js';
 import { AiOrchestrator, OrchestrationFailure, type ConversationTurn, type GenerationOutcome } from './orchestrator.js';
 import { reconstructMessageHistory } from './message-provenance.js';
+import { extractNumericThresholdFacts, identityForQuestion, latestSemanticFactEvents, reconcileExplicitNumericCorrection, semanticFactId, type SemanticFact } from './semantic-grounding.js';
+import { createHash } from 'node:crypto';
 import { configuredProvider } from './provider.factory.js';
 import { validateProcessSpec } from '../validation/validation.service.js';
 import { generateArtifacts } from '../generation/artifact-generator.js';
@@ -36,26 +38,33 @@ export class ConversationService {
     if (typeof name !== 'string' || !name.trim() || name.length > 128) throw new ConversationServiceFailure('PROJECT_NAME_INVALID', 'Nome do projeto deve ter de 1 a 128 caracteres', 400);
     return { ...await this.repo().createProject(this.environment.localTenantId, name.trim(), targetProfile), status: 'draft', currentRevision: 0 };
   }
-  async submitMessage(sessionId: string, text: string, baseRevision: number, dataClassification?: 'synthetic' | 'public') {
+  async submitMessage(sessionId: string, text: string, baseRevision: number, dataClassification?: 'synthetic' | 'public', operationId?: string) {
     this.guardExternalData(dataClassification);
-    return this.processTurn(sessionId, text, baseRevision);
+    return this.processTurn(sessionId, text, baseRevision, 'user', undefined, operationId);
   }
-  async answerQuestions(sessionId: string, answers: string[], baseRevision: number, dataClassification?: 'synthetic' | 'public') {
+  async answerQuestions(sessionId: string, answers: string[], baseRevision: number, dataClassification?: 'synthetic' | 'public', questionSetId?: string, operationId?: string) {
     this.guardExternalData(dataClassification);
     this.ensureRepository();
+    const requestHash = hashOperation({ kind: 'answers', baseRevision, answers: Array.isArray(answers) ? answers.map(answer => typeof answer === 'string' ? answer.trim() : answer) : answers, questionSetId: questionSetId || null });
+    const replay = await this.replayOperation(sessionId, operationId, requestHash);
+    if (replay) return replay;
     const session = await this.sessionOrThrow(sessionId);
     if (!Array.isArray(answers) || answers.length !== session.pendingQuestions.length || answers.some(answer => typeof answer !== 'string' || !answer.trim() || answer.length > 2000)) {
       throw new ConversationServiceFailure('ANSWERS_INVALID', 'Forneça uma resposta de até 2000 caracteres para cada pergunta pendente', 400);
     }
-    const questions = session.pendingQuestions as Array<{ question: string }>;
+    const questions = session.pendingQuestions as Array<{ question: string; questionId?: string; requirementId?: string; semanticSlot?: string }>;
     if (!Number.isInteger(baseRevision) || baseRevision !== session.currentRevision) throw new RevisionConflict();
     const confirmedAt = new Date().toISOString();
-    await this.repo().appendConfirmedFacts(this.environment.localTenantId, sessionId, questions.map((question, index): ConfirmedFact => ({ question: question.question, answer: answers[index].trim(), confirmedAt })));
     // Questions are model-authored context, not user evidence. Persist only the answers as a user turn.
     const text = answers.map(answer => answer.trim()).join('\n\n');
-    return this.processTurn(sessionId, text, baseRevision, 'confirmed-answer');
+    const facts = questions.map((question, index): ConfirmedFact => {
+        const identity = identityForQuestion(question.question, question.requirementId);
+        const semanticSlot = question.semanticSlot || identity.semanticSlot;
+        return { question: question.question, answer: answers[index].trim(), confirmedAt, answeredAt: confirmedAt, questionId: question.questionId || identity.questionId, requirementId: question.requirementId || identity.requirementId, semanticSlot, semanticFactId: semanticFactId(semanticSlot), questionStatus: 'answered', state: 'confirmed' };
+      });
+    return this.processTurn(sessionId, text, baseRevision, 'confirmed-answer', facts, operationId, questionSetId, requestHash);
   }
-  async session(sessionId: string) { this.ensureRepository(); return this.sessionOrThrow(sessionId); }
+  async session(sessionId: string) { this.ensureRepository(); await this.repo().reconcileInterruptedRuns(this.environment.localTenantId, sessionId); const session = await this.sessionOrThrow(sessionId); return { ...session, questionSetId: stableQuestionSetId(session.pendingQuestions), pendingQuestions: publicQuestions(session.pendingQuestions) }; }
   async history(sessionId: string) {
     this.ensureRepository(); await this.sessionOrThrow(sessionId);
     const [messages, facts] = await Promise.all([this.repo().listMessages(this.environment.localTenantId, sessionId, 100), this.repo().listConfirmedFacts(this.environment.localTenantId, sessionId)]);
@@ -103,73 +112,101 @@ export class ConversationService {
     return result;
   }
 
-  private async processTurn(sessionId: string, text: string, baseRevision: number, sourceMessageType: 'user' | 'confirmed-answer' = 'user') {
+  private async processTurn(sessionId: string, text: string, baseRevision: number, sourceMessageType: 'user' | 'confirmed-answer' = 'user', facts?: ConfirmedFact[], operationId?: string, expectedQuestionSetId?: string, suppliedRequestHash?: string) {
     this.ensureRepository();
+    if (operationId !== undefined && (typeof operationId !== 'string' || operationId.length < 8 || operationId.length > 128)) throw new ConversationServiceFailure('OPERATION_ID_INVALID', 'operationId deve conter de 8 a 128 caracteres', 400);
+    if (expectedQuestionSetId !== undefined && (typeof expectedQuestionSetId !== 'string' || expectedQuestionSetId.length > 64)) throw new ConversationServiceFailure('QUESTION_SET_INVALID', 'questionSetId inválido', 400);
+    if (typeof text !== 'string' || !text.trim() || text.length > 6000) throw new ConversationServiceFailure('MESSAGE_SIZE_INVALID', 'A mensagem deve conter de 1 a 6000 caracteres', 400);
+    const requestHash = suppliedRequestHash || hashOperation({ kind: sourceMessageType, baseRevision, text: text.trim(), expectedQuestionSetId: expectedQuestionSetId || null });
+    const replay = await this.replayOperation(sessionId, operationId, requestHash);
+    if (replay) return replay;
     const session = await this.sessionOrThrow(sessionId);
     if (!Number.isInteger(baseRevision) || baseRevision !== session.currentRevision) throw new RevisionConflict();
     if (!this.orchestrator) {
       const reason = this.providerConfigurationError;
       throw new ConversationServiceFailure(reason?.code || 'AI_NOT_CONFIGURED', reason?.message || 'Configure AI_PROVIDER e AI_MODEL no backend antes de iniciar uma conversa', 503);
     }
-    if (typeof text !== 'string' || !text.trim() || text.length > 6000) throw new ConversationServiceFailure('MESSAGE_SIZE_INVALID', 'A mensagem deve conter de 1 a 6000 caracteres', 400);
     const tenantId = this.environment.localTenantId;
-    const submittedMessage = await this.repo().appendMessage(tenantId, sessionId, 'user', text.trim());
-    // Once a user turn is submitted, prior questions have either been answered or
-    // superseded. Keep stale prompts out of the session while this run is in flight.
-    await this.repo().setPendingQuestions(tenantId, sessionId, []);
-    const run = await this.repo().createRun(tenantId, sessionId, this.orchestratorProvider(), this.orchestratorModel());
-    await this.repo().updateRun(tenantId, run.id, { status: 'generating' });
+    const turn = await this.repo().beginTurn(tenantId, sessionId, { operationId, requestHash, baseRevision, role: 'user', content: text.trim(), facts, expectedQuestionSetId }, this.orchestratorProvider(), this.orchestratorModel());
+    const submittedMessage = turn.message; const run = turn.run;
+    if (turn.replay) return { ...(run.result as Record<string, unknown> || {}), generationRunId: run.id, status: run.status, replayed: true };
+    let providerCallStarted = Boolean(run.providerStartedAt);
     try {
       const [storedMessages, currentSpec, confirmedFacts] = await Promise.all([this.repo().listMessages(tenantId, sessionId, 8), this.repo().getCurrentSpec(tenantId, sessionId), this.repo().listConfirmedFacts(tenantId, sessionId)]);
-      await this.repo().setSessionStatus(tenantId, sessionId, 'generating');
+      if (this.environment.aiSemanticGroundingMode === 'controlled') await this.persistNumericSemanticCorrection(sessionId, submittedMessage, confirmedFacts);
       const history: ConversationTurn[] = reconstructMessageHistory(storedMessages, confirmedFacts).map(message => ({ role: message.role, content: message.content }));
-      const outcome = await this.orchestrator.generate({ text: text.trim(), sourceMessageId: submittedMessage.id, sourceMessageType, history, currentSpec, targetProfile: session.targetProfile, confirmedFacts: confirmedFacts.slice(-40) });
+      let outcome: GenerationOutcome;
+      try { outcome = await this.orchestrator.generate({ text: text.trim(), sourceMessageId: submittedMessage.id, sourceMessageType, history, currentSpec, targetProfile: session.targetProfile, confirmedFacts: confirmedFacts.slice(-40), onProviderCallStart: async () => { await this.repo().markProviderStarted(tenantId, run.id); providerCallStarted = true; } }); }
+      catch (error) {
+        const mapped = mapServiceError(error);
+        await this.repo().completeTurn(tenantId, sessionId, run.id, { status: 'failed', assistantMessage: providerCallStarted ? `Não foi possível concluir a geração (${mapped.code}). Você pode tentar novamente; a revisão atual foi mantida.` : undefined, runPatch: { status: 'failed', errorCode: mapped.code, result: { error: { code: mapped.code, message: mapped.message } }, metrics: { runId: run.id, provider: run.provider, model: run.model, latencyMs: Date.now() - Date.parse(run.createdAt), errorCode: mapped.code, providerCallStarted, providerDiagnostic: error instanceof OrchestrationFailure ? error.providerDiagnostic : undefined, pipeline: error instanceof OrchestrationFailure ? error.diagnostics : undefined } } });
+        throw mapped;
+      }
       return await this.persistOutcome(sessionId, run, baseRevision, outcome);
     } catch (error) {
-      const mapped = mapServiceError(error);
-      await Promise.all([
-        this.repo().updateRun(tenantId, run.id, { status: 'failed', errorCode: mapped.code, result: { error: { code: mapped.code, message: mapped.message } }, metrics: { runId: run.id, provider: run.provider, model: run.model, latencyMs: Date.now() - Date.parse(run.createdAt), errorCode: mapped.code, providerDiagnostic: error instanceof OrchestrationFailure ? error.providerDiagnostic : undefined, pipeline: error instanceof OrchestrationFailure ? error.diagnostics : undefined } }),
-        this.repo().setSessionStatus(tenantId, sessionId, 'failed'),
-        this.repo().setPendingQuestions(tenantId, sessionId, []),
-      ]);
-      await this.repo().appendMessage(tenantId, sessionId, 'assistant', `Não foi possível concluir a geração (${mapped.code}). Você pode tentar novamente; a revisão atual foi mantida.`);
-      throw mapped;
+      if (error instanceof ConversationServiceFailure) throw error;
+      throw mapServiceError(error);
     }
   }
 
   private async persistOutcome(sessionId: string, run: GenerationRun, baseRevision: number, outcome: GenerationOutcome) {
     const tenantId = this.environment.localTenantId;
     if (outcome.kind === 'need_clarification') {
-      await this.repo().setPendingQuestions(tenantId, sessionId, outcome.questions);
-      await this.repo().setSessionStatus(tenantId, sessionId, 'needs-input');
       const summary = outcome.summary || 'Preciso esclarecer alguns pontos antes de propor um fluxo correto.';
-      await this.repo().appendMessage(tenantId, sessionId, 'assistant', `${summary}\n${outcome.questions.map((question, index) => `${index + 1}. ${question.question}`).join('\n')}`);
-      const result = { kind: outcome.kind, questions: outcome.questions, summary, knowledgeVersion: outcome.knowledgeVersion, knowledgeModules: outcome.knowledgeModules };
-      await this.repo().updateRun(tenantId, run.id, { status: 'needs-input', result, metrics: metrics(outcome) });
+      const questionSetId = stableQuestionSetId(outcome.questions);
+      const result = { kind: outcome.kind, questions: publicQuestions(outcome.questions), questionSetId, summary, knowledgeVersion: outcome.knowledgeVersion, knowledgeModules: outcome.knowledgeModules };
+      await this.repo().completeTurn(tenantId, sessionId, run.id, { status: 'needs-input', questions: outcome.questions, assistantMessage: `${summary}\n${outcome.questions.map((question, index) => `${index + 1}. ${question.question}`).join('\n')}`, runPatch: { status: 'needs-input', result, metrics: metrics(outcome) } });
       return { generationRunId: run.id, status: 'needs-input', ...result };
     }
     if (!outcome.validation.valid || !outcome.artifacts) {
-      await this.repo().setSessionStatus(tenantId, sessionId, 'validation-failed');
       const result = { kind: outcome.kind, changeSummary: outcome.changeSummary, validation: outcome.validation, repairAttempts: outcome.repairAttempts };
-      await this.repo().updateRun(tenantId, run.id, { status: 'validation-failed', result, metrics: metrics(outcome) });
-      await this.repo().appendMessage(tenantId, sessionId, 'assistant', `A proposta não passou na validação determinística: ${outcome.validation.diagnostics.map(d => d.code).join(', ')}`);
+      await this.repo().completeTurn(tenantId, sessionId, run.id, { status: 'validation-failed', assistantMessage: `A proposta não passou na validação determinística: ${outcome.validation.diagnostics.map(d => d.code).join(', ')}`, runPatch: { status: 'validation-failed', result, metrics: metrics(outcome) } });
       return { generationRunId: run.id, status: 'validation-failed', ...result };
     }
     const artifactBundle = { bpmnXml: outcome.artifacts.bpmnXml, forms: outcome.artifacts.forms, manifest: outcome.artifacts.manifest, diagnostics: outcome.artifacts.diagnostics };
     const metadata = { provider: outcome.provider, model: outcome.model, latencyMs: outcome.latencyMs, usage: outcome.usage, repairAttempts: outcome.repairAttempts, knowledgeVersion: outcome.knowledgeVersion, knowledgeModules: outcome.knowledgeModules };
-    const proposal = await this.repo().createProposal(tenantId, sessionId, baseRevision, outcome.spec, artifactBundle, outcome.changeSummary, metadata);
-    await this.repo().setSessionStatus(tenantId, sessionId, 'review-required');
-    await this.repo().setPendingQuestions(tenantId, sessionId, []);
-    await this.repo().appendMessage(tenantId, sessionId, 'assistant', `${outcome.changeSummary}\nProposta salva como revisão ${proposal.revision}; aceite-a após revisão para torná-la atual.`);
-    const result = { kind: outcome.kind, revision: proposal.revision, baseRevision, changeSummary: outcome.changeSummary, validation: outcome.validation, artifacts: artifactBundle, metadata };
-    await this.repo().updateRun(tenantId, run.id, { status: 'validated', result, metrics: metrics(outcome) });
-    return { generationRunId: run.id, status: 'validated', ...result };
+    const result = { kind: outcome.kind, baseRevision, processSpec: outcome.spec, changeSummary: outcome.changeSummary, validation: outcome.validation, artifacts: artifactBundle, metadata };
+    await this.repo().completeTurn(tenantId, sessionId, run.id, { status: 'review-required', proposal: { processSpec: outcome.spec, artifacts: artifactBundle, summary: outcome.changeSummary, metadata, baseRevision }, assistantMessage: `${outcome.changeSummary}\nProposta salva para revisão; aceite-a após revisão para torná-la atual.`, runPatch: { status: 'validated', result: { kind: outcome.kind, baseRevision, changeSummary: outcome.changeSummary, validation: outcome.validation, artifacts: artifactBundle, metadata }, metrics: metrics(outcome) } });
+    const savedRun = await this.repo().getRun(tenantId, run.id); const publicResult = (savedRun?.result || {}) as any;
+    return { generationRunId: run.id, status: 'validated', ...publicResult };
+  }
+
+  private async persistNumericSemanticCorrection(sessionId: string, message: { id: string; content: string }, facts: ConfirmedFact[]) {
+    const effectiveFacts = latestSemanticFactEvents(facts);
+    const storedThresholdFacts = effectiveFacts.flatMap(fact => fact.state === 'confirmed' && fact.semanticFact?.attribute === 'numeric-threshold' && fact.semanticFact.state === 'confirmed' ? [fact.semanticFact] : []);
+    let previous: SemanticFact[] = storedThresholdFacts;
+    if (!previous.length) {
+      const tenantId = this.environment.localTenantId;
+      const messages = await this.repo().listMessages(tenantId, sessionId, 100);
+      previous = extractNumericThresholdFacts(messages.filter(item => item.role === 'user' && item.id !== message.id).map(item => ({ sourceId: item.id, text: item.content })));
+    }
+    const result = reconcileExplicitNumericCorrection(previous, message.content, message.id);
+    if (result.status !== 'reconciled') return;
+    const existingEvents = new Set(effectiveFacts.filter(fact => fact.semanticFact).map(fact => `${fact.semanticFact!.id}:${fact.semanticFact!.state}`));
+    const events = result.facts.filter(fact => fact.state === 'superseded' || (fact.state === 'confirmed' && fact.source.sourceId === message.id));
+    const confirmedAt = new Date().toISOString();
+    const records = events.filter(fact => !existingEvents.has(`${fact.id}:${fact.state}`)).map((fact): ConfirmedFact => ({
+      question: 'Condição numérica do processo', answer: fact.value, confirmedAt,
+      questionId: `q_${fact.requirementId}`, requirementId: fact.requirementId,
+      semanticSlot: `slot:condition-value:${fact.requirementId}`, semanticFactId: fact.id,
+      sourceId: fact.source.sourceId, state: fact.state as 'confirmed' | 'superseded',
+      supersedesFactId: fact.relations.find(item => item.type === 'supersedes')?.factId,
+      semanticFact: fact,
+    }));
+    if (records.length) await this.repo().appendConfirmedFacts(this.environment.localTenantId, sessionId, records);
   }
 
   private async sessionOrThrow(sessionId: string) {
     const session = await this.repo().getSession(this.environment.localTenantId, sessionId);
     if (!session) throw new ConversationServiceFailure('SESSION_NOT_FOUND', 'Sessão não encontrada', 404);
     return session;
+  }
+  private async replayOperation(sessionId: string, operationId: string | undefined, requestHash: string) {
+    if (operationId === undefined) return undefined;
+    if (typeof operationId !== 'string' || operationId.length < 8 || operationId.length > 128) throw new ConversationServiceFailure('OPERATION_ID_INVALID', 'operationId deve conter de 8 a 128 caracteres', 400);
+    const run = await this.repo().getOperation(this.environment.localTenantId, sessionId, operationId, requestHash);
+    if (!run) return undefined;
+    return { ...(run.result as Record<string, unknown> || {}), generationRunId: run.id, status: run.status, replayed: true };
   }
   private ensureRepository() { if (!this.repository) throw new ConversationServiceFailure('PERSISTENCE_NOT_CONFIGURED', 'Configure DATABASE_URL para persistir projetos e conversas no PostgreSQL', 503); }
   private guardExternalData(classification?: string) {
@@ -180,12 +217,24 @@ export class ConversationService {
   private orchestratorModel() { return this.orchestrator!.modelId; }
 }
 
+function publicQuestions(value: unknown): Array<{ question: string; blocking: boolean }> {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item: any) => item && typeof item.question === 'string').map((item: any) => ({ question: item.question, blocking: item.blocking === true }));
+}
+
+function stableQuestionSetId(value: unknown): string {
+  const questions = Array.isArray(value) ? value.map((item: any) => ({ questionId: item?.questionId || item?.id || null, requirementId: item?.requirementId || null, semanticSlot: item?.semanticSlot || null, question: item?.question || null })) : [];
+  return `qs_${createHash('sha256').update(JSON.stringify(questions)).digest('hex').slice(0, 24)}`;
+}
+
 function metrics(outcome: GenerationOutcome) {
   return { provider: outcome.provider, model: outcome.model, latencyMs: outcome.latencyMs, usage: outcome.usage, repairAttempts: outcome.kind === 'proposed_spec' ? outcome.repairAttempts : 0, knowledgeVersion: outcome.knowledgeVersion, knowledgeModules: outcome.knowledgeModules, pipeline: outcome.diagnostics?.filter(item => item.stage !== 'requirement-coverage-shadow') };
 }
+function hashOperation(value: unknown) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 function mapServiceError(error: unknown): ConversationServiceFailure {
   if (error instanceof ConversationServiceFailure) return error;
   if (error instanceof RevisionConflict) return new ConversationServiceFailure('REVISION_CONFLICT', error.message, 409);
+  if (error instanceof OperationConflict) return new ConversationServiceFailure('OPERATION_ID_CONFLICT', error.message, 409);
   if (error instanceof ConversationNotFound) return new ConversationServiceFailure('SESSION_NOT_FOUND', error.message, 404);
   if (error instanceof OrchestrationFailure) {
     const status = error.code === 'PROVIDER_TIMEOUT' ? 504 : error.code === 'PROVIDER_UNAVAILABLE' ? 503 : error.code === 'PROVIDER_RATE_LIMITED' ? 429 : error.code.startsWith('PROVIDER_') || error.code === 'MODEL_RESULT_INVALID' ? 502 : error.code.endsWith('_LIMIT_EXCEEDED') ? 413 : 422;
