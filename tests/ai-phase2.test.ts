@@ -361,6 +361,10 @@ test('orquestrador pergunta lacunas, valida ProcessSpec, gera artefatos e limita
   assert.equal(generated.spec.status, 'needs-input');
   assert.equal(generated.artifacts?.manifest.publication.eligible, false);
   assert.ok(generated.artifacts?.manifest.configuration.unresolvedRoles.length);
+  const shadow = generated.diagnostics?.find(item => item.stage === 'requirement-coverage-shadow');
+  assert.equal(shadow?.status, 'audited');
+  assert.ok(shadow?.details.coverage);
+  assert.equal(Object.hasOwn(shadow!.details, 'findings'), false, 'shadow diagnostic retains aggregates only');
 
   const refined = structuredClone(spec); refined.name = 'Solicitação de férias revisada';
   const refineProvider = new QueueProvider([{ kind: 'refinement', changeSummary: 'Renomear mantendo o restante', operations: [{ kind: 'renameProcess', name: refined.name }] }]);
@@ -426,6 +430,8 @@ test('API persiste conversas, perguntas, runs e revisões; refinamento mantém a
     const answer = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/answers`, payload: { answers: ['O gestor é selecionado manualmente pelo operador autorizado.'], baseRevision: 0 } });
     assert.equal(answer.statusCode, 200);
     assert.equal(answer.json().status, 'validated');
+    const answeredRun = await app.inject({ method: 'GET', url: `/api/v1/generation-runs/${answer.json().generationRunId}` });
+    assert.ok(!answeredRun.json().metrics.pipeline.some((item: any) => item.stage === 'requirement-coverage-shadow'), 'shadow diagnostics stay out of the public run response');
     assert.match(provider.prompts[1].prompt, /Fatos confirmados pelo solicitante/);
     assert.match(provider.prompts[1].prompt, /selecionado manualmente pelo operador autorizado/);
     const facts = await repository.listConfirmedFacts('test-tenant', sessionId);

@@ -53,7 +53,7 @@ export class ConversationService {
     await this.repo().appendConfirmedFacts(this.environment.localTenantId, sessionId, questions.map((question, index): ConfirmedFact => ({ question: question.question, answer: answers[index].trim(), confirmedAt })));
     // Questions are model-authored context, not user evidence. Persist only the answers as a user turn.
     const text = answers.map(answer => answer.trim()).join('\n\n');
-    return this.processTurn(sessionId, text, baseRevision);
+    return this.processTurn(sessionId, text, baseRevision, 'confirmed-answer');
   }
   async session(sessionId: string) { this.ensureRepository(); return this.sessionOrThrow(sessionId); }
   async history(sessionId: string) {
@@ -103,7 +103,7 @@ export class ConversationService {
     return result;
   }
 
-  private async processTurn(sessionId: string, text: string, baseRevision: number) {
+  private async processTurn(sessionId: string, text: string, baseRevision: number, sourceMessageType: 'user' | 'confirmed-answer' = 'user') {
     this.ensureRepository();
     const session = await this.sessionOrThrow(sessionId);
     if (!Number.isInteger(baseRevision) || baseRevision !== session.currentRevision) throw new RevisionConflict();
@@ -113,7 +113,7 @@ export class ConversationService {
     }
     if (typeof text !== 'string' || !text.trim() || text.length > 6000) throw new ConversationServiceFailure('MESSAGE_SIZE_INVALID', 'A mensagem deve conter de 1 a 6000 caracteres', 400);
     const tenantId = this.environment.localTenantId;
-    await this.repo().appendMessage(tenantId, sessionId, 'user', text.trim());
+    const submittedMessage = await this.repo().appendMessage(tenantId, sessionId, 'user', text.trim());
     // Once a user turn is submitted, prior questions have either been answered or
     // superseded. Keep stale prompts out of the session while this run is in flight.
     await this.repo().setPendingQuestions(tenantId, sessionId, []);
@@ -123,7 +123,7 @@ export class ConversationService {
       const [storedMessages, currentSpec, confirmedFacts] = await Promise.all([this.repo().listMessages(tenantId, sessionId, 8), this.repo().getCurrentSpec(tenantId, sessionId), this.repo().listConfirmedFacts(tenantId, sessionId)]);
       await this.repo().setSessionStatus(tenantId, sessionId, 'generating');
       const history: ConversationTurn[] = reconstructMessageHistory(storedMessages, confirmedFacts).map(message => ({ role: message.role, content: message.content }));
-      const outcome = await this.orchestrator.generate({ text: text.trim(), history, currentSpec, targetProfile: session.targetProfile, confirmedFacts: confirmedFacts.slice(-40) });
+      const outcome = await this.orchestrator.generate({ text: text.trim(), sourceMessageId: submittedMessage.id, sourceMessageType, history, currentSpec, targetProfile: session.targetProfile, confirmedFacts: confirmedFacts.slice(-40) });
       return await this.persistOutcome(sessionId, run, baseRevision, outcome);
     } catch (error) {
       const mapped = mapServiceError(error);
@@ -181,7 +181,7 @@ export class ConversationService {
 }
 
 function metrics(outcome: GenerationOutcome) {
-  return { provider: outcome.provider, model: outcome.model, latencyMs: outcome.latencyMs, usage: outcome.usage, repairAttempts: outcome.kind === 'proposed_spec' ? outcome.repairAttempts : 0, knowledgeVersion: outcome.knowledgeVersion, knowledgeModules: outcome.knowledgeModules, pipeline: outcome.diagnostics };
+  return { provider: outcome.provider, model: outcome.model, latencyMs: outcome.latencyMs, usage: outcome.usage, repairAttempts: outcome.kind === 'proposed_spec' ? outcome.repairAttempts : 0, knowledgeVersion: outcome.knowledgeVersion, knowledgeModules: outcome.knowledgeModules, pipeline: outcome.diagnostics?.filter(item => item.stage !== 'requirement-coverage-shadow') };
 }
 function mapServiceError(error: unknown): ConversationServiceFailure {
   if (error instanceof ConversationServiceFailure) return error;

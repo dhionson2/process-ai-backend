@@ -10,10 +10,11 @@ import type { ConfirmedFact } from '../projects/conversation.repository.js';
 import { interpretationSchema, normalizeInterpretation } from './interpretation-context.js';
 import { technicalIntent } from '../knowledge/capability-context.js';
 import { createHash } from 'node:crypto';
+import { evaluateRequirementCoverage, extractRequirementLedger, proposeLiteralCoverageLinks, type CoverageElement, type RequirementType } from './requirement-coverage.js';
 
 export type ConversationTurn = { role: 'user' | 'assistant'; content: string };
 export type PipelineDiagnostic = { stage: string; status: string; details: Record<string, unknown> };
-type GenerationArguments = { text: string; history: ConversationTurn[]; currentSpec?: Record<string, unknown>; targetProfile?: ProjectTarget; confirmedFacts?: ConfirmedFact[] };
+type GenerationArguments = { text: string; history: ConversationTurn[]; sourceMessageId?: string; sourceMessageType?: 'user' | 'confirmed-answer'; currentSpec?: Record<string, unknown>; targetProfile?: ProjectTarget; confirmedFacts?: ConfirmedFact[] };
 export type GenerationOutcome = (
   | { kind: 'need_clarification'; questions: Array<{ question: string; blocking: boolean }>; summary?: string; provider: string; model: string; latencyMs: number; usage: ProviderUsage; knowledgeVersion: string; knowledgeModules: string[]; intermediate?: Json }
   | { kind: 'proposed_spec'; spec: Record<string, unknown>; changeSummary: string; validation: { valid: boolean; diagnostics: Array<{ code: string; path: string; message: string; severity: string }> }; artifacts?: Awaited<ReturnType<typeof generateArtifacts>>; provider: string; model: string; latencyMs: number; usage: ProviderUsage; repairAttempts: number; knowledgeVersion: string; knowledgeModules: string[]; intermediate?: Json }) & { diagnostics?: PipelineDiagnostic[] };
@@ -159,6 +160,14 @@ export class AiOrchestrator {
           knowledgeText: knowledge.text,
         });
         compiledBusinessIntent = compiled.businessIntent as Json;
+        const ledger = extractRequirementLedger({
+          messages: [{ id: args.sourceMessageId || `message_${createHash('sha256').update(args.text).digest('hex').slice(0, 16)}`, text: args.text, source: args.sourceMessageType || 'user' }],
+          confirmedAnswers: confirmedFacts.map((fact, index) => ({ messageId: `answer_${createHash('sha256').update(`${fact.confirmedAt}\0${index}\0${fact.answer}`).digest('hex').slice(0, 16)}`, text: fact.answer })),
+        });
+        const elements = businessIntentCoverageElements(compiledBusinessIntent);
+        const links = proposeLiteralCoverageLinks(ledger, elements);
+        const coverage = evaluateRequirementCoverage({ ledger, elements, links, messages: [{ id: args.sourceMessageId || `message_${createHash('sha256').update(args.text).digest('hex').slice(0, 16)}`, text: args.text }, ...confirmedFacts.map((fact, index) => ({ id: `answer_${createHash('sha256').update(`${fact.confirmedAt}\0${index}\0${fact.answer}`).digest('hex').slice(0, 16)}`, text: fact.answer }))] });
+        trace.push({ stage: 'requirement-coverage-shadow', status: 'audited', details: { ledgerVersion: ledger.schemaVersion, requirementCount: ledger.requirements.length, extractionComplete: ledger.extraction.complete, coverage: coverage.totals } });
         return compiled.spec;
       } catch (error) {
         trace.push({ stage: 'compilation', status: 'rejected', details: { code: error instanceof IntentCompilationError ? 'INTENT_INCOMPLETE' : 'REFINEMENT_AMBIGUOUS' } });
@@ -227,6 +236,27 @@ export class AiOrchestrator {
       provider: this.provider.id, model: completion.model, latencyMs, usage, repairAttempts, knowledgeVersion: knowledge.version, knowledgeModules: knowledge.moduleIds, intermediate: compiledBusinessIntent || plan,
     };
   }
+}
+
+function businessIntentCoverageElements(intent: Json): CoverageElement[] {
+  const elements: CoverageElement[] = [];
+  const add = (id: string, type: RequirementType, meaning: string, evidence?: string, actor?: string, evidenceSource?: string) => elements.push({ id, type, meaning, ...(actor ? { actor } : {}), ...(evidence ? { evidence } : {}), ...(evidenceSource ? { evidenceSource } : {}) });
+  for (const [index, actor] of (intent.actors || []).entries()) add(`actor:${index}`, 'actor', actor.name, actor.evidence, actor.name, actor.provenance?.source);
+  for (const [index, field] of (intent.startFields || []).entries()) add(`field:start:${index}`, 'field', field.name, field.evidence, undefined, field.provenance?.source);
+  const walk = (items: Json[], path: string) => (items || []).forEach((activity: Json, index: number) => {
+    const id = `${path}:${index}`;
+    const type: RequirementType = activity.kind === 'integration' ? 'integration' : activity.kind === 'decision' || activity.kind === 'approval' ? 'decision' : 'activity';
+    add(id, type, activity.name, activity.evidence, activity.actor, activity.provenance?.source);
+    for (const [fieldIndex, field] of (activity.fields || []).entries()) add(`${id}:field:${fieldIndex}`, 'field', field.name, field.evidence, undefined, field.provenance?.source);
+    for (const [ruleIndex, alternative] of (activity.alternatives || []).entries()) {
+      add(`${id}:condition:${ruleIndex}`, 'condition', String(alternative.label), activity.evidence, undefined, activity.provenance?.source);
+      walk(alternative.steps || [], `${id}:alternative:${ruleIndex}`);
+    }
+    walk(activity.onApproved || [], `${id}:approved`); walk(activity.onRejected || [], `${id}:rejected`);
+  });
+  walk(intent.activities || [], 'activity');
+  for (const [index, rule] of (intent.rules || []).entries()) add(`rule:${index}`, 'business-rule', rule.text, rule.evidence, undefined, rule.provenance?.source);
+  return elements;
 }
 
 function clarificationOutcome(value: Json, model: string, latencyMs: number, usage: ProviderUsage, provider: string, knowledgeVersion: string, knowledgeModules: string[], intermediate?: Json): GenerationOutcome {
