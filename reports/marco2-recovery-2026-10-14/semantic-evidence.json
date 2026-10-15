@@ -1,0 +1,31 @@
+{
+  "A": {
+    "approved": "Registrar férias",
+    "approvedRole": "RH",
+    "rejected": "Comunicar motivo ao servidor",
+    "rejectedRole": "Servidor",
+    "approvalBeforeTarget": true,
+    "requiresReason": true
+  },
+  "B": {
+    "approved": "Receber solicitação de compra",
+    "approvedRole": "Setor de Compras",
+    "rejected": "Receber justificativa da reprovação",
+    "rejectedRole": "Funcionário",
+    "approvalBeforeTarget": true,
+    "requiresReason": true
+  },
+  "C": {
+    "approved": "Registrar férias",
+    "approvedRole": "RH",
+    "rejected": "Comunicar motivo ao servidor",
+    "rejectedRole": "Servidor",
+    "approvalBeforeTarget": true,
+    "requiresReason": true
+  },
+  "CApprovalRole": {
+    "id": "role_diretor",
+    "label": "Diretor",
+    "resolution": "unresolved"
+  }
+}

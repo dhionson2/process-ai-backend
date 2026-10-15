@@ -1,25 +1,25 @@
-<?xml version='1.0' encoding='utf-8'?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_processo_integracao" targetNamespace="urn:process-design:preview">
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:process-ai="urn:process-ai:preview" xmlns:flowable="http://flowable.org/bpmn" id="Definitions_processo_integracao" targetNamespace="urn:process-design:preview">
   <bpmn:process id="processo_integracao" name="Consultar e atualizar registro por conectores aprovados" isExecutable="false">
-    <bpmn:startEvent id="inicio" name="Solicitar atualização">
+    <bpmn:startEvent id="inicio" name="Solicitar atualização" flowable:formKey="frm_param">
       <bpmn:outgoing>f_1</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:serviceTask id="fetch" name="Consultar API">
-      <bpmn:documentation>PREVIEW-ONLY: http.request via people_api/lookup_request; configs no ProcessSpec, execução DESATIVADA.</bpmn:documentation>
+      <bpmn:documentation>PREVIEW-ONLY: http.request via people_api/lookup_request; configuração declarativa do ProcessSpec, execução desativada.</bpmn:documentation>
       <bpmn:incoming>f_1</bpmn:incoming>
       <bpmn:outgoing>f_2</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:userTask id="human" name="Aprovar alteração">
+    <bpmn:userTask id="human" name="Aprovar alteração" flowable:candidateGroups="operations" flowable:formKey="frm_approve">
       <bpmn:incoming>f_2</bpmn:incoming>
       <bpmn:outgoing>f_3</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:exclusiveGateway id="route" name="Autorizado?">
+    <bpmn:exclusiveGateway id="route" name="Autorizado?" gatewayDirection="Diverging">
       <bpmn:incoming>f_3</bpmn:incoming>
       <bpmn:outgoing>f_4</bpmn:outgoing>
       <bpmn:outgoing>f_5</bpmn:outgoing>
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="update" name="Atualizar registro">
-      <bpmn:documentation>PREVIEW-ONLY: database.record.update via hr_db/set_request_status; configs no ProcessSpec, execução DESATIVADA.</bpmn:documentation>
+      <bpmn:documentation>PREVIEW-ONLY: database.record.update via hr_db/set_request_status; configuração declarativa do ProcessSpec, execução desativada.</bpmn:documentation>
       <bpmn:incoming>f_4</bpmn:incoming>
       <bpmn:outgoing>f_6</bpmn:outgoing>
     </bpmn:serviceTask>
@@ -31,67 +31,29 @@
     <bpmn:sequenceFlow id="f_2" sourceRef="fetch" targetRef="human" />
     <bpmn:sequenceFlow id="f_3" sourceRef="human" targetRef="route" />
     <bpmn:sequenceFlow id="f_4" sourceRef="route" targetRef="update">
-      <bpmn:documentation>CONDITION AST (preview): {"left": {"var": "approved"}, "op": "eq", "right": {"literal": true}}</bpmn:documentation>
+      <bpmn:documentation>CONDITION AST (preview): {&quot;left&quot;:{&quot;var&quot;:&quot;approved&quot;},&quot;op&quot;:&quot;eq&quot;,&quot;right&quot;:{&quot;literal&quot;:true}}</bpmn:documentation>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" language="urn:process-ai:expression-ast">{&quot;left&quot;:{&quot;var&quot;:&quot;approved&quot;},&quot;op&quot;:&quot;eq&quot;,&quot;right&quot;:{&quot;literal&quot;:true}}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="f_5" sourceRef="route" targetRef="fim">
-      <bpmn:documentation>CONDITION AST (preview): {"left": {"var": "approved"}, "op": "eq", "right": {"literal": false}}</bpmn:documentation>
+      <bpmn:documentation>CONDITION AST (preview): {&quot;left&quot;:{&quot;var&quot;:&quot;approved&quot;},&quot;op&quot;:&quot;eq&quot;,&quot;right&quot;:{&quot;literal&quot;:false}}</bpmn:documentation>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" language="urn:process-ai:expression-ast">{&quot;left&quot;:{&quot;var&quot;:&quot;approved&quot;},&quot;op&quot;:&quot;eq&quot;,&quot;right&quot;:{&quot;literal&quot;:false}}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="f_6" sourceRef="update" targetRef="fim" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="Diagram_processo_integracao">
     <bpmndi:BPMNPlane id="Plane_processo_integracao" bpmnElement="processo_integracao">
-      <bpmndi:BPMNShape id="Shape_inicio" bpmnElement="inicio">
-        <dc:Bounds x="110" y="130.0" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_fetch" bpmnElement="fetch">
-        <dc:Bounds x="320" y="130.0" width="140" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_human" bpmnElement="human">
-        <dc:Bounds x="530" y="130.0" width="140" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_route" bpmnElement="route">
-        <dc:Bounds x="740" y="130.0" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_update" bpmnElement="update">
-        <dc:Bounds x="950" y="40.0" width="140" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_fim" bpmnElement="fim">
-        <dc:Bounds x="950" y="220.0" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Edge_f_1" bpmnElement="f_1">
-        <di:waypoint x="146" y="148.0" />
-        <di:waypoint x="233.0" y="148.0" />
-        <di:waypoint x="233.0" y="170.0" />
-        <di:waypoint x="320" y="170.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_f_2" bpmnElement="f_2">
-        <di:waypoint x="460" y="170.0" />
-        <di:waypoint x="530" y="170.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_f_3" bpmnElement="f_3">
-        <di:waypoint x="670" y="170.0" />
-        <di:waypoint x="705.0" y="170.0" />
-        <di:waypoint x="705.0" y="155.0" />
-        <di:waypoint x="740" y="155.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_f_4" bpmnElement="f_4">
-        <di:waypoint x="790" y="155.0" />
-        <di:waypoint x="870.0" y="155.0" />
-        <di:waypoint x="870.0" y="80.0" />
-        <di:waypoint x="950" y="80.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_f_5" bpmnElement="f_5">
-        <di:waypoint x="790" y="155.0" />
-        <di:waypoint x="870.0" y="155.0" />
-        <di:waypoint x="870.0" y="238.0" />
-        <di:waypoint x="950" y="238.0" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_f_6" bpmnElement="f_6">
-        <di:waypoint x="1090" y="80.0" />
-        <di:waypoint x="1020.0" y="80.0" />
-        <di:waypoint x="1020.0" y="238.0" />
-        <di:waypoint x="950" y="238.0" />
-      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Shape_inicio" bpmnElement="inicio"><dc:Bounds x="110" y="130" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_fetch" bpmnElement="fetch"><dc:Bounds x="320" y="130" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_human" bpmnElement="human"><dc:Bounds x="530" y="130" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_route" bpmnElement="route"><dc:Bounds x="740" y="130" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_update" bpmnElement="update"><dc:Bounds x="950" y="40" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_fim" bpmnElement="fim"><dc:Bounds x="950" y="220" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_f_1" bpmnElement="f_1"><di:waypoint x="146" y="148" /><di:waypoint x="233" y="148" /><di:waypoint x="233" y="170" /><di:waypoint x="320" y="170" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_f_2" bpmnElement="f_2"><di:waypoint x="460" y="170" /><di:waypoint x="530" y="170" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_f_3" bpmnElement="f_3"><di:waypoint x="670" y="170" /><di:waypoint x="705" y="170" /><di:waypoint x="705" y="155" /><di:waypoint x="740" y="155" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_f_4" bpmnElement="f_4"><di:waypoint x="790" y="155" /><di:waypoint x="870" y="155" /><di:waypoint x="870" y="80" /><di:waypoint x="950" y="80" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_f_5" bpmnElement="f_5"><di:waypoint x="790" y="155" /><di:waypoint x="870" y="155" /><di:waypoint x="870" y="238" /><di:waypoint x="950" y="238" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_f_6" bpmnElement="f_6"><di:waypoint x="1090" y="80" /><di:waypoint x="1020" y="80" /><di:waypoint x="1020" y="238" /><di:waypoint x="950" y="238" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

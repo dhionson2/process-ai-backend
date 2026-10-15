@@ -1,6 +1,6 @@
 # Contrato entre frontend e backend
 
-## Contrato atual — bootstrap
+## Contrato atual — backend
 Base URL desenvolvimento: `http://127.0.0.1:3333`
 
 | Método | Rota | Retorno | Estado |
@@ -9,17 +9,34 @@ Base URL desenvolvimento: `http://127.0.0.1:3333`
 | GET | `/api/v1/capabilities` | perfil, tipos permitidos, restrições | Implementado |
 | GET | `/api/v1/examples` | array de `{id, name, description}` | Implementado |
 | GET | `/api/v1/examples/:id` | `{spec, bpmnXml, forms, manifest}` | Implementado; fixtures estáticas |
-| POST | `/api/v1/validate` | `{valid, diagnostics}` | Parcial: JSON Schema + conjunto inicial de semântica |
+| POST | `/api/v1/validate` | `{valid, diagnostics}` | JSON Schema 2020-12 e semântica v1 para o subset POC |
+| POST | `/api/v1/generate` | `{bpmnXml, forms, manifest, diagnostics}` | Implementado; BPMN/Form determinísticos e preview-only; aviso para regras externas |
+| POST | `/api/v1/validate-form` | `{valid, diagnostics}` | Aplica regras required/requiredWhen canônicas do ProcessSpec |
+| POST | `/api/v1/publication/validate` | `{publishable, checks, blockers}` | Simulação; 422 se runtime não garantir regras condicionais; não publica |
+| POST | `/api/v1/projects` | `{projectId, sessionId, status, currentRevision}` | Cria projeto e sessão em PostgreSQL |
+| GET | `/api/v1/design-sessions/:id` | estado, revisão atual, questões | Implementado |
+| POST | `/api/v1/design-sessions/:id/messages` | pergunta ou proposta, `generationRunId` | Síncrono; provider configurado no backend; `baseRevision` obrigatório |
+| POST | `/api/v1/design-sessions/:id/answers` | resultado do turno conversacional | Responde questões pendentes |
+| POST | `/api/v1/design-sessions/:id/refinements` | resultado do turno conversacional | Propõe revisão sem substituir a atual |
+| GET | `/api/v1/design-sessions/:id/history` | `{messages}` | Histórico persistido |
+| GET/PUT | `/api/v1/design-sessions/:id/draft` | sessão, revisão, ProcessSpec e artefatos | PUT cria proposta manual validada, exige `baseRevision` |
+| GET | `/api/v1/design-sessions/:id/revisions` | `{revisions}` | Lista revisões |
+| GET | `/api/v1/design-sessions/:id/revisions/:revision` | ProcessSpec e artefatos | Recupera revisão |
+| POST | `/api/v1/design-sessions/:id/revisions/:revision/accept` | revisão aceita | Controle otimista; 409 se `baseRevision` ficou obsoleta |
+| GET | `/api/v1/generation-runs/:id` | estado, resultado e métricas | Geração e uso persistidos |
+| GET | `/openapi.json` | OpenAPI 3.1, `info.version=1.1.0` | Fonte em `specs/contracts/process-ai-api.v1.openapi.json`; injeta schema ProcessSpec canônico |
+
+`POST /api/v1/generate` retorna 200 para ProcessSpec válido e gera prévia mesmo quando há `requiredWhen`: o Form JSON mantém o campo opcional para form-js e aplica `conditional.hide` apenas à apresentação. A resposta inclui aviso `EXTERNAL_FORM_VALIDATION_REQUIRED` e manifest que marca artefato válido para prévia, validação externa necessária e publicação inelegível. A regra canônica continua em ProcessSpec e deve ser aplicada por `POST /api/v1/validate-form` antes de aceitar cada submissão. `@bpmn-io/form-js-viewer` 2.1.1 não garante `requiredWhen`.
+
+`POST /api/v1/publication/validate` é somente uma simulação de guarda. Recebe `spec` e `runtimeCapabilities.conditionalFormValidation`; responde 422 se houver regra `requiredWhen` sem garantia declarada pelo runtime. Não publica processos. A publicação real está desabilitada nesta fase.
 
 O catálogo de exemplos está em `specs/foundation/examples/` no backend. São cenários fictícios e nunca são executados.
 
-## Planejado, NÃO implementado
-- `POST /api/v1/projects` e `GET /api/v1/projects/:id` — criar/ler rascunhos persistidos.
-- `POST /api/v1/generations` — geração assíncrona; resposta com ID da job.
-- `GET /api/v1/generations/:id/events` — SSE com estados progressivos.
-- `POST /api/v1/projects/:id/revisions` — revisão com controle otimista da versão.
-- `GET /api/v1/providers` — modelos disponíveis conforme política (sem expor secrets).
-- `GET /openapi.json` — documentação formal (pendente).
+## Ainda não implementado
+- `GET /api/v1/projects/:id` — leitura de projeto por ID.
+- Geração assíncrona e SSE (`/api/v1/generation-runs/:id/events`). Turnos atuais são síncronos e limitados por timeout.
+- `GET /api/v1/providers` — capacidade/modelos sem expor secrets.
+- Autenticação OIDC, autorização e resolução de tenant por identidade; configuração atual usa tenant local do servidor.
 
 ## Convenções obrigatórias para evolução
 - UTC ISO8601, versão explícita de esquema (`schemaVersion`), corpo limitado e erros com código + mensagem.
@@ -27,3 +44,5 @@ O catálogo de exemplos está em `specs/foundation/examples/` no backend. São c
 - 401/403 para autenticação/autorização; 409 para conflito de revisão; 422 para validação.
 - Prefixar rotas públicas em `/api/v1`; compatibilidade e versionamento negociados via contrato OpenAPI.
 - `ProcessSpec` pertence ao backend; frontend apresenta documentos sem assumir regras de execução.
+- CORS de desenvolvimento vem de `CORS_ORIGIN` no backend; padrão `http://localhost:5173`.
+- Com `openai-compatible`, mensagens/respostas/refinamentos exigem `dataClassification` igual a `synthetic` ou `public`. O modo padrão continua sem provider externo.

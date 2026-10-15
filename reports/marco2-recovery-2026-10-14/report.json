@@ -1,0 +1,856 @@
+{
+  "provider": "Groq OpenAI-compatible",
+  "model": "openai/gpt-oss-120b",
+  "structuredOutput": "json_schema strict",
+  "budget": {
+    "maxCalls": 5,
+    "maxTokens": 50000
+  },
+  "scenarios": {
+    "Groq cenário A férias": {
+      "projectId": "e46d6494-f90a-4f1e-81fe-3cd1a8350d2e",
+      "sessionId": "a8cd5667-c96d-46f6-8958-421f15ada888",
+      "status": "validated",
+      "kind": "proposed_spec",
+      "questions": [],
+      "revision": 1,
+      "validation": {
+        "valid": true,
+        "diagnostics": []
+      },
+      "process": {
+        "id": "process_processo_de_ferias",
+        "name": "Processo de férias",
+        "roles": [
+          {
+            "id": "role_servidor",
+            "label": "Servidor",
+            "resolution": "unresolved"
+          },
+          {
+            "id": "role_gestor",
+            "label": "Gestor",
+            "resolution": "unresolved"
+          },
+          {
+            "id": "role_rh",
+            "label": "RH",
+            "resolution": "unresolved"
+          }
+        ],
+        "nodes": [
+          {
+            "id": "start_processo_de_ferias",
+            "type": "startEvent",
+            "name": "Processo de férias"
+          },
+          {
+            "id": "end_process_finished",
+            "type": "endEvent",
+            "name": "Processo encerrado"
+          },
+          {
+            "id": "task_aprovar_ferias",
+            "type": "userTask",
+            "name": "Aprovar férias",
+            "role": "Gestor"
+          },
+          {
+            "id": "gateway_aprovar_ferias",
+            "type": "exclusiveGateway",
+            "name": "Aprovar férias"
+          },
+          {
+            "id": "task_registrar_ferias",
+            "type": "userTask",
+            "name": "Registrar férias",
+            "role": "RH"
+          },
+          {
+            "id": "task_comunicar_motivo_ao_servidor",
+            "type": "userTask",
+            "name": "Comunicar motivo ao servidor",
+            "role": "Servidor"
+          },
+          {
+            "id": "task_informar_periodo_de_ferias",
+            "type": "userTask",
+            "name": "Informar período de férias",
+            "role": "Servidor"
+          }
+        ],
+        "forms": [
+          {
+            "id": "form_processo_de_ferias_request",
+            "name": "Processo de férias — solicitação",
+            "fields": [
+              {
+                "key": "field_periodo",
+                "label": "periodo",
+                "required": true,
+                "requiredWhen": false
+              }
+            ]
+          },
+          {
+            "id": "form_aprovar_ferias",
+            "name": "Aprovar férias",
+            "fields": [
+              {
+                "key": "field_decisao",
+                "label": "Decisão",
+                "required": true,
+                "requiredWhen": false
+              },
+              {
+                "key": "field_motivo_da_rejeicao",
+                "label": "Motivo da rejeição",
+                "required": false,
+                "requiredWhen": true
+              }
+            ]
+          }
+        ],
+        "branchValues": [
+          "approved",
+          "rejected"
+        ],
+        "pendingQuestions": [
+          {
+            "id": "pq_1",
+            "blocking": true,
+            "question": "Como o runtime deve atribuir o papel “Servidor”? A identidade do responsável pode ser configurada depois da prévia.",
+            "relatedNodeId": "task_comunicar_motivo_ao_servidor"
+          },
+          {
+            "id": "pq_2",
+            "blocking": true,
+            "question": "Como o runtime deve atribuir o papel “Gestor”? A identidade do responsável pode ser configurada depois da prévia.",
+            "relatedNodeId": "task_aprovar_ferias"
+          },
+          {
+            "id": "pq_3",
+            "blocking": true,
+            "question": "Como o runtime deve atribuir o papel “RH”? A identidade do responsável pode ser configurada depois da prévia.",
+            "relatedNodeId": "task_registrar_ferias"
+          }
+        ]
+      },
+      "artifactSummary": {
+        "bpmnBytes": 6918,
+        "formIds": [
+          "form_processo_de_ferias_request",
+          "form_aprovar_ferias"
+        ],
+        "publishable": false
+      },
+      "runs": [
+        {
+          "status": "validated",
+          "metrics": {
+            "model": "openai/gpt-oss-120b",
+            "usage": {
+              "inputTokens": 2306,
+              "outputTokens": 1378
+            },
+            "pipeline": [
+              {
+                "stage": "context",
+                "status": "selected",
+                "details": {
+                  "promptChars": 2460,
+                  "schemaChars": 4356,
+                  "systemChars": 2845,
+                  "promptSha256": "7c09f3ecde737fb763c5d4e3b09583df49b3e9a34aa590008c7a199b41ed3075",
+                  "refinementMode": false,
+                  "knowledgeModules": [
+                    "business-interpretation"
+                  ],
+                  "confirmedFactCount": 0,
+                  "integrationsRequested": false
+                }
+              },
+              {
+                "stage": "provider",
+                "status": "received",
+                "details": {
+                  "kind": "business_intent",
+                  "usage": {
+                    "inputTokens": 2306,
+                    "outputTokens": 1378
+                  },
+                  "latencyMs": 3449
+                }
+              },
+              {
+                "stage": "normalization",
+                "status": "valid",
+                "details": {
+                  "kind": "business_intent"
+                }
+              },
+              {
+                "stage": "compilation",
+                "status": "started",
+                "details": {
+                  "kind": "business_intent",
+                  "modelConfigurationFlags": 0
+                }
+              },
+              {
+                "stage": "validation",
+                "status": "valid",
+                "details": {
+                  "codes": [],
+                  "forms": 2,
+                  "nodes": 7
+                }
+              },
+              {
+                "stage": "artifacts",
+                "status": "generated",
+                "details": {
+                  "codes": [
+                    "EXTERNAL_FORM_VALIDATION_REQUIRED",
+                    "PROCESS_CONFIGURATION_PENDING"
+                  ],
+                  "forms": 2,
+                  "bpmnChars": 6918
+                }
+              }
+            ],
+            "provider": "openai-compatible",
+            "latencyMs": 3449,
+            "repairAttempts": 0,
+            "knowledgeModules": [
+              "business-interpretation"
+            ],
+            "knowledgeVersion": "1.1.0"
+          }
+        }
+      ]
+    },
+    "Groq cenário B aprovação administrativa": {
+      "projectId": "190cc14c-04b3-4ef6-a1a6-ea449cccfcb0",
+      "sessionId": "6bc7d1ce-b2f1-4de7-99e3-912c50f9089e",
+      "status": "validated",
+      "kind": "proposed_spec",
+      "questions": [],
+      "revision": 1,
+      "validation": {
+        "valid": true,
+        "diagnostics": []
+      },
+      "process": {
+        "id": "process_processo_de_solicitacao_de_compra_de_equipam",
+        "name": "Processo de Solicitação de Compra de Equipamento",
+        "roles": [
+          {
+            "id": "role_funcionario",
+            "label": "Funcionário",
+            "resolution": "unresolved"
+          },
+          {
+            "id": "role_gestor",
+            "label": "Gestor",
+            "resolution": "unresolved"
+          },
+          {
+            "id": "role_setor_de_compras",
+            "label": "Setor de Compras",
+            "resolution": "unresolved"
+          }
+        ],
+        "nodes": [
+          {
+            "id": "start_processo_de_solicitacao_de_compra_de_equipam",
+            "type": "startEvent",
+            "name": "Processo de Solicitação de Compra de Equipamento"
+          },
+          {
+            "id": "end_process_finished",
+            "type": "endEvent",
+            "name": "Processo encerrado"
+          },
+          {
+            "id": "task_aprovar_solicitacao_de_compra",
+            "type": "userTask",
+            "name": "Aprovar solicitação de compra",
+            "role": "Gestor"
+          },
+          {
+            "id": "gateway_aprovar_solicitacao_de_compra",
+            "type": "exclusiveGateway",
+            "name": "Aprovar solicitação de compra"
+          },
+          {
+            "id": "task_receber_solicitacao_de_compra",
+            "type": "userTask",
+            "name": "Receber solicitação de compra",
+            "role": "Setor de Compras"
+          },
+          {
+            "id": "task_receber_justificativa_da_reprovacao",
+            "type": "userTask",
+            "name": "Receber justificativa da reprovação",
+            "role": "Funcionário"
+          },
+          {
+            "id": "task_solicitar_compra_de_equipamento",
+            "type": "userTask",
+            "name": "Solicitar compra de equipamento",
+            "role": "Funcionário"
+          }
+        ],
+        "forms": [
+          {
+            "id": "form_aprovar_solicitacao_de_compra",
+            "name": "Aprovar solicitação de compra",
+            "fields": [
+              {
+                "key": "field_decisao",
+                "label": "Decisão",
+                "required": true,
+                "requiredWhen": false
+              },
+              {
+                "key": "field_motivo_da_rejeicao",
+                "label": "Motivo da rejeição",
+                "required": false,
+                "requiredWhen": true
+              }
+            ]
+          }
+        ],
+        "branchValues": [
+          "approved",
+          "rejected"
+        ],
+        "pendingQuestions": [
+          {
+            "id": "pq_1",
+            "blocking": true,
+            "question": "Como o runtime deve atribuir o papel “Funcionário”? A identidade do responsável pode ser configurada depois da prévia.",
+            "relatedNodeId": "task_receber_justificativa_da_reprovacao"
+          },
+          {
+            "id": "pq_2",
+            "blocking": true,
+            "question": "Como o runtime deve atribuir o papel “Gestor”? A identidade do responsável pode ser configurada depois da prévia.",
+            "relatedNodeId": "task_aprovar_solicitacao_de_compra"
+          },
+          {
+            "id": "pq_3",
+            "blocking": true,
+            "question": "Como o runtime deve atribuir o papel “Setor de Compras”? A identidade do responsável pode ser configurada depois da prévia.",
+            "relatedNodeId": "task_receber_solicitacao_de_compra"
+          }
+        ]
+      },
+      "artifactSummary": {
+        "bpmnBytes": 7581,
+        "formIds": [
+          "form_aprovar_solicitacao_de_compra"
+        ],
+        "publishable": false
+      },
+      "runs": [
+        {
+          "status": "validated",
+          "metrics": {
+            "model": "openai/gpt-oss-120b",
+            "usage": {
+              "inputTokens": 2305,
+              "outputTokens": 1247
+            },
+            "pipeline": [
+              {
+                "stage": "context",
+                "status": "selected",
+                "details": {
+                  "promptChars": 2471,
+                  "schemaChars": 4356,
+                  "systemChars": 2845,
+                  "promptSha256": "0cf0cc24195ac206ac09e2ea57eb34168747c8b7653b56b2e3483b1950cabcd6",
+                  "refinementMode": false,
+                  "knowledgeModules": [
+                    "business-interpretation"
+                  ],
+                  "confirmedFactCount": 0,
+                  "integrationsRequested": false
+                }
+              },
+              {
+                "stage": "provider",
+                "status": "received",
+                "details": {
+                  "kind": "business_intent",
+                  "usage": {
+                    "inputTokens": 2305,
+                    "outputTokens": 1247
+                  },
+                  "latencyMs": 3432
+                }
+              },
+              {
+                "stage": "normalization",
+                "status": "valid",
+                "details": {
+                  "kind": "business_intent"
+                }
+              },
+              {
+                "stage": "compilation",
+                "status": "started",
+                "details": {
+                  "kind": "business_intent",
+                  "modelConfigurationFlags": 0
+                }
+              },
+              {
+                "stage": "validation",
+                "status": "valid",
+                "details": {
+                  "codes": [],
+                  "forms": 1,
+                  "nodes": 7
+                }
+              },
+              {
+                "stage": "artifacts",
+                "status": "generated",
+                "details": {
+                  "codes": [
+                    "EXTERNAL_FORM_VALIDATION_REQUIRED",
+                    "PROCESS_CONFIGURATION_PENDING"
+                  ],
+                  "forms": 1,
+                  "bpmnChars": 7581
+                }
+              }
+            ],
+            "provider": "openai-compatible",
+            "latencyMs": 3432,
+            "repairAttempts": 0,
+            "knowledgeModules": [
+              "business-interpretation"
+            ],
+            "knowledgeVersion": "1.1.0"
+          }
+        }
+      ]
+    },
+    "C": {
+      "status": "validated",
+      "questions": [
+        "Qual o ator (papel) responsável pela segunda aprovação antes de encaminhar ao RH?",
+        "Qual deve ser o fluxo caso a segunda aprovação seja rejeitada (por exemplo, comunicar motivo ao servidor ou encerrar o processo)?"
+      ],
+      "runs": [
+        {
+          "status": "needs-input",
+          "metrics": {
+            "model": "openai/gpt-oss-120b",
+            "usage": {
+              "inputTokens": 3907,
+              "outputTokens": 462
+            },
+            "pipeline": [
+              {
+                "stage": "context",
+                "status": "selected",
+                "details": {
+                  "promptChars": 8687,
+                  "schemaChars": 3434,
+                  "systemChars": 2845,
+                  "promptSha256": "9e3e303994eac2edafd007e1c01c6bb46d46169f135b1b5de0b21ba11a039877",
+                  "refinementMode": true,
+                  "knowledgeModules": [
+                    "business-interpretation"
+                  ],
+                  "confirmedFactCount": 0,
+                  "integrationsRequested": false
+                }
+              },
+              {
+                "stage": "provider",
+                "status": "received",
+                "details": {
+                  "kind": "need_clarification",
+                  "usage": {
+                    "inputTokens": 3907,
+                    "outputTokens": 462
+                  },
+                  "latencyMs": 1452
+                }
+              },
+              {
+                "stage": "normalization",
+                "status": "valid",
+                "details": {
+                  "kind": "need_clarification"
+                }
+              }
+            ],
+            "provider": "openai-compatible",
+            "latencyMs": 1452,
+            "repairAttempts": 0,
+            "knowledgeModules": [
+              "business-interpretation"
+            ],
+            "knowledgeVersion": "1.1.0"
+          }
+        },
+        {
+          "status": "needs-input",
+          "metrics": {
+            "model": "openai/gpt-oss-120b",
+            "usage": {
+              "inputTokens": 4177,
+              "outputTokens": 784
+            },
+            "pipeline": [
+              {
+                "stage": "context",
+                "status": "selected",
+                "details": {
+                  "promptChars": 10017,
+                  "schemaChars": 3434,
+                  "systemChars": 2845,
+                  "promptSha256": "3b405d9a933b474c96fc47f91202a1b7f627c6cf0c9c6bd83b64c33c23861bbc",
+                  "refinementMode": true,
+                  "knowledgeModules": [
+                    "business-interpretation"
+                  ],
+                  "confirmedFactCount": 2,
+                  "integrationsRequested": false
+                }
+              },
+              {
+                "stage": "provider",
+                "status": "received",
+                "details": {
+                  "kind": "refinement",
+                  "usage": {
+                    "inputTokens": 4177,
+                    "outputTokens": 784
+                  },
+                  "latencyMs": 2803
+                }
+              },
+              {
+                "stage": "normalization",
+                "status": "valid",
+                "details": {
+                  "kind": "refinement"
+                }
+              },
+              {
+                "stage": "compilation",
+                "status": "started",
+                "details": {
+                  "kind": "refinement",
+                  "modelConfigurationFlags": 0
+                }
+              },
+              {
+                "stage": "compilation",
+                "status": "rejected",
+                "details": {
+                  "code": "INTENT_INCOMPLETE"
+                }
+              }
+            ],
+            "provider": "openai-compatible",
+            "latencyMs": 2803,
+            "repairAttempts": 0,
+            "knowledgeModules": [
+              "business-interpretation"
+            ],
+            "knowledgeVersion": "1.1.0"
+          }
+        }
+      ],
+      "sessionId": "a8cd5667-c96d-46f6-8958-421f15ada888",
+      "resume": {
+        "status": "validated",
+        "revision": 2,
+        "kind": "proposed_spec",
+        "changeSummary": "Inserir segunda aprovação (Diretor) antes da tarefa Registrar férias, com fluxo de rejeição para Comunicar motivo ao servidor.",
+        "validation": {
+          "valid": true,
+          "diagnostics": []
+        },
+        "latencyMs": 2679,
+        "usage": {
+          "inputTokens": 4266,
+          "outputTokens": 949
+        }
+      },
+      "followupError": null,
+      "followupQuestions": [],
+      "providerUsage": {
+        "calls": 1,
+        "tokens": 5215,
+        "retries": 0
+      },
+      "apiRoundTrip": {
+        "validationValid": true,
+        "bpmnIdentical": true,
+        "formsIdentical": true
+      },
+      "acceptedRevision": 2,
+      "revision": 2,
+      "baseRevision": 1,
+      "changeSummary": "Inserir segunda aprovação (Diretor) antes da tarefa Registrar férias, com fluxo de rejeição para Comunicar motivo ao servidor.",
+      "validation": {
+        "valid": true,
+        "diagnostics": []
+      },
+      "publishable": false,
+      "preservedRevision1": true,
+      "priorNodesPreserved": true,
+      "priorFormsPreserved": true,
+      "metrics": [
+        {
+          "call": 1,
+          "kind": "business_intent",
+          "latencyMs": 3449,
+          "usage": {
+            "inputTokens": 2306,
+            "outputTokens": 1378
+          }
+        },
+        {
+          "call": 2,
+          "kind": "business_intent",
+          "latencyMs": 3432,
+          "usage": {
+            "inputTokens": 2305,
+            "outputTokens": 1247
+          }
+        },
+        {
+          "call": 3,
+          "kind": "need_clarification",
+          "latencyMs": 1452,
+          "usage": {
+            "inputTokens": 3907,
+            "outputTokens": 462
+          }
+        },
+        {
+          "call": 4,
+          "kind": "refinement",
+          "latencyMs": 2803,
+          "usage": {
+            "inputTokens": 4177,
+            "outputTokens": 784
+          }
+        },
+        {
+          "call": 5,
+          "kind": "refinement",
+          "latencyMs": 2679,
+          "usage": {
+            "inputTokens": 4266,
+            "outputTokens": 949
+          }
+        }
+      ],
+      "followup": {
+        "status": "validated",
+        "revision": 2,
+        "kind": "proposed_spec",
+        "changeSummary": "Inserir segunda aprovação (Diretor) antes da tarefa Registrar férias, com fluxo de rejeição para Comunicar motivo ao servidor.",
+        "validation": {
+          "valid": true,
+          "diagnostics": []
+        },
+        "latencyMs": 2679,
+        "usage": {
+          "inputTokens": 4266,
+          "outputTokens": 949
+        }
+      },
+      "preservedNodeCount": 7,
+      "preservedFormCount": 2
+    }
+  },
+  "api": {
+    "status": "ok",
+    "service": "process-ai-backend",
+    "version": "0.1.0"
+  },
+  "usageTotals": {
+    "calls": 5,
+    "tokens": 21781,
+    "retries": 0
+  },
+  "persistence": {
+    "apiProcessRestarted": true,
+    "currentRevision": 2,
+    "processSpecRecovered": true,
+    "bpmnRecovered": true,
+    "formsRecovered": 3,
+    "revisions": [
+      {
+        "revision": 2,
+        "baseRevision": 1,
+        "status": "accepted"
+      },
+      {
+        "revision": 1,
+        "baseRevision": 0,
+        "status": "accepted"
+      }
+    ],
+    "revision1MatchesSavedInitial": true,
+    "allOriginalNodesPreserved": true,
+    "allOriginalFormsPreserved": true,
+    "historyMessages": 8,
+    "userMessages": 4,
+    "userMessagesContainModelQuestion": false,
+    "staleBaseRevisionRejected": true,
+    "generationRuns": {
+      "databaseRuns": 5,
+      "allRunsReadableAfterApiRestart": true,
+      "statuses": [
+        "validated",
+        "validated",
+        "needs-input",
+        "needs-input",
+        "validated"
+      ],
+      "models": [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-120b"
+      ],
+      "totalUsage": {
+        "inputTokens": 16961,
+        "outputTokens": 4820
+      }
+    }
+  },
+  "chromium": {
+    "engine": "Chromium",
+    "results": [
+      {
+        "label": "A",
+        "bpmn": {
+          "warnings": 0,
+          "hasDiagram": true,
+          "elements": 20
+        },
+        "forms": [
+          {
+            "id": "form_aprovar_ferias",
+            "viewerWarnings": 0,
+            "editorWarnings": 0,
+            "reimportWarnings": 0,
+            "stable": true,
+            "fields": 3
+          },
+          {
+            "id": "form_processo_de_ferias_request",
+            "viewerWarnings": 0,
+            "editorWarnings": 0,
+            "reimportWarnings": 0,
+            "stable": true,
+            "fields": 2
+          }
+        ]
+      },
+      {
+        "label": "B",
+        "bpmn": {
+          "warnings": 0,
+          "hasDiagram": true,
+          "elements": 20
+        },
+        "forms": [
+          {
+            "id": "form_aprovar_solicitacao_de_compra",
+            "viewerWarnings": 0,
+            "editorWarnings": 0,
+            "reimportWarnings": 0,
+            "stable": true,
+            "fields": 3
+          }
+        ]
+      },
+      {
+        "label": "C",
+        "bpmn": {
+          "warnings": 0,
+          "hasDiagram": true,
+          "elements": 26
+        },
+        "forms": [
+          {
+            "id": "form_aprovar_ferias",
+            "viewerWarnings": 0,
+            "editorWarnings": 0,
+            "reimportWarnings": 0,
+            "stable": true,
+            "fields": 3
+          },
+          {
+            "id": "form_processo_de_ferias_request",
+            "viewerWarnings": 0,
+            "editorWarnings": 0,
+            "reimportWarnings": 0,
+            "stable": true,
+            "fields": 2
+          },
+          {
+            "id": "form_segunda_aprovacao",
+            "viewerWarnings": 0,
+            "editorWarnings": 0,
+            "reimportWarnings": 0,
+            "stable": true,
+            "fields": 3
+          }
+        ]
+      }
+    ],
+    "errors": []
+  },
+  "harness": {
+    "firstChromiumAttempt": "fixed __name shim and form-evidence unpacking; final imports passed"
+  },
+  "semanticEvidence": {
+    "A": {
+      "approved": "Registrar férias",
+      "approvedRole": "RH",
+      "rejected": "Comunicar motivo ao servidor",
+      "rejectedRole": "Servidor",
+      "approvalBeforeTarget": true,
+      "requiresReason": true
+    },
+    "B": {
+      "approved": "Receber solicitação de compra",
+      "approvedRole": "Setor de Compras",
+      "rejected": "Receber justificativa da reprovação",
+      "rejectedRole": "Funcionário",
+      "approvalBeforeTarget": true,
+      "requiresReason": true
+    },
+    "C": {
+      "approved": "Registrar férias",
+      "approvedRole": "RH",
+      "rejected": "Comunicar motivo ao servidor",
+      "rejectedRole": "Servidor",
+      "approvalBeforeTarget": true,
+      "requiresReason": true
+    },
+    "CApprovalRole": {
+      "id": "role_diretor",
+      "label": "Diretor",
+      "resolution": "unresolved"
+    }
+  }
+}

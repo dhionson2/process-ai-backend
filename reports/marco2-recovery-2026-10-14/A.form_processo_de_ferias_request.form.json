@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "components": [
+    {
+      "type": "textfield",
+      "key": "var_form_processo_de_ferias_request_periodo",
+      "label": "periodo",
+      "id": "Field_form_processo_de_ferias_request_0",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "type": "button",
+      "key": "submit",
+      "label": "Enviar",
+      "action": "submit",
+      "id": "Submit_form_processo_de_ferias_request"
+    }
+  ]
+}

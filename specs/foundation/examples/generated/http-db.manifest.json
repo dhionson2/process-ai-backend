@@ -1,16 +1,43 @@
 {
   "specId": "processo_integracao",
+  "specRevision": 0,
   "targetProfile": "generic-bpmn2",
+  "generatorVersion": "1.0.0",
   "previewOnly": true,
   "isExecutable": false,
   "formArtifacts": {
-    "frm_param": "http-db-frm_param.form.json",
-    "frm_approve": "http-db-frm_approve.form.json"
+    "frm_param": "processo_integracao-frm_param.form.json",
+    "frm_approve": "processo_integracao-frm_approve.form.json"
   },
+  "artifactStatus": "valid-for-preview",
+  "validation": {
+    "formJsValidatesRequiredWhen": false,
+    "externalValidationRequired": false,
+    "sourceOfBusinessRules": "ProcessSpec"
+  },
+  "configuration": {
+    "ready": true,
+    "unresolvedRoles": [],
+    "pendingQuestions": []
+  },
+  "publication": {
+    "eligible": false,
+    "reason": "Publicação real não está habilitada nesta fase."
+  },
+  "capabilities": [
+    "bpmn-preview",
+    "form-js-preview"
+  ],
   "uncompiledRules": [],
+  "delegatedRules": [],
   "pendingQuestions": [],
+  "checksums": {
+    "process.bpmn": "3fdfcaa75a0b884af2f6071097cd0001533e5aa823ea14ea6c0e72fcabf48083",
+    "frm_param.form.json": "40c8d1d227248e8eb7dead401b44ad87ddd68205eca8bde378a51ac9a7b82e16",
+    "frm_approve.form.json": "2fe58ccfc83e4eafb94e91528bdffd9b17e33a9817bd36dc49c1b194db08901d"
+  },
   "notes": [
-    "BPMN gerado somente para design; serviceTask e conditions NÃO são executáveis.",
-    "Formulários NÃO foram importados em browser; teste com versão real é obrigatório."
+    "Artefatos destinados a modelagem e prévia; service tasks permanecem declarativas e não executáveis.",
+    "Conectores HTTP, banco de dados e notificação nunca são invocados durante geração."
   ]
 }

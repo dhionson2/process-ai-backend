@@ -24,7 +24,10 @@
       "type": "textarea",
       "key": "reason",
       "label": "Motivo da rejeição",
-      "id": "Field_form_gestor_1"
+      "id": "Field_form_gestor_1",
+      "conditional": {
+        "hide": "= not((decision = \"rejected\"))"
+      }
     },
     {
       "type": "button",

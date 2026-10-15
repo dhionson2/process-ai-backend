@@ -8,8 +8,10 @@
 
 - `targetProfile`: `generic-bpmn2`, `flowable-oss`, `unique-future`. Apenas `generic-bpmn2` para prévia POC; os outros são **alvos de compatibilidade a certificar**, não aprovação para publicação.
 - `status`: `draft`, `needs-input`, `invalid`, `ready-for-review`, `approved`.
+- `roles[].resolution: unresolved` representa papel de negócio conhecido sem mapeamento de identidade/grupo no runtime. Uma pergunta bloqueante relacionada à tarefa mantém o processo em `needs-input`; BPMN/Form podem ser gerados para prévia, mas `candidateGroups` é omitido e publicação é bloqueada. Não significa atribuição manual.
 - Identificadores estáveis (ASCII, `[A-Za-z][A-Za-z0-9_\-]*`); não derive IDs do texto do rótulo a cada regeneração.
 - `metadata.provenance`: versão do KnowledgePack, prompt template, modelo/provedor e hash do input, sem armazenar segredos.
+- `metadata.requirementProvenance` (opcional): índice por entidade de fonte/confirmação e SHA-256 da citação de evidência. O texto bruto da conversa não é copiado para o ProcessSpec.
 
 ## Nós
 

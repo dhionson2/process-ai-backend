@@ -1,0 +1,18 @@
+{
+  "kind": "refinement",
+  "changeSummary": "Inserida segunda aprovação (Diretor) antes da tarefa de registrar férias. Rejeição encaminha ao motivo ao servidor, como na primeira aprovação.",
+  "operations": [
+    {
+      "kind": "insertApprovalBefore",
+      "beforeActivity": "task_registrar_ferias",
+      "rejectedTargetActivity": "task_comunicar_motivo_ao_servidor",
+      "approval": {
+        "name": "Segunda aprovação",
+        "actor": {
+          "name": "Diretor"
+        },
+        "requiresRejectionReason": true
+      }
+    }
+  ]
+}

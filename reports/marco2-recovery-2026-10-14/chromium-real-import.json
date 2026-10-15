@@ -1,0 +1,84 @@
+{
+  "engine": "Chromium",
+  "results": [
+    {
+      "label": "A",
+      "bpmn": {
+        "warnings": 0,
+        "hasDiagram": true,
+        "elements": 20
+      },
+      "forms": [
+        {
+          "id": "form_aprovar_ferias",
+          "viewerWarnings": 0,
+          "editorWarnings": 0,
+          "reimportWarnings": 0,
+          "stable": true,
+          "fields": 3
+        },
+        {
+          "id": "form_processo_de_ferias_request",
+          "viewerWarnings": 0,
+          "editorWarnings": 0,
+          "reimportWarnings": 0,
+          "stable": true,
+          "fields": 2
+        }
+      ]
+    },
+    {
+      "label": "B",
+      "bpmn": {
+        "warnings": 0,
+        "hasDiagram": true,
+        "elements": 20
+      },
+      "forms": [
+        {
+          "id": "form_aprovar_solicitacao_de_compra",
+          "viewerWarnings": 0,
+          "editorWarnings": 0,
+          "reimportWarnings": 0,
+          "stable": true,
+          "fields": 3
+        }
+      ]
+    },
+    {
+      "label": "C",
+      "bpmn": {
+        "warnings": 0,
+        "hasDiagram": true,
+        "elements": 26
+      },
+      "forms": [
+        {
+          "id": "form_aprovar_ferias",
+          "viewerWarnings": 0,
+          "editorWarnings": 0,
+          "reimportWarnings": 0,
+          "stable": true,
+          "fields": 3
+        },
+        {
+          "id": "form_processo_de_ferias_request",
+          "viewerWarnings": 0,
+          "editorWarnings": 0,
+          "reimportWarnings": 0,
+          "stable": true,
+          "fields": 2
+        },
+        {
+          "id": "form_segunda_aprovacao",
+          "viewerWarnings": 0,
+          "editorWarnings": 0,
+          "reimportWarnings": 0,
+          "stable": true,
+          "fields": 3
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

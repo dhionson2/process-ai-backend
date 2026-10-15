@@ -8,7 +8,7 @@
 
 **Plano:** Start+form → User Task Gestor+form → XOR → User Task RH+form (aprovado) / Notificação (rejeitado) → End.
 
-**Perguntas:** gestor definido como relação hierárquica ou grupo? RH pode devolver? haverá justificativa de rejeição? qual regra de dias?
+**Orientação:** se a descrição não definir como localizar o gestor ou o grupo de RH, preserve o papel com atribuição pendente e bloqueie publicação. Isso não impede a prévia. Preserve qualquer resolução de papéis e regra de rejeição já declarada. Não pergunte sobre limites legais de dias quando o solicitante não pedir essa validação.
 
 ## 2. Aquisição de material
 

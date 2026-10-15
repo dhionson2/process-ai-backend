@@ -1,0 +1,50 @@
+{
+  "classification": "synthetic",
+  "startedAt": "2026-10-14T23:49:41.065Z",
+  "rawStructured": {
+    "response": {
+      "kind": "need_clarification",
+      "summary": "Necessário definir detalhes da segunda aprovação inserida antes da tarefa de registro de férias.",
+      "questions": [
+        {
+          "question": "Qual o ator (papel) responsável pela segunda aprovação antes de encaminhar ao RH?",
+          "blocking": true
+        },
+        {
+          "question": "Qual deve ser o fluxo caso a segunda aprovação seja rejeitada (por exemplo, comunicar motivo ao servidor ou encerrar o processo)?",
+          "blocking": true
+        }
+      ]
+    }
+  },
+  "normalizedResponse": {
+    "value": {
+      "kind": "need_clarification",
+      "summary": "Necessário definir detalhes da segunda aprovação inserida antes da tarefa de registro de férias.",
+      "questions": [
+        {
+          "question": "Qual o ator (papel) responsável pela segunda aprovação antes de encaminhar ao RH?",
+          "blocking": true
+        },
+        {
+          "question": "Qual deve ser o fluxo caso a segunda aprovação seja rejeitada (por exemplo, comunicar motivo ao servidor ou encerrar o processo)?",
+          "blocking": true
+        }
+      ]
+    },
+    "usage": {
+      "inputTokens": 3907,
+      "outputTokens": 462
+    },
+    "latencyMs": 1452,
+    "model": "openai/gpt-oss-120b"
+  },
+  "requestSummary": {
+    "model": "openai/gpt-oss-120b",
+    "systemChars": 2845,
+    "promptChars": 8687,
+    "schemaChars": 3434,
+    "promptSha256": "9e3e303994eac2edafd007e1c01c6bb46d46169f135b1b5de0b21ba11a039877",
+    "maxOutputTokens": 3000
+  }
+}

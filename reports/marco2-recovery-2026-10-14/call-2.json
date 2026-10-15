@@ -1,0 +1,133 @@
+{
+  "classification": "synthetic",
+  "startedAt": "2026-10-14T23:48:36.050Z",
+  "rawStructured": {
+    "response": {
+      "kind": "business_intent",
+      "name": "Processo de Solicitação de Compra de Equipamento",
+      "purpose": "Gerenciar a solicitação, aprovação e encaminhamento da compra de equipamento.",
+      "actors": [
+        {
+          "name": "Funcionário",
+          "evidence": "Um funcionário solicita a compra de um equipamento"
+        },
+        {
+          "name": "Gestor",
+          "evidence": "O gestor aprova ou reprova"
+        },
+        {
+          "name": "Setor de Compras",
+          "evidence": "o setor de compras recebe a solicitação"
+        }
+      ],
+      "startFields": [],
+      "activities": [
+        {
+          "kind": "task",
+          "name": "Solicitar compra de equipamento",
+          "actor": "Funcionário",
+          "evidence": "Um funcionário solicita a compra de um equipamento",
+          "fields": []
+        },
+        {
+          "kind": "approval",
+          "name": "Aprovar solicitação de compra",
+          "actor": "Gestor",
+          "evidence": "O gestor aprova ou reprova",
+          "requiresRejectionReason": null,
+          "onApproved": [
+            {
+              "kind": "task",
+              "name": "Receber solicitação de compra",
+              "actor": "Setor de Compras",
+              "evidence": "o setor de compras recebe a solicitação",
+              "fields": []
+            }
+          ],
+          "onRejected": [
+            {
+              "kind": "task",
+              "name": "Receber justificativa da reprovação",
+              "actor": "Funcionário",
+              "evidence": "o funcionário recebe a justificativa",
+              "fields": []
+            }
+          ]
+        }
+      ],
+      "rules": [],
+      "suggestions": []
+    }
+  },
+  "normalizedResponse": {
+    "value": {
+      "kind": "business_intent",
+      "name": "Processo de Solicitação de Compra de Equipamento",
+      "purpose": "Gerenciar a solicitação, aprovação e encaminhamento da compra de equipamento.",
+      "actors": [
+        {
+          "name": "Funcionário",
+          "evidence": "Um funcionário solicita a compra de um equipamento"
+        },
+        {
+          "name": "Gestor",
+          "evidence": "O gestor aprova ou reprova"
+        },
+        {
+          "name": "Setor de Compras",
+          "evidence": "o setor de compras recebe a solicitação"
+        }
+      ],
+      "startFields": [],
+      "activities": [
+        {
+          "kind": "task",
+          "name": "Solicitar compra de equipamento",
+          "actor": "Funcionário",
+          "evidence": "Um funcionário solicita a compra de um equipamento",
+          "fields": []
+        },
+        {
+          "kind": "approval",
+          "name": "Aprovar solicitação de compra",
+          "actor": "Gestor",
+          "evidence": "O gestor aprova ou reprova",
+          "onApproved": [
+            {
+              "kind": "task",
+              "name": "Receber solicitação de compra",
+              "actor": "Setor de Compras",
+              "evidence": "o setor de compras recebe a solicitação",
+              "fields": []
+            }
+          ],
+          "onRejected": [
+            {
+              "kind": "task",
+              "name": "Receber justificativa da reprovação",
+              "actor": "Funcionário",
+              "evidence": "o funcionário recebe a justificativa",
+              "fields": []
+            }
+          ]
+        }
+      ],
+      "rules": [],
+      "suggestions": []
+    },
+    "usage": {
+      "inputTokens": 2305,
+      "outputTokens": 1247
+    },
+    "latencyMs": 3432,
+    "model": "openai/gpt-oss-120b"
+  },
+  "requestSummary": {
+    "model": "openai/gpt-oss-120b",
+    "systemChars": 2845,
+    "promptChars": 2471,
+    "schemaChars": 4356,
+    "promptSha256": "0cf0cc24195ac206ac09e2ea57eb34168747c8b7653b56b2e3483b1950cabcd6",
+    "maxOutputTokens": 3000
+  }
+}

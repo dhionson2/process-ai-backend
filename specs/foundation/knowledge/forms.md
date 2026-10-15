@@ -42,6 +42,10 @@
 
 `decision` é enum `approved | rejected`; `reason` é campo texto com validação condicional obrigatória quando `decision == rejected`. Essa condição **não pode ser exigida apenas pela IA**; deve existir também na camada de validação de domínio/runtime.
 
+## Evidência do alvo form-js 2.1.1
+
+Em Chromium, `conditional.hide` é avaliado como FEEL unary test e preservado por `FormEditor.importSchema()`/`saveSchema()`. O Viewer não aplica `requiredWhen` do ProcessSpec. Por isso, o Artifact Generator emite `reason` como opcional na validação nativa do form-js; `conditional.hide` é somente apresentação. O Form JSON não recebe extensão proprietária nem é fonte canônica da regra. Toda submissão deve passar por `POST /api/v1/validate-form`, que reavalia `requiredWhen` no domínio. O manifesto identifica prévia válida, validação externa necessária e publicação inelegível até um runtime provar essa garantia.
+
 ## Geração de schema
 
 O gerador mapeia FormSpec para `{"type":"default","components":[...]}` compatível com a versão-alvo; IDs/keys estáveis; propriedades desconhecidas produzem `UNSUPPORTED_FORM_FIELD` e não são omitidas silenciosamente. Validar importação em `FormEditor` e viewer em testes de integração.

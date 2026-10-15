@@ -1,0 +1,77 @@
+{
+  "specId": "process_processo_de_solicitacao_de_compra_de_equipam",
+  "specRevision": 0,
+  "targetProfile": "generic-bpmn2",
+  "generatorVersion": "1.0.0",
+  "previewOnly": true,
+  "isExecutable": false,
+  "formArtifacts": {
+    "form_aprovar_solicitacao_de_compra": "process_processo_de_solicitacao_de_compra_de_equipam-form_aprovar_solicitacao_de_compra.form.json"
+  },
+  "artifactStatus": "valid-for-preview",
+  "validation": {
+    "formJsValidatesRequiredWhen": false,
+    "externalValidationRequired": true,
+    "sourceOfBusinessRules": "ProcessSpec"
+  },
+  "configuration": {
+    "ready": false,
+    "unresolvedRoles": [
+      "role_funcionario",
+      "role_gestor",
+      "role_setor_de_compras"
+    ],
+    "pendingQuestions": [
+      "pq_1",
+      "pq_2",
+      "pq_3"
+    ]
+  },
+  "publication": {
+    "eligible": false,
+    "reason": "Configuração obrigatória permanece pendente; resolva as perguntas do ProcessSpec antes da publicação."
+  },
+  "capabilities": [
+    "bpmn-preview",
+    "form-js-preview",
+    "draft-with-pending-configuration",
+    "backend-conditional-form-validation"
+  ],
+  "uncompiledRules": [],
+  "delegatedRules": [
+    {
+      "formId": "form_aprovar_solicitacao_de_compra",
+      "fieldKey": "field_motivo_da_rejeicao",
+      "rule": "requiredWhen",
+      "validator": "ProcessSpec submission validation"
+    }
+  ],
+  "pendingQuestions": [
+    {
+      "id": "pq_1",
+      "question": "Como o runtime deve atribuir o papel “Funcionário”? A identidade do responsável pode ser configurada depois da prévia.",
+      "blocking": true,
+      "relatedNodeId": "task_receber_justificativa_da_reprovacao"
+    },
+    {
+      "id": "pq_2",
+      "question": "Como o runtime deve atribuir o papel “Gestor”? A identidade do responsável pode ser configurada depois da prévia.",
+      "blocking": true,
+      "relatedNodeId": "task_aprovar_solicitacao_de_compra"
+    },
+    {
+      "id": "pq_3",
+      "question": "Como o runtime deve atribuir o papel “Setor de Compras”? A identidade do responsável pode ser configurada depois da prévia.",
+      "blocking": true,
+      "relatedNodeId": "task_receber_solicitacao_de_compra"
+    }
+  ],
+  "checksums": {
+    "process.bpmn": "2994290894141972dd153417f5985fec80138073d10a557e8efaaef9c8727eda",
+    "form_aprovar_solicitacao_de_compra.form.json": "4932ed2c05d7ec90ca2d052f14304d4f37776ef7e926f03b6d7a64fcbeff56e2"
+  },
+  "notes": [
+    "Artefatos destinados a modelagem e prévia; service tasks permanecem declarativas e não executáveis.",
+    "Conectores HTTP, banco de dados e notificação nunca são invocados durante geração."
+  ]
+}

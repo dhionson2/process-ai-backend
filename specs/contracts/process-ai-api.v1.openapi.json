@@ -1,0 +1,2668 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Process AI Backend API",
+    "version": "1.1.0",
+    "description": "API versionada para ProcessSpec, geração, validação e modelagem conversacional. Não executa conectores nem publica processos."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:3333"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "API ativa"
+          }
+        }
+      }
+    },
+    "/api/v1/capabilities": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Capacidades declarativas de prévia"
+          }
+        }
+      }
+    },
+    "/api/v1/examples": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Exemplos fictícios disponíveis"
+          }
+        }
+      }
+    },
+    "/api/v1/examples/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ferias",
+                "http-db"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Spec e artefatos de exemplo"
+          },
+          "404": {
+            "description": "Exemplo inexistente"
+          }
+        }
+      }
+    },
+    "/api/v1/validate": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessSpec"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validação estrutural e semântica",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ProcessSpec estrutural ou semanticamente inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/generate": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessSpec"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gera artefatos válidos para prévia. Avisos e manifest indicam regras que exigem validação externa e publicação bloqueada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratedArtifacts"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ProcessSpec estrutural ou semanticamente inválido"
+          }
+        }
+      }
+    },
+    "/api/v1/validate-form": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "spec",
+                  "formId",
+                  "data"
+                ],
+                "properties": {
+                  "spec": {
+                    "$ref": "#/components/schemas/ProcessSpec"
+                  },
+                  "formId": {
+                    "type": "string"
+                  },
+                  "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Aplica required e requiredWhen canônicos do ProcessSpec aos dados submetidos, independente do form-js.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "valid",
+                    "diagnostics"
+                  ],
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    },
+                    "diagnostics": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "code",
+                          "path",
+                          "message"
+                        ],
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/publication/validate": {
+      "post": {
+        "summary": "Simular validação de elegibilidade de publicação",
+        "description": "Não publica. Rejeita com 422 quando o ProcessSpec tem requiredWhen e o runtime não declara garantia de validação condicional.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "spec",
+                  "runtimeCapabilities"
+                ],
+                "properties": {
+                  "spec": {
+                    "$ref": "#/components/schemas/ProcessSpec"
+                  },
+                  "runtimeCapabilities": {
+                    "type": "object",
+                    "required": [
+                      "conditionalFormValidation"
+                    ],
+                    "properties": {
+                      "conditionalFormValidation": {
+                        "type": "boolean",
+                        "description": "Runtime de destino garante requiredWhen do ProcessSpec."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Guardas condicionais satisfeitas; publicação real continua desabilitada nesta fase.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationReadiness"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Runtime sem garantia necessária ou ProcessSpec inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationReadiness"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects": {
+      "post": {
+        "summary": "Criar projeto e sessão",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "targetProfile": {
+                    "type": "string",
+                    "enum": [
+                      "generic-bpmn2",
+                      "flowable-oss",
+                      "unique-future"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Projeto e sessão criados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida"
+          },
+          "503": {
+            "description": "PostgreSQL indisponível"
+          }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado da sessão",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSession"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sessão inexistente"
+          }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/messages": {
+      "post": {
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "text",
+                  "baseRevision"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 6000
+                  },
+                  "baseRevision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "dataClassification": {
+                    "type": "string",
+                    "enum": [
+                      "synthetic",
+                      "public"
+                    ],
+                    "description": "Obrigatório com provider externo; nunca classifique dados reais ou sigilosos."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado do turno conversacional",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationTurnResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sessão inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revisão base obsoleta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Contexto excede o limite configurado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ProcessSpec inválido"
+          },
+          "429": {
+            "description": "Limite local de concorrência atingido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Resposta inválida ou rejeitada pelo provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Persistência ou IA indisponível",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Tempo limite do provider excedido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/refinements": {
+      "post": {
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "text",
+                  "baseRevision"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 6000
+                  },
+                  "baseRevision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "dataClassification": {
+                    "type": "string",
+                    "enum": [
+                      "synthetic",
+                      "public"
+                    ],
+                    "description": "Obrigatório com provider externo; nunca classifique dados reais ou sigilosos."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado do turno conversacional",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationTurnResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sessão inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revisão base obsoleta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Contexto excede o limite configurado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ProcessSpec inválido"
+          },
+          "429": {
+            "description": "Limite local de concorrência atingido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Resposta inválida ou rejeitada pelo provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Persistência ou IA indisponível",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Tempo limite do provider excedido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/answers": {
+      "post": {
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "answers",
+                  "baseRevision"
+                ],
+                "properties": {
+                  "answers": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 30,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "baseRevision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "dataClassification": {
+                    "type": "string",
+                    "enum": [
+                      "synthetic",
+                      "public"
+                    ],
+                    "description": "Obrigatório com provider externo; nunca classifique dados reais ou sigilosos."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado do turno conversacional",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationTurnResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sessão inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revisão base obsoleta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Contexto excede o limite configurado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ProcessSpec inválido"
+          },
+          "429": {
+            "description": "Limite local de concorrência atingido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Resposta inválida ou rejeitada pelo provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Persistência ou IA indisponível",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Tempo limite do provider excedido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/history": {
+      "get": {
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mensagens em ordem cronológica",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "messages"
+                  ],
+                  "properties": {
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "role",
+                          "content",
+                          "createdAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "assistant"
+                            ]
+                          },
+                          "content": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sessão inexistente"
+          }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/draft": {
+      "get": {
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sessão, revisão atual e ProcessSpec aprovados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "session",
+                    "revision",
+                    "processSpec",
+                    "artifacts"
+                  ],
+                  "properties": {
+                    "session": {
+                      "$ref": "#/components/schemas/ConversationSession"
+                    },
+                    "revision": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/RevisionSummary"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "processSpec": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/ProcessSpec"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "artifacts": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/GeneratedArtifacts"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sessão inexistente"
+          }
+        }
+      },
+      "put": {
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "baseRevision",
+                  "processSpec"
+                ],
+                "properties": {
+                  "baseRevision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "processSpec": {
+                    "$ref": "#/components/schemas/ProcessSpec"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Proposta manual validada e salva sem substituir a revisão atual",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrada inválida"
+          },
+          "404": {
+            "description": "Recurso não encontrado"
+          },
+          "409": {
+            "description": "Revisão base obsoleta"
+          },
+          "422": {
+            "description": "ProcessSpec inválido"
+          },
+          "503": {
+            "description": "Persistência ou IA indisponível"
+          }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/revisions": {
+      "get": {
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revisões em ordem decrescente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "revisions"
+                  ],
+                  "properties": {
+                    "revisions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RevisionSummary"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sessão inexistente"
+          }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/revisions/{revision}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revisão incluindo ProcessSpec e artefatos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RevisionSummary"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "processSpec",
+                        "artifacts"
+                      ],
+                      "properties": {
+                        "processSpec": {
+                          "$ref": "#/components/schemas/ProcessSpec"
+                        },
+                        "artifacts": {
+                          "$ref": "#/components/schemas/GeneratedArtifacts"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Número de revisão inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Revisão inexistente"
+          }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/revisions/{revision}/accept": {
+      "post": {
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "baseRevision"
+                ],
+                "properties": {
+                  "baseRevision": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Revisão aceita e definida como atual",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Número de revisão ou base inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Revisão inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revisão base obsoleta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/generation-runs/{runId}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado, resultado e métricas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationRun"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Execução inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ProcessSpec": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://example.invalid/contracts/process-spec.v1.schema.json",
+        "title": "ProcessSpec v1 — contrato de modelagem independente do motor",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "id",
+          "name",
+          "locale",
+          "targetProfile",
+          "status",
+          "roles",
+          "variables",
+          "forms",
+          "nodes",
+          "flows",
+          "pendingQuestions",
+          "assumptions",
+          "policies"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "1.0.0"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "locale": {
+            "const": "pt-BR"
+          },
+          "targetProfile": {
+            "enum": [
+              "generic-bpmn2",
+              "flowable-oss",
+              "unique-future"
+            ]
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "needs-input",
+              "invalid",
+              "ready-for-review",
+              "approved"
+            ]
+          },
+          "roles": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "label",
+                "resolution"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "resolution": {
+                  "enum": [
+                    "requester",
+                    "manual",
+                    "group",
+                    "manager-of-requester",
+                    "system",
+                    "unresolved"
+                  ]
+                },
+                "groupKey": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                }
+              }
+            }
+          },
+          "variables": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/$defs/variable"
+            }
+          },
+          "forms": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "name",
+                "usage",
+                "fields"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "usage": {
+                  "enum": [
+                    "start",
+                    "task"
+                  ]
+                },
+                "fields": {
+                  "type": "array",
+                  "maxItems": 300,
+                  "items": {
+                    "$ref": "#/$defs/field"
+                  }
+                }
+              }
+            }
+          },
+          "nodes": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/$defs/node"
+            }
+          },
+          "flows": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "source",
+                "target"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                },
+                "target": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 255
+                },
+                "condition": {
+                  "$ref": "#/$defs/expression"
+                },
+                "isDefault": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "pendingQuestions": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "question",
+                "blocking"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                },
+                "question": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "blocking": {
+                  "type": "boolean"
+                },
+                "relatedNodeId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                }
+              }
+            }
+          },
+          "assumptions": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "text",
+                "confirmed"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "confirmed": {
+                  "type": "boolean"
+                },
+                "origin": {
+                  "enum": [
+                    "user",
+                    "catalog",
+                    "inference",
+                    "example"
+                  ]
+                }
+              }
+            }
+          },
+          "policies": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "manualApprovalRequired",
+              "allowExecution"
+            ],
+            "properties": {
+              "manualApprovalRequired": {
+                "const": true
+              },
+              "allowExecution": {
+                "const": false
+              }
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "knowledgeVersion": {
+                "type": "string"
+              },
+              "modelId": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "requirementProvenance": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["path", "name", "source", "confirmed"],
+                  "properties": {
+                    "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+                    "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+                    "source": { "enum": ["user", "confirmed-answer", "catalog", "knowledge", "inference"] },
+                    "confirmed": { "type": "boolean" },
+                    "evidenceSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "$defs": {
+          "expression": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "var"
+                ],
+                "properties": {
+                  "var": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                    "maxLength": 128
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "literal"
+                ],
+                "properties": {
+                  "literal": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "op",
+                  "left",
+                  "right"
+                ],
+                "properties": {
+                  "op": {
+                    "enum": [
+                      "eq",
+                      "ne",
+                      "gt",
+                      "gte",
+                      "lt",
+                      "lte"
+                    ]
+                  },
+                  "left": {
+                    "$ref": "#/$defs/expression"
+                  },
+                  "right": {
+                    "$ref": "#/$defs/expression"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "op",
+                  "args"
+                ],
+                "properties": {
+                  "op": {
+                    "enum": [
+                      "and",
+                      "or"
+                    ]
+                  },
+                  "args": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 12,
+                    "items": {
+                      "$ref": "#/$defs/expression"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "op",
+                  "arg"
+                ],
+                "properties": {
+                  "op": {
+                    "enum": [
+                      "not",
+                      "isSet"
+                    ]
+                  },
+                  "arg": {
+                    "$ref": "#/$defs/expression"
+                  }
+                }
+              }
+            ]
+          },
+          "field": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "label",
+              "type",
+              "required",
+              "bindTo"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "type": {
+                "enum": [
+                  "text",
+                  "textarea",
+                  "integer",
+                  "decimal",
+                  "boolean",
+                  "select",
+                  "date",
+                  "datetime",
+                  "email",
+                  "attachment"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "bindTo": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "sensitive": {
+                "type": "boolean"
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "label",
+                    "value"
+                  ],
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    },
+                    "value": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  }
+                }
+              },
+              "visibleWhen": {
+                "$ref": "#/$defs/expression"
+              },
+              "requiredWhen": {
+                "$ref": "#/$defs/expression"
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "pattern": {
+                "type": "string",
+                "maxLength": 150
+              }
+            }
+          },
+          "variable": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "type",
+              "required",
+              "sensitive",
+              "scope",
+              "source"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "type": {
+                "enum": [
+                  "string",
+                  "integer",
+                  "decimal",
+                  "boolean",
+                  "date",
+                  "datetime",
+                  "object",
+                  "array"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "sensitive": {
+                "type": "boolean"
+              },
+              "scope": {
+                "enum": [
+                  "process",
+                  "task"
+                ]
+              },
+              "enumValues": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              },
+              "source": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "form",
+                      "action",
+                      "constant",
+                      "system"
+                    ]
+                  },
+                  "formId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                    "maxLength": 128
+                  },
+                  "fieldKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                    "maxLength": 128
+                  },
+                  "nodeId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                    "maxLength": 128
+                  },
+                  "outputKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                    "maxLength": 128
+                  },
+                  "systemKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                    "maxLength": 128
+                  },
+                  "value": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "node": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "type"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "type": {
+                "enum": [
+                  "startEvent",
+                  "endEvent",
+                  "userTask",
+                  "serviceTask",
+                  "manualTask",
+                  "businessRuleTask",
+                  "sendTask",
+                  "receiveTask",
+                  "scriptTask",
+                  "exclusiveGateway",
+                  "parallelGateway",
+                  "inclusiveGateway",
+                  "eventBasedGateway",
+                  "intermediateCatchEvent",
+                  "intermediateThrowEvent",
+                  "boundaryEvent",
+                  "subProcess",
+                  "callActivity"
+                ]
+              },
+              "documentation": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "roleId": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "formId": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "action": {
+                "$ref": "#/$defs/action"
+              },
+              "defaultFlowId": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "eventDefinition": {
+                "enum": [
+                  "none",
+                  "message",
+                  "timer",
+                  "signal",
+                  "error",
+                  "escalation",
+                  "terminate",
+                  "compensation",
+                  "link"
+                ]
+              },
+              "attachedToNodeId": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "calledProcessId": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "extensionData": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          },
+          "retryPolicy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "maxAttempts",
+              "backoffMs"
+            ],
+            "properties": {
+              "maxAttempts": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 12
+              },
+              "backoffMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3600000
+              }
+            }
+          },
+          "action": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "capability",
+              "connectorId",
+              "operationId",
+              "inputMapping",
+              "outputMapping",
+              "timeoutMs",
+              "retryPolicy",
+              "sideEffectLevel"
+            ],
+            "properties": {
+              "capability": {
+                "enum": [
+                  "http.request",
+                  "database.record.read",
+                  "database.record.create",
+                  "database.record.update",
+                  "database.record.delete",
+                  "notification.send",
+                  "document.generate",
+                  "document.sign.request",
+                  "queue.publish",
+                  "data.transform",
+                  "process.call",
+                  "rules.evaluate",
+                  "file.store"
+                ]
+              },
+              "connectorId": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "operationId": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "maxLength": 128
+              },
+              "inputMapping": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/expression"
+                }
+              },
+              "outputMapping": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                  "maxLength": 128
+                }
+              },
+              "timeoutMs": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 300000
+              },
+              "retryPolicy": {
+                "$ref": "#/$defs/retryPolicy"
+              },
+              "idempotencyKey": {
+                "$ref": "#/$defs/expression"
+              },
+              "sideEffectLevel": {
+                "enum": [
+                  "read",
+                  "write",
+                  "irreversible"
+                ]
+              },
+              "approvalRequired": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "Diagnostic": {
+        "type": "object",
+        "required": [
+          "code",
+          "path",
+          "message",
+          "severity"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning",
+              "info"
+            ]
+          }
+        }
+      },
+      "ValidationResult": {
+        "type": "object",
+        "required": [
+          "valid",
+          "diagnostics"
+        ],
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            }
+          }
+        }
+      },
+      "GeneratedArtifacts": {
+        "type": "object",
+        "required": [
+          "bpmnXml",
+          "forms",
+          "manifest",
+          "diagnostics"
+        ],
+        "properties": {
+          "bpmnXml": {
+            "type": "string"
+          },
+          "forms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "json"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "json": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "manifest": {
+            "type": "object",
+            "required": [
+              "artifactStatus",
+              "validation",
+              "configuration",
+              "publication",
+              "capabilities",
+              "delegatedRules",
+              "checksums"
+            ],
+            "properties": {
+              "artifactStatus": {
+                "type": "string",
+                "const": "valid-for-preview"
+              },
+              "validation": {
+                "type": "object",
+                "required": [
+                  "formJsValidatesRequiredWhen",
+                  "externalValidationRequired",
+                  "sourceOfBusinessRules"
+                ],
+                "properties": {
+                  "formJsValidatesRequiredWhen": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "externalValidationRequired": {
+                    "type": "boolean"
+                  },
+                  "sourceOfBusinessRules": {
+                    "type": "string",
+                    "const": "ProcessSpec"
+                  }
+                }
+              },
+              "configuration": {
+                "type": "object",
+                "required": ["ready", "unresolvedRoles", "pendingQuestions"],
+                "properties": {
+                  "ready": { "type": "boolean" },
+                  "unresolvedRoles": { "type": "array", "items": { "type": "string" } },
+                  "pendingQuestions": { "type": "array", "items": { "type": "string" } }
+                }
+              },
+              "publication": {
+                "type": "object",
+                "required": [
+                  "eligible",
+                  "reason"
+                ],
+                "properties": {
+                  "eligible": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "delegatedRules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "formId",
+                    "fieldKey",
+                    "rule",
+                    "validator"
+                  ],
+                  "properties": {
+                    "formId": {
+                      "type": "string"
+                    },
+                    "fieldKey": {
+                      "type": "string"
+                    },
+                    "rule": {
+                      "type": "string",
+                      "const": "requiredWhen"
+                    },
+                    "validator": {
+                      "type": "string",
+                      "const": "ProcessSpec submission validation"
+                    }
+                  }
+                }
+              },
+              "checksums": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            }
+          }
+        }
+      },
+      "PublicationReadiness": {
+        "type": "object",
+        "required": [
+          "publishable",
+          "checks",
+          "blockers"
+        ],
+        "properties": {
+          "publishable": {
+            "type": "boolean",
+            "const": false
+          },
+          "checks": {
+            "type": "object",
+            "required": [
+              "conditionalRulesDelegated",
+              "runtimeGuaranteesConditionalValidation"
+            ],
+            "properties": {
+              "conditionalRulesDelegated": {
+                "type": "boolean"
+              },
+              "runtimeGuaranteesConditionalValidation": {
+                "type": "boolean"
+              }
+            }
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            }
+          }
+        }
+      },
+      "ProjectCreated": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "sessionId",
+          "status",
+          "currentRevision"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "const": "draft"
+          },
+          "currentRevision": {
+            "type": "integer",
+            "const": 0
+          }
+        }
+      },
+      "ConversationSession": {
+        "type": "object",
+        "required": [
+          "id",
+          "projectId",
+          "name",
+          "targetProfile",
+          "status",
+          "currentRevision",
+          "pendingQuestions",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "targetProfile": {
+            "type": "string",
+            "enum": [
+              "generic-bpmn2",
+              "flowable-oss",
+              "unique-future"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "generating",
+              "needs-input",
+              "validation-failed",
+              "review-required",
+              "accepted",
+              "failed"
+            ]
+          },
+          "currentRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pendingQuestions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GenerationTurnResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "generationRunId",
+              "status",
+              "kind",
+              "questions"
+            ],
+            "properties": {
+              "generationRunId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "status": {
+                "type": "string",
+                "const": "needs-input"
+              },
+              "kind": {
+                "type": "string",
+                "const": "need_clarification"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "questions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "question",
+                    "blocking"
+                  ],
+                  "properties": {
+                    "question": {
+                      "type": "string"
+                    },
+                    "blocking": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "knowledgeVersion": {
+                "type": "string"
+              },
+              "knowledgeModules": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "generationRunId",
+              "status",
+              "kind",
+              "revision",
+              "baseRevision",
+              "changeSummary",
+              "validation",
+              "artifacts",
+              "metadata"
+            ],
+            "properties": {
+              "generationRunId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "status": {
+                "type": "string",
+                "const": "validated"
+              },
+              "kind": {
+                "type": "string",
+                "const": "proposed_spec"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "baseRevision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "changeSummary": {
+                "type": "string"
+              },
+              "validation": {
+                "$ref": "#/components/schemas/ValidationResult"
+              },
+              "artifacts": {
+                "$ref": "#/components/schemas/GeneratedArtifacts"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "generationRunId",
+              "status",
+              "kind",
+              "validation"
+            ],
+            "properties": {
+              "generationRunId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "status": {
+                "type": "string",
+                "const": "validation-failed"
+              },
+              "kind": {
+                "type": "string",
+                "const": "proposed_spec"
+              },
+              "validation": {
+                "$ref": "#/components/schemas/ValidationResult"
+              },
+              "repairAttempts": {
+                "type": "integer",
+                "maximum": 1
+              }
+            }
+          }
+        ]
+      },
+      "GenerationRun": {
+        "type": "object",
+        "required": [
+          "id",
+          "sessionId",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "generating",
+              "needs-input",
+              "validated",
+              "validation-failed",
+              "failed"
+            ]
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "errorCode": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RevisionSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "sessionId",
+          "revision",
+          "baseRevision",
+          "status",
+          "summary",
+          "metadata",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "baseRevision": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "accepted"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ApiError": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryAfterMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Aguardar este intervalo antes de uma nova tentativa, quando informado pelo provedor."
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            }
+          }
+        }
+      },
+      "ProposalResult": {
+        "type": "object",
+        "required": [
+          "revision",
+          "baseRevision",
+          "status",
+          "validation",
+          "artifacts"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "baseRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "accepted"
+            ]
+          },
+          "validation": {
+            "$ref": "#/components/schemas/ValidationResult"
+          },
+          "artifacts": {
+            "$ref": "#/components/schemas/GeneratedArtifacts"
+          },
+          "processSpec": {
+            "$ref": "#/components/schemas/ProcessSpec"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
+      "Revision": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RevisionSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "processSpec",
+              "artifacts"
+            ],
+            "properties": {
+              "processSpec": {
+                "$ref": "#/components/schemas/ProcessSpec"
+              },
+              "artifacts": {
+                "$ref": "#/components/schemas/GeneratedArtifacts"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

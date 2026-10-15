@@ -1,0 +1,139 @@
+{
+  "classification": "synthetic",
+  "sessionId": "a8cd5667-c96d-46f6-8958-421f15ada888",
+  "startedAt": "2026-10-14T23:52:42.895Z",
+  "requestPurpose": "resume C after deterministic activity-id resolution correction",
+  "response": {
+    "status": "validated",
+    "revision": 2,
+    "kind": "proposed_spec",
+    "changeSummary": "Inserir segunda aprovação (Diretor) antes da tarefa Registrar férias, com fluxo de rejeição para Comunicar motivo ao servidor.",
+    "validation": {
+      "valid": true,
+      "diagnostics": []
+    },
+    "latencyMs": 2679,
+    "usage": {
+      "inputTokens": 4266,
+      "outputTokens": 949
+    }
+  },
+  "process": {
+    "nodes": [
+      {
+        "id": "start_processo_de_ferias",
+        "type": "startEvent",
+        "name": "Processo de férias"
+      },
+      {
+        "id": "end_process_finished",
+        "type": "endEvent",
+        "name": "Processo encerrado"
+      },
+      {
+        "id": "task_aprovar_ferias",
+        "type": "userTask",
+        "name": "Aprovar férias",
+        "roleId": "role_gestor"
+      },
+      {
+        "id": "gateway_aprovar_ferias",
+        "type": "exclusiveGateway",
+        "name": "Aprovar férias"
+      },
+      {
+        "id": "task_registrar_ferias",
+        "type": "userTask",
+        "name": "Registrar férias",
+        "roleId": "role_rh"
+      },
+      {
+        "id": "task_comunicar_motivo_ao_servidor",
+        "type": "userTask",
+        "name": "Comunicar motivo ao servidor",
+        "roleId": "role_servidor"
+      },
+      {
+        "id": "task_informar_periodo_de_ferias",
+        "type": "userTask",
+        "name": "Informar período de férias",
+        "roleId": "role_servidor"
+      },
+      {
+        "id": "task_segunda_aprovacao",
+        "type": "userTask",
+        "name": "Segunda aprovação",
+        "roleId": "role_diretor"
+      },
+      {
+        "id": "gateway_segunda_aprovacao",
+        "type": "exclusiveGateway",
+        "name": "Segunda aprovação"
+      }
+    ],
+    "revision": 2,
+    "baseRevision": 1,
+    "publishable": false,
+    "pendingQuestions": [
+      {
+        "id": "pq_1",
+        "blocking": true,
+        "question": "Como o runtime deve atribuir o papel “Servidor”? A identidade do responsável pode ser configurada depois da prévia.",
+        "relatedNodeId": "task_comunicar_motivo_ao_servidor"
+      },
+      {
+        "id": "pq_2",
+        "blocking": true,
+        "question": "Como o runtime deve atribuir o papel “Gestor”? A identidade do responsável pode ser configurada depois da prévia.",
+        "relatedNodeId": "task_aprovar_ferias"
+      },
+      {
+        "id": "pq_3",
+        "blocking": true,
+        "question": "Como o runtime deve atribuir o papel “RH”? A identidade do responsável pode ser configurada depois da prévia.",
+        "relatedNodeId": "task_registrar_ferias"
+      },
+      {
+        "id": "pq_diretor",
+        "blocking": true,
+        "question": "Como o runtime deve atribuir o papel “Diretor”?",
+        "relatedNodeId": "task_segunda_aprovacao"
+      }
+    ]
+  },
+  "chromiumPending": "Will import genuine C artifacts with fixed harness after validation",
+  "apiRoundTrip": {
+    "validationValid": true,
+    "bpmnIdentical": true,
+    "formsIdentical": true
+  },
+  "acceptedRevision": 2,
+  "usageTotals": {
+    "calls": 1,
+    "tokens": 5215,
+    "retries": 0
+  },
+  "rawStructured": {
+    "response": {
+      "kind": "refinement",
+      "changeSummary": "Inserir segunda aprovação (Diretor) antes da tarefa Registrar férias, com fluxo de rejeição para Comunicar motivo ao servidor.",
+      "operations": [
+        {
+          "kind": "insertApprovalBefore",
+          "beforeActivity": "task_registrar_ferias",
+          "rejectedTargetActivity": "task_comunicar_motivo_ao_servidor",
+          "approval": {
+            "name": "Segunda aprovação",
+            "actor": {
+              "name": "Diretor",
+              "resolution": null,
+              "groupName": null,
+              "resolutionEvidence": null
+            },
+            "requiresRejectionReason": true
+          }
+        }
+      ]
+    }
+  }
+}

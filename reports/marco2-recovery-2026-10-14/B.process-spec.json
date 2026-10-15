@@ -1,0 +1,305 @@
+{
+  "id": "process_processo_de_solicitacao_de_compra_de_equipam",
+  "name": "Processo de Solicitação de Compra de Equipamento",
+  "flows": [
+    {
+      "id": "flow_0001",
+      "source": "task_aprovar_solicitacao_de_compra",
+      "target": "gateway_aprovar_solicitacao_de_compra"
+    },
+    {
+      "id": "flow_0002",
+      "source": "task_receber_solicitacao_de_compra",
+      "target": "end_process_finished"
+    },
+    {
+      "id": "flow_0003",
+      "source": "task_receber_justificativa_da_reprovacao",
+      "target": "end_process_finished"
+    },
+    {
+      "id": "flow_0004",
+      "label": "Aprovado",
+      "source": "gateway_aprovar_solicitacao_de_compra",
+      "target": "task_receber_solicitacao_de_compra",
+      "condition": {
+        "op": "eq",
+        "left": {
+          "var": "var_aprovar_solicitacao_de_compra_decision"
+        },
+        "right": {
+          "literal": "approved"
+        }
+      }
+    },
+    {
+      "id": "flow_0005",
+      "label": "Rejeitado",
+      "source": "gateway_aprovar_solicitacao_de_compra",
+      "target": "task_receber_justificativa_da_reprovacao",
+      "condition": {
+        "op": "eq",
+        "left": {
+          "var": "var_aprovar_solicitacao_de_compra_decision"
+        },
+        "right": {
+          "literal": "rejected"
+        }
+      }
+    },
+    {
+      "id": "flow_0006",
+      "source": "task_solicitar_compra_de_equipamento",
+      "target": "task_aprovar_solicitacao_de_compra"
+    },
+    {
+      "id": "flow_0007",
+      "source": "start_processo_de_solicitacao_de_compra_de_equipam",
+      "target": "task_solicitar_compra_de_equipamento"
+    }
+  ],
+  "forms": [
+    {
+      "id": "form_aprovar_solicitacao_de_compra",
+      "name": "Aprovar solicitação de compra",
+      "usage": "task",
+      "fields": [
+        {
+          "key": "field_decisao",
+          "type": "select",
+          "label": "Decisão",
+          "bindTo": "var_aprovar_solicitacao_de_compra_decision",
+          "options": [
+            {
+              "label": "Aprovar",
+              "value": "approved"
+            },
+            {
+              "label": "Rejeitar",
+              "value": "rejected"
+            }
+          ],
+          "required": true
+        },
+        {
+          "key": "field_motivo_da_rejeicao",
+          "type": "textarea",
+          "label": "Motivo da rejeição",
+          "bindTo": "var_aprovar_solicitacao_de_compra_rejection_reas",
+          "required": false,
+          "visibleWhen": {
+            "op": "eq",
+            "left": {
+              "var": "var_aprovar_solicitacao_de_compra_decision"
+            },
+            "right": {
+              "literal": "rejected"
+            }
+          },
+          "requiredWhen": {
+            "op": "eq",
+            "left": {
+              "var": "var_aprovar_solicitacao_de_compra_decision"
+            },
+            "right": {
+              "literal": "rejected"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start_processo_de_solicitacao_de_compra_de_equipam",
+      "name": "Processo de Solicitação de Compra de Equipamento",
+      "type": "startEvent"
+    },
+    {
+      "id": "end_process_finished",
+      "name": "Processo encerrado",
+      "type": "endEvent"
+    },
+    {
+      "id": "task_aprovar_solicitacao_de_compra",
+      "name": "Aprovar solicitação de compra",
+      "type": "userTask",
+      "formId": "form_aprovar_solicitacao_de_compra",
+      "roleId": "role_gestor"
+    },
+    {
+      "id": "gateway_aprovar_solicitacao_de_compra",
+      "name": "Aprovar solicitação de compra",
+      "type": "exclusiveGateway"
+    },
+    {
+      "id": "task_receber_solicitacao_de_compra",
+      "name": "Receber solicitação de compra",
+      "type": "userTask",
+      "roleId": "role_setor_de_compras"
+    },
+    {
+      "id": "task_receber_justificativa_da_reprovacao",
+      "name": "Receber justificativa da reprovação",
+      "type": "userTask",
+      "roleId": "role_funcionario"
+    },
+    {
+      "id": "task_solicitar_compra_de_equipamento",
+      "name": "Solicitar compra de equipamento",
+      "type": "userTask",
+      "roleId": "role_funcionario"
+    }
+  ],
+  "roles": [
+    {
+      "id": "role_funcionario",
+      "label": "Funcionário",
+      "resolution": "unresolved"
+    },
+    {
+      "id": "role_gestor",
+      "label": "Gestor",
+      "resolution": "unresolved"
+    },
+    {
+      "id": "role_setor_de_compras",
+      "label": "Setor de Compras",
+      "resolution": "unresolved"
+    }
+  ],
+  "locale": "pt-BR",
+  "status": "needs-input",
+  "metadata": {
+    "modelId": "openai/gpt-oss-120b",
+    "revision": 0,
+    "knowledgeVersion": "1.1.0",
+    "requirementProvenance": [
+      {
+        "name": "Funcionário",
+        "path": "roles/funcionario",
+        "source": "user",
+        "confirmed": true,
+        "evidenceSha256": "99f3e40c6e7c63758d0daea2fc9a3238b48c679fa8acd9f049cedbbe83b677df"
+      },
+      {
+        "name": "Funcionário",
+        "path": "roles/funcionario/assignment",
+        "source": "inference",
+        "confirmed": false
+      },
+      {
+        "name": "Gestor",
+        "path": "roles/gestor",
+        "source": "user",
+        "confirmed": true,
+        "evidenceSha256": "fb1c32770c5c53d8f137092be38a18fb17d4d938ea944ecac8cfbf422d543678"
+      },
+      {
+        "name": "Gestor",
+        "path": "roles/gestor/assignment",
+        "source": "inference",
+        "confirmed": false
+      },
+      {
+        "name": "Setor de Compras",
+        "path": "roles/setor_de_compras",
+        "source": "user",
+        "confirmed": true,
+        "evidenceSha256": "b9d8641e3b8e30b85f1d3ae4cbdfcd81343c4200cb11f15c751cd6ebb9b4a18f"
+      },
+      {
+        "name": "Setor de Compras",
+        "path": "roles/setor_de_compras/assignment",
+        "source": "inference",
+        "confirmed": false
+      },
+      {
+        "name": "Solicitar compra de equipamento",
+        "path": "activities/0",
+        "source": "user",
+        "confirmed": true,
+        "evidenceSha256": "99f3e40c6e7c63758d0daea2fc9a3238b48c679fa8acd9f049cedbbe83b677df"
+      },
+      {
+        "name": "Aprovar solicitação de compra",
+        "path": "activities/1",
+        "source": "user",
+        "confirmed": true,
+        "evidenceSha256": "fb1c32770c5c53d8f137092be38a18fb17d4d938ea944ecac8cfbf422d543678"
+      },
+      {
+        "name": "Receber solicitação de compra",
+        "path": "activities/1/0",
+        "source": "user",
+        "confirmed": true,
+        "evidenceSha256": "b9d8641e3b8e30b85f1d3ae4cbdfcd81343c4200cb11f15c751cd6ebb9b4a18f"
+      },
+      {
+        "name": "Receber justificativa da reprovação",
+        "path": "activities/1/1",
+        "source": "user",
+        "confirmed": true,
+        "evidenceSha256": "fd335bf070b5afca9e69084e8272067f6312dce650488ba6b76307f98ccf12b7"
+      }
+    ]
+  },
+  "policies": {
+    "allowExecution": false,
+    "manualApprovalRequired": true
+  },
+  "variables": [
+    {
+      "key": "var_aprovar_solicitacao_de_compra_decision",
+      "type": "string",
+      "scope": "process",
+      "source": {
+        "kind": "form",
+        "formId": "form_aprovar_solicitacao_de_compra",
+        "fieldKey": "field_decisao"
+      },
+      "required": true,
+      "sensitive": false,
+      "enumValues": [
+        "approved",
+        "rejected"
+      ]
+    },
+    {
+      "key": "var_aprovar_solicitacao_de_compra_rejection_reas",
+      "type": "string",
+      "scope": "process",
+      "source": {
+        "kind": "form",
+        "formId": "form_aprovar_solicitacao_de_compra",
+        "fieldKey": "field_motivo_da_rejeicao"
+      },
+      "required": false,
+      "sensitive": false
+    }
+  ],
+  "assumptions": [],
+  "description": "Gerenciar a solicitação, aprovação e encaminhamento da compra de equipamento.",
+  "schemaVersion": "1.0.0",
+  "targetProfile": "generic-bpmn2",
+  "pendingQuestions": [
+    {
+      "id": "pq_1",
+      "blocking": true,
+      "question": "Como o runtime deve atribuir o papel “Funcionário”? A identidade do responsável pode ser configurada depois da prévia.",
+      "relatedNodeId": "task_receber_justificativa_da_reprovacao"
+    },
+    {
+      "id": "pq_2",
+      "blocking": true,
+      "question": "Como o runtime deve atribuir o papel “Gestor”? A identidade do responsável pode ser configurada depois da prévia.",
+      "relatedNodeId": "task_aprovar_solicitacao_de_compra"
+    },
+    {
+      "id": "pq_3",
+      "blocking": true,
+      "question": "Como o runtime deve atribuir o papel “Setor de Compras”? A identidade do responsável pode ser configurada depois da prévia.",
+      "relatedNodeId": "task_receber_solicitacao_de_compra"
+    }
+  ]
+}

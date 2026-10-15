@@ -1,0 +1,26 @@
+{
+  "apiProcessRestarted": true,
+  "currentRevision": 2,
+  "processSpecRecovered": true,
+  "bpmnRecovered": true,
+  "formsRecovered": 3,
+  "revisions": [
+    {
+      "revision": 2,
+      "baseRevision": 1,
+      "status": "accepted"
+    },
+    {
+      "revision": 1,
+      "baseRevision": 0,
+      "status": "accepted"
+    }
+  ],
+  "revision1MatchesSavedInitial": true,
+  "allOriginalNodesPreserved": true,
+  "allOriginalFormsPreserved": true,
+  "historyMessages": 8,
+  "userMessages": 4,
+  "userMessagesContainModelQuestion": false,
+  "staleBaseRevisionRejected": true
+}

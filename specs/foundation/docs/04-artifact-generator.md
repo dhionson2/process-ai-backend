@@ -29,7 +29,7 @@ interface ArtifactGenerator {
 
 1. Traduz tipos de domínio para componentes permitidos da versão efetiva do `form-js`.
 2. Configura `key`, label, descrição, propriedades de validação e options.
-3. Compila regras `requiredWhen` e `visibleWhen` apenas para sintaxe suportada e com testes; caso contrário bloqueia, não degrada silenciosamente.
+3. Gera `visibleWhen` para apresentação quando suportado. Não projeta `requiredWhen` em propriedades nativas do form-js; marca validação externa necessária no manifesto/diagnósticos e mantém a regra em ProcessSpec para validação de submissão no backend.
 4. Preserva mappings para variáveis sem embutir credenciais/dados sensíveis em schemas.
 5. Testa import no `FormEditor` e viewer e valida campos requeridos do conjunto de cenários.
 

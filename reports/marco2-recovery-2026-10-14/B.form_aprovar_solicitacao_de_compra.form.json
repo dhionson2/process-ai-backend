@@ -1,0 +1,40 @@
+{
+  "type": "default",
+  "components": [
+    {
+      "type": "select",
+      "key": "var_aprovar_solicitacao_de_compra_decision",
+      "label": "Decisão",
+      "id": "Field_form_aprovar_solicitacao_de_compra_0",
+      "validate": {
+        "required": true
+      },
+      "values": [
+        {
+          "label": "Aprovar",
+          "value": "approved"
+        },
+        {
+          "label": "Rejeitar",
+          "value": "rejected"
+        }
+      ]
+    },
+    {
+      "type": "textarea",
+      "key": "var_aprovar_solicitacao_de_compra_rejection_reas",
+      "label": "Motivo da rejeição",
+      "id": "Field_form_aprovar_solicitacao_de_compra_1",
+      "conditional": {
+        "hide": "= not((var_aprovar_solicitacao_de_compra_decision = \"rejected\"))"
+      }
+    },
+    {
+      "type": "button",
+      "key": "submit",
+      "label": "Enviar",
+      "action": "submit",
+      "id": "Submit_form_aprovar_solicitacao_de_compra"
+    }
+  ]
+}

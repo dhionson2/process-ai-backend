@@ -24,7 +24,7 @@ Este kit especifica os **quatro pilares** da solução: Knowledge Engine, Proces
 | `contracts/generation-result.v1.schema.json` | Contrato de resposta de IA para esclarecimento/proposta |
 | `examples/*.json` | Cenários ouro de férias, HTTP e atualização autorizada em registro |
 | `scripts/check_examples.py` | Verificação básica offline de schema e semântica (referência) |
-| `scripts/reference_generator.py` | Geração experimental offline de BPMN + form JSON para fixtures (não é produção) |
+| `scripts/reference_generator.py` | Gerador Python histórico de referência; fixtures executáveis da Fase 1 são geradas por `npm run generate:examples` em TypeScript |
 
 ## Princípios inegociáveis
 

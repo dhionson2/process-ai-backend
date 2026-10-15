@@ -1,0 +1,61 @@
+{
+  "classification": "synthetic",
+  "startedAt": "2026-10-14T23:50:46.073Z",
+  "rawStructured": {
+    "response": {
+      "kind": "refinement",
+      "changeSummary": "Inserida segunda aprovação (Diretor) antes da tarefa de registrar férias. Rejeição encaminha ao motivo ao servidor, como na primeira aprovação.",
+      "operations": [
+        {
+          "kind": "insertApprovalBefore",
+          "beforeActivity": "task_registrar_ferias",
+          "rejectedTargetActivity": "task_comunicar_motivo_ao_servidor",
+          "approval": {
+            "name": "Segunda aprovação",
+            "actor": {
+              "name": "Diretor",
+              "resolution": null,
+              "groupName": null,
+              "resolutionEvidence": null
+            },
+            "requiresRejectionReason": true
+          }
+        }
+      ]
+    }
+  },
+  "normalizedResponse": {
+    "value": {
+      "kind": "refinement",
+      "changeSummary": "Inserida segunda aprovação (Diretor) antes da tarefa de registrar férias. Rejeição encaminha ao motivo ao servidor, como na primeira aprovação.",
+      "operations": [
+        {
+          "kind": "insertApprovalBefore",
+          "beforeActivity": "task_registrar_ferias",
+          "rejectedTargetActivity": "task_comunicar_motivo_ao_servidor",
+          "approval": {
+            "name": "Segunda aprovação",
+            "actor": {
+              "name": "Diretor"
+            },
+            "requiresRejectionReason": true
+          }
+        }
+      ]
+    },
+    "usage": {
+      "inputTokens": 4177,
+      "outputTokens": 784
+    },
+    "latencyMs": 2803,
+    "model": "openai/gpt-oss-120b"
+  },
+  "requestSummary": {
+    "model": "openai/gpt-oss-120b",
+    "systemChars": 2845,
+    "promptChars": 10017,
+    "schemaChars": 3434,
+    "promptSha256": "3b405d9a933b474c96fc47f91202a1b7f627c6cf0c9c6bd83b64c33c23861bbc",
+    "maxOutputTokens": 3000
+  }
+}

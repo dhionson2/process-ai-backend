@@ -1,0 +1,22 @@
+{
+  "databaseRuns": 5,
+  "allRunsReadableAfterApiRestart": true,
+  "statuses": [
+    "validated",
+    "validated",
+    "needs-input",
+    "needs-input",
+    "validated"
+  ],
+  "models": [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-120b"
+  ],
+  "totalUsage": {
+    "inputTokens": 16961,
+    "outputTokens": 4820
+  }
+}

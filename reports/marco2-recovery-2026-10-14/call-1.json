@@ -1,0 +1,149 @@
+{
+  "classification": "synthetic",
+  "startedAt": "2026-10-14T23:47:31.042Z",
+  "rawStructured": {
+    "response": {
+      "kind": "business_intent",
+      "name": "Processo de férias",
+      "purpose": "Gerenciar solicitação de férias",
+      "actors": [
+        {
+          "name": "Servidor",
+          "evidence": "servidor informa o período solicitado"
+        },
+        {
+          "name": "Gestor",
+          "evidence": "gestor aprova ou reprova"
+        },
+        {
+          "name": "RH",
+          "evidence": "RH registra as férias"
+        }
+      ],
+      "startFields": [
+        {
+          "name": "periodo",
+          "type": "text",
+          "required": true,
+          "evidence": "período solicitado",
+          "choices": null
+        }
+      ],
+      "activities": [
+        {
+          "kind": "task",
+          "name": "Informar período de férias",
+          "actor": "Servidor",
+          "evidence": "servidor informa o período solicitado",
+          "fields": []
+        },
+        {
+          "kind": "approval",
+          "name": "Aprovar férias",
+          "actor": "Gestor",
+          "evidence": "gestor aprova ou reprova",
+          "requiresRejectionReason": true,
+          "onApproved": [
+            {
+              "kind": "task",
+              "name": "Registrar férias",
+              "actor": "RH",
+              "evidence": "RH registra as férias",
+              "fields": []
+            }
+          ],
+          "onRejected": [
+            {
+              "kind": "task",
+              "name": "Comunicar motivo ao servidor",
+              "actor": "Servidor",
+              "evidence": "servidor recebe o motivo",
+              "fields": []
+            }
+          ]
+        }
+      ],
+      "rules": [],
+      "suggestions": []
+    }
+  },
+  "normalizedResponse": {
+    "value": {
+      "kind": "business_intent",
+      "name": "Processo de férias",
+      "purpose": "Gerenciar solicitação de férias",
+      "actors": [
+        {
+          "name": "Servidor",
+          "evidence": "servidor informa o período solicitado"
+        },
+        {
+          "name": "Gestor",
+          "evidence": "gestor aprova ou reprova"
+        },
+        {
+          "name": "RH",
+          "evidence": "RH registra as férias"
+        }
+      ],
+      "startFields": [
+        {
+          "name": "periodo",
+          "type": "text",
+          "evidence": "período solicitado",
+          "required": true
+        }
+      ],
+      "activities": [
+        {
+          "kind": "task",
+          "name": "Informar período de férias",
+          "actor": "Servidor",
+          "evidence": "servidor informa o período solicitado",
+          "fields": []
+        },
+        {
+          "kind": "approval",
+          "name": "Aprovar férias",
+          "actor": "Gestor",
+          "evidence": "gestor aprova ou reprova",
+          "requiresRejectionReason": true,
+          "onApproved": [
+            {
+              "kind": "task",
+              "name": "Registrar férias",
+              "actor": "RH",
+              "evidence": "RH registra as férias",
+              "fields": []
+            }
+          ],
+          "onRejected": [
+            {
+              "kind": "task",
+              "name": "Comunicar motivo ao servidor",
+              "actor": "Servidor",
+              "evidence": "servidor recebe o motivo",
+              "fields": []
+            }
+          ]
+        }
+      ],
+      "rules": [],
+      "suggestions": []
+    },
+    "usage": {
+      "inputTokens": 2306,
+      "outputTokens": 1378
+    },
+    "latencyMs": 3449,
+    "model": "openai/gpt-oss-120b"
+  },
+  "requestSummary": {
+    "model": "openai/gpt-oss-120b",
+    "systemChars": 2845,
+    "promptChars": 2460,
+    "schemaChars": 4356,
+    "promptSha256": "7c09f3ecde737fb763c5d4e3b09583df49b3e9a34aa590008c7a199b41ed3075",
+    "maxOutputTokens": 3000
+  }
+}

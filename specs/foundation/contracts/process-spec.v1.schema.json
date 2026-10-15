@@ -85,7 +85,8 @@
               "manual",
               "group",
               "manager-of-requester",
-              "system"
+              "system",
+              "unresolved"
             ]
           },
           "groupKey": {
@@ -289,6 +290,21 @@
         "revision": {
           "type": "integer",
           "minimum": 0
+        },
+        "requirementProvenance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "name", "source", "confirmed"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+              "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+              "source": { "enum": ["user", "confirmed-answer", "catalog", "knowledge", "inference"] },
+              "confirmed": { "type": "boolean" },
+              "evidenceSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            }
+          }
         }
       }
     }

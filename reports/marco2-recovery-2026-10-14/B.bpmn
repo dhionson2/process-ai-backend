@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:process-ai="urn:process-ai:preview" xmlns:flowable="http://flowable.org/bpmn" id="Definitions_process_processo_de_solicitacao_de_compra_de_equipam" targetNamespace="urn:process-design:preview">
+  <bpmn:process id="process_processo_de_solicitacao_de_compra_de_equipam" name="Processo de Solicitação de Compra de Equipamento" isExecutable="false">
+    <bpmn:startEvent id="start_processo_de_solicitacao_de_compra_de_equipam" name="Processo de Solicitação de Compra de Equipamento">
+      <bpmn:outgoing>flow_0007</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:endEvent id="end_process_finished" name="Processo encerrado">
+      <bpmn:incoming>flow_0002</bpmn:incoming>
+      <bpmn:incoming>flow_0003</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:userTask id="task_aprovar_solicitacao_de_compra" name="Aprovar solicitação de compra" flowable:formKey="form_aprovar_solicitacao_de_compra">
+      <bpmn:incoming>flow_0006</bpmn:incoming>
+      <bpmn:outgoing>flow_0001</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="gateway_aprovar_solicitacao_de_compra" name="Aprovar solicitação de compra" gatewayDirection="Diverging">
+      <bpmn:incoming>flow_0001</bpmn:incoming>
+      <bpmn:outgoing>flow_0004</bpmn:outgoing>
+      <bpmn:outgoing>flow_0005</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="task_receber_solicitacao_de_compra" name="Receber solicitação de compra">
+      <bpmn:incoming>flow_0004</bpmn:incoming>
+      <bpmn:outgoing>flow_0002</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="task_receber_justificativa_da_reprovacao" name="Receber justificativa da reprovação">
+      <bpmn:incoming>flow_0005</bpmn:incoming>
+      <bpmn:outgoing>flow_0003</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="task_solicitar_compra_de_equipamento" name="Solicitar compra de equipamento">
+      <bpmn:incoming>flow_0007</bpmn:incoming>
+      <bpmn:outgoing>flow_0006</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="flow_0001" sourceRef="task_aprovar_solicitacao_de_compra" targetRef="gateway_aprovar_solicitacao_de_compra" />
+    <bpmn:sequenceFlow id="flow_0002" sourceRef="task_receber_solicitacao_de_compra" targetRef="end_process_finished" />
+    <bpmn:sequenceFlow id="flow_0003" sourceRef="task_receber_justificativa_da_reprovacao" targetRef="end_process_finished" />
+    <bpmn:sequenceFlow id="flow_0004" sourceRef="gateway_aprovar_solicitacao_de_compra" targetRef="task_receber_solicitacao_de_compra" name="Aprovado">
+      <bpmn:documentation>CONDITION AST (preview): {&quot;left&quot;:{&quot;var&quot;:&quot;var_aprovar_solicitacao_de_compra_decision&quot;},&quot;op&quot;:&quot;eq&quot;,&quot;right&quot;:{&quot;literal&quot;:&quot;approved&quot;}}</bpmn:documentation>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" language="urn:process-ai:expression-ast">{&quot;left&quot;:{&quot;var&quot;:&quot;var_aprovar_solicitacao_de_compra_decision&quot;},&quot;op&quot;:&quot;eq&quot;,&quot;right&quot;:{&quot;literal&quot;:&quot;approved&quot;}}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_0005" sourceRef="gateway_aprovar_solicitacao_de_compra" targetRef="task_receber_justificativa_da_reprovacao" name="Rejeitado">
+      <bpmn:documentation>CONDITION AST (preview): {&quot;left&quot;:{&quot;var&quot;:&quot;var_aprovar_solicitacao_de_compra_decision&quot;},&quot;op&quot;:&quot;eq&quot;,&quot;right&quot;:{&quot;literal&quot;:&quot;rejected&quot;}}</bpmn:documentation>
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" language="urn:process-ai:expression-ast">{&quot;left&quot;:{&quot;var&quot;:&quot;var_aprovar_solicitacao_de_compra_decision&quot;},&quot;op&quot;:&quot;eq&quot;,&quot;right&quot;:{&quot;literal&quot;:&quot;rejected&quot;}}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_0006" sourceRef="task_solicitar_compra_de_equipamento" targetRef="task_aprovar_solicitacao_de_compra" />
+    <bpmn:sequenceFlow id="flow_0007" sourceRef="start_processo_de_solicitacao_de_compra_de_equipam" targetRef="task_solicitar_compra_de_equipamento" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_process_processo_de_solicitacao_de_compra_de_equipam">
+    <bpmndi:BPMNPlane id="Plane_process_processo_de_solicitacao_de_compra_de_equipam" bpmnElement="process_processo_de_solicitacao_de_compra_de_equipam">
+      <bpmndi:BPMNShape id="Shape_start_processo_de_solicitacao_de_compra_de_equipam" bpmnElement="start_processo_de_solicitacao_de_compra_de_equipam"><dc:Bounds x="110" y="130" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_end_process_finished" bpmnElement="end_process_finished"><dc:Bounds x="1160" y="130" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_task_aprovar_solicitacao_de_compra" bpmnElement="task_aprovar_solicitacao_de_compra"><dc:Bounds x="530" y="130" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_gateway_aprovar_solicitacao_de_compra" bpmnElement="gateway_aprovar_solicitacao_de_compra"><dc:Bounds x="740" y="130" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_task_receber_solicitacao_de_compra" bpmnElement="task_receber_solicitacao_de_compra"><dc:Bounds x="950" y="40" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_task_receber_justificativa_da_reprovacao" bpmnElement="task_receber_justificativa_da_reprovacao"><dc:Bounds x="950" y="220" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_task_solicitar_compra_de_equipamento" bpmnElement="task_solicitar_compra_de_equipamento"><dc:Bounds x="320" y="130" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_flow_0001" bpmnElement="flow_0001"><di:waypoint x="670" y="170" /><di:waypoint x="705" y="170" /><di:waypoint x="705" y="155" /><di:waypoint x="740" y="155" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_flow_0002" bpmnElement="flow_0002"><di:waypoint x="1090" y="80" /><di:waypoint x="1125" y="80" /><di:waypoint x="1125" y="148" /><di:waypoint x="1160" y="148" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_flow_0003" bpmnElement="flow_0003"><di:waypoint x="1090" y="260" /><di:waypoint x="1125" y="260" /><di:waypoint x="1125" y="148" /><di:waypoint x="1160" y="148" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_flow_0004" bpmnElement="flow_0004"><di:waypoint x="790" y="155" /><di:waypoint x="870" y="155" /><di:waypoint x="870" y="80" /><di:waypoint x="950" y="80" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_flow_0005" bpmnElement="flow_0005"><di:waypoint x="790" y="155" /><di:waypoint x="870" y="155" /><di:waypoint x="870" y="260" /><di:waypoint x="950" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_flow_0006" bpmnElement="flow_0006"><di:waypoint x="460" y="170" /><di:waypoint x="530" y="170" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_flow_0007" bpmnElement="flow_0007"><di:waypoint x="146" y="148" /><di:waypoint x="233" y="148" /><di:waypoint x="233" y="170" /><di:waypoint x="320" y="170" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

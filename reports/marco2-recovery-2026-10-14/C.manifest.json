@@ -1,0 +1,95 @@
+{
+  "specId": "process_processo_de_ferias",
+  "specRevision": 0,
+  "targetProfile": "generic-bpmn2",
+  "generatorVersion": "1.0.0",
+  "previewOnly": true,
+  "isExecutable": false,
+  "formArtifacts": {
+    "form_processo_de_ferias_request": "process_processo_de_ferias-form_processo_de_ferias_request.form.json",
+    "form_aprovar_ferias": "process_processo_de_ferias-form_aprovar_ferias.form.json",
+    "form_segunda_aprovacao": "process_processo_de_ferias-form_segunda_aprovacao.form.json"
+  },
+  "artifactStatus": "valid-for-preview",
+  "validation": {
+    "formJsValidatesRequiredWhen": false,
+    "externalValidationRequired": true,
+    "sourceOfBusinessRules": "ProcessSpec"
+  },
+  "configuration": {
+    "ready": false,
+    "unresolvedRoles": [
+      "role_servidor",
+      "role_gestor",
+      "role_rh",
+      "role_diretor"
+    ],
+    "pendingQuestions": [
+      "pq_1",
+      "pq_2",
+      "pq_3",
+      "pq_diretor"
+    ]
+  },
+  "publication": {
+    "eligible": false,
+    "reason": "Configuração obrigatória permanece pendente; resolva as perguntas do ProcessSpec antes da publicação."
+  },
+  "capabilities": [
+    "bpmn-preview",
+    "form-js-preview",
+    "draft-with-pending-configuration",
+    "backend-conditional-form-validation"
+  ],
+  "uncompiledRules": [],
+  "delegatedRules": [
+    {
+      "formId": "form_aprovar_ferias",
+      "fieldKey": "field_motivo_da_rejeicao",
+      "rule": "requiredWhen",
+      "validator": "ProcessSpec submission validation"
+    },
+    {
+      "formId": "form_segunda_aprovacao",
+      "fieldKey": "field_segunda_aprovacao_rejection_reason",
+      "rule": "requiredWhen",
+      "validator": "ProcessSpec submission validation"
+    }
+  ],
+  "pendingQuestions": [
+    {
+      "id": "pq_1",
+      "blocking": true,
+      "question": "Como o runtime deve atribuir o papel “Servidor”? A identidade do responsável pode ser configurada depois da prévia.",
+      "relatedNodeId": "task_comunicar_motivo_ao_servidor"
+    },
+    {
+      "id": "pq_2",
+      "blocking": true,
+      "question": "Como o runtime deve atribuir o papel “Gestor”? A identidade do responsável pode ser configurada depois da prévia.",
+      "relatedNodeId": "task_aprovar_ferias"
+    },
+    {
+      "id": "pq_3",
+      "blocking": true,
+      "question": "Como o runtime deve atribuir o papel “RH”? A identidade do responsável pode ser configurada depois da prévia.",
+      "relatedNodeId": "task_registrar_ferias"
+    },
+    {
+      "id": "pq_diretor",
+      "question": "Como o runtime deve atribuir o papel “Diretor”?",
+      "blocking": true,
+      "relatedNodeId": "task_segunda_aprovacao"
+    }
+  ],
+  "checksums": {
+    "process.bpmn": "1af3b40fcdccd7f29f5fcb250f10af60756cea4f203c9e5f87e6e4829e2faa8d",
+    "form_processo_de_ferias_request.form.json": "201a6f1358250d2bdd3173eec2f7c7a8980a3a993b4312726d6e25a8c0a9c18e",
+    "form_aprovar_ferias.form.json": "48ed9491f397a0d6dd7bf25438944cee0b3da6f8e589b67429a233f0b92a5740",
+    "form_segunda_aprovacao.form.json": "972998932a5ce2122ddb2b960edc55e324f1df0db8f55b84c444ced12e0540b7"
+  },
+  "notes": [
+    "Artefatos destinados a modelagem e prévia; service tasks permanecem declarativas e não executáveis.",
+    "Conectores HTTP, banco de dados e notificação nunca são invocados durante geração."
+  ]
+}

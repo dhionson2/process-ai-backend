@@ -1,9 +1,17 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "status": "design-proposal",
   "locale": "pt-BR",
   "selectionPolicy": "deterministic-tags-first",
   "modules": [
+    {
+      "id": "business-interpretation",
+      "path": "business-interpretation.md",
+      "always": false,
+      "tags": [
+        "interpretation"
+      ]
+    },
     {
       "id": "policy",
       "path": "system-policy.md",
