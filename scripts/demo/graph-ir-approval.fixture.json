@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "process": {
+    "id": "purchase_process",
+    "name": "Compra de material",
+    "description": "Solicitação de compra, análise e decisão do gestor",
+    "locale": "pt-BR",
+    "targetProfile": "generic-bpmn2"
+  },
+  "roles": [
+    { "id": "employee", "label": "Funcionário", "resolution": "requester" },
+    { "id": "manager", "label": "Gestor", "resolution": "unresolved" },
+    { "id": "finance", "label": "Financeiro", "resolution": "unresolved" }
+  ],
+  "variables": [
+    { "id": "var_material", "key": "material", "type": "string", "required": true, "source": { "kind": "form", "formRef": "form_request", "fieldKey": "material" } },
+    { "id": "var_approved", "key": "approved", "type": "boolean", "required": true, "source": { "kind": "form", "formRef": "form_manager", "fieldKey": "approved" } }
+  ],
+  "requirements": [
+    { "id": "req_submit", "kind": "activity", "mandatory": true, "nodeId": "submit" },
+    { "id": "req_review", "kind": "activity", "mandatory": true, "nodeId": "review" },
+    { "id": "req_purchase", "kind": "activity", "mandatory": true, "nodeId": "purchase" },
+    { "id": "req_gateway", "kind": "structure", "mandatory": true, "nodeId": "decision" },
+    { "id": "req_approved", "kind": "condition", "mandatory": true, "variableId": "var_approved", "operator": "eq", "value": true },
+    { "id": "req_rejected", "kind": "condition", "mandatory": true, "variableId": "var_approved", "operator": "eq", "value": false },
+    { "id": "req_material", "kind": "form-field", "mandatory": true, "formRef": "form_request", "fieldKey": "material" },
+    { "id": "req_decision_field", "kind": "form-field", "mandatory": true, "formRef": "form_manager", "fieldKey": "approved" }
+  ],
+  "nodes": [
+    { "id": "start", "type": "start", "name": "Início", "formRef": "form_request", "requirementRefs": [] },
+    { "id": "submit", "type": "humanTask", "name": "Solicitar compra de material", "roleId": "employee", "requirementRefs": ["req_submit"] },
+    { "id": "review", "type": "humanTask", "name": "Analisar a solicitação de compra", "roleId": "manager", "formRef": "form_manager", "requirementRefs": ["req_review"] },
+    { "id": "decision", "type": "exclusiveGateway", "name": "Compra aprovada?", "requirementRefs": ["req_gateway"] },
+    { "id": "purchase", "type": "humanTask", "name": "Providenciar a compra", "roleId": "finance", "requirementRefs": ["req_purchase"] },
+    { "id": "end_approved", "type": "end", "name": "Compra providenciada", "requirementRefs": [] },
+    { "id": "end_rejected", "type": "end", "name": "Solicitação reprovada", "requirementRefs": [] }
+  ],
+  "edges": [
+    { "id": "start_submit", "source": "start", "target": "submit", "kind": "sequence", "requirementRefs": [] },
+    { "id": "submit_review", "source": "submit", "target": "review", "kind": "sequence", "requirementRefs": [] },
+    { "id": "review_decision", "source": "review", "target": "decision", "kind": "sequence", "requirementRefs": [] },
+    { "id": "approve_purchase", "source": "decision", "target": "purchase", "kind": "sequence", "gatewayId": "decision", "condition": { "op": "eq", "variableId": "var_approved", "value": true }, "requirementRefs": ["req_approved"] },
+    { "id": "reject_end", "source": "decision", "target": "end_rejected", "kind": "sequence", "gatewayId": "decision", "condition": { "op": "eq", "variableId": "var_approved", "value": false }, "requirementRefs": ["req_rejected"] },
+    { "id": "purchase_end", "source": "purchase", "target": "end_approved", "kind": "sequence", "requirementRefs": [] }
+  ],
+  "formRefs": [
+    { "id": "form_request", "name": "Solicitação de compra", "usage": "start", "fields": [ { "key": "material", "label": "Material solicitado", "type": "text", "bindTo": "var_material", "required": true, "requirementRefs": ["req_material"] } ] },
+    { "id": "form_manager", "name": "Análise do gestor", "usage": "task", "fields": [ { "key": "approved", "label": "Decisão", "type": "boolean", "bindTo": "var_approved", "required": true, "requirementRefs": ["req_decision_field"] } ] }
+  ],
+  "metadata": { "provenance": [] }
+}
