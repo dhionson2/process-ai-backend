@@ -123,13 +123,13 @@ test('GraphIR lowering conserva proveniência global segura e recusa metadata se
   assert.ok(unsupported.diagnostics.some(item => item.code === 'GRAPHIR_METADATA_UNSUPPORTED'));
 });
 
-test('GraphIR lowering falha explicitamente para papel unresolved sem pergunta de configuração', async () => {
+test('GraphIR lowering mantém prévia needs-input com pergunta vinculada para papel unresolved', async () => {
   const graph = toGraphIR(g03ReimbursementProcessSpec);
   graph.roles[0].resolution = 'unresolved';
   const lowered = await lowerGraphIRToProcessSpec(graph);
-  assert.equal(lowered.valid, false);
-  assert.equal(lowered.processSpec, null);
-  assert.ok(lowered.diagnostics.some(item => item.code === 'GRAPHIR_UNSUPPORTED_UNRESOLVED_ROLE'));
+  assert.equal(lowered.valid, true, JSON.stringify(lowered.diagnostics));
+  assert.equal(lowered.processSpec?.status, 'needs-input');
+  assert.ok(lowered.processSpec?.pendingQuestions.some((item: any) => item.relatedNodeId));
 });
 
 test('GraphIR lowering recusa targetProfile ainda não certificado pelos geradores', async () => {

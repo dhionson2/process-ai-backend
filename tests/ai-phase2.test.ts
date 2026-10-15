@@ -16,6 +16,8 @@ import { configuredProvider } from '../src/modules/ai/provider.factory.js';
 import { semanticIntentSchema } from '../src/modules/ai/semantic-process.js';
 import { identityForQuestion, latestSemanticFactEvents } from '../src/modules/ai/semantic-grounding.js';
 import { requirementFromEvidence, type RequirementLedgerV1 } from '../src/modules/ai/requirement-coverage.js';
+import { graphIrProviderSchema, normalizeGraphIrProviderValue } from '../src/modules/graph-ir/provider-schema.js';
+import { validateGraphIR } from '../src/modules/graph-ir/graph-ir.js';
 
 async function fixture(): Promise<any> { return JSON.parse(await readFile('specs/foundation/examples/ferias.json', 'utf8')); }
 function compactExpression(value: any): any {
@@ -44,7 +46,7 @@ function semanticVacationIntent() {
 }
 const supportedVacationRequest = 'O servidor solicitante faz a solicitação informando a data inicial e a data final das férias. O gestor é selecionado manualmente pelo operador autorizado e aprova ou reprova. O RH é grupo RH e registra se houver aprovação. Se reprovado, o servidor deve ser informado do motivo.';
 function environment(overrides: Partial<Environment> = {}): Environment {
-  return { host: '127.0.0.1', port: 3333, corsOrigins: [], logLevel: 'silent', localTenantId: 'test-tenant', aiProvider: 'disabled', ollamaBaseUrl: 'http://127.0.0.1:11434', externalAiApproved: false, aiTimeoutMs: 400, aiContextTokens: 8192, aiMaxOutputTokens: 2048, aiMaxInputChars: 24000, aiMaxConcurrency: 2, externalAiStructuredOutput: 'json-object', aiMaxProviderCalls: 0, aiMaxProviderTokens: 0, aiSemanticGroundingMode: 'legacy', ...overrides };
+  return { host: '127.0.0.1', port: 3333, corsOrigins: [], logLevel: 'silent', localTenantId: 'test-tenant', aiProvider: 'disabled', ollamaBaseUrl: 'http://127.0.0.1:11434', externalAiApproved: false, aiTimeoutMs: 400, aiContextTokens: 8192, aiMaxOutputTokens: 2048, aiMaxInputChars: 24000, aiMaxConcurrency: 2, externalAiStructuredOutput: 'json-object', aiMaxProviderCalls: 0, aiMaxProviderTokens: 0, aiSemanticGroundingMode: 'legacy', aiGraphIrMode: 'off', ...overrides };
 }
 class QueueProvider implements ModelProvider {
   readonly id = 'queue-test';
@@ -58,6 +60,125 @@ class QueueProvider implements ModelProvider {
   }
 }
 const clarification = { kind: 'need_clarification', questions: [{ question: 'Qual unidade deve localizar o gestor?', blocking: true }], summary: 'Falta definir como obter o responsável.' };
+
+function graphIrApproval(): any {
+  return {
+    schemaVersion: '1.0.0', process: { id: 'purchase_process', name: 'Compra de material', description: 'Solicitação de compra', locale: 'pt-BR', targetProfile: 'generic-bpmn2' },
+    roles: [{ id: 'employee', label: 'Funcionário', resolution: 'requester' }, { id: 'manager', label: 'Gestor', resolution: 'unresolved' }, { id: 'finance', label: 'Financeiro', resolution: 'unresolved' }],
+    variables: [
+      { id: 'var_material', key: 'material', type: 'string', required: true, source: { kind: 'form', formRef: 'form_request', fieldKey: 'material' } },
+      { id: 'var_approved', key: 'approved', type: 'boolean', required: true, source: { kind: 'form', formRef: 'form_manager', fieldKey: 'approved' } },
+    ],
+    requirements: [
+      { id: 'req_submit', kind: 'activity', mandatory: true, nodeId: 'submit' },
+      { id: 'req_review', kind: 'activity', mandatory: true, nodeId: 'review' },
+      { id: 'req_purchase', kind: 'activity', mandatory: true, nodeId: 'purchase' },
+      { id: 'req_gateway', kind: 'structure', mandatory: true, nodeId: 'decision' },
+      { id: 'req_approved', kind: 'condition', mandatory: true, variableId: 'var_approved', operator: 'eq', value: true },
+      { id: 'req_rejected', kind: 'condition', mandatory: true, variableId: 'var_approved', operator: 'eq', value: false },
+      { id: 'req_material', kind: 'form-field', mandatory: true, formRef: 'form_request', fieldKey: 'material' },
+      { id: 'req_decision_field', kind: 'form-field', mandatory: true, formRef: 'form_manager', fieldKey: 'approved' },
+    ],
+    nodes: [
+      { id: 'start', type: 'start', name: 'Início', formRef: 'form_request', requirementRefs: [] },
+      { id: 'submit', type: 'humanTask', name: 'Solicitar compra de material', roleId: 'employee', requirementRefs: ['req_submit'] },
+      { id: 'review', type: 'humanTask', name: 'Analisar a solicitação de compra', roleId: 'manager', formRef: 'form_manager', requirementRefs: ['req_review'] },
+      { id: 'decision', type: 'exclusiveGateway', name: 'Compra aprovada?', requirementRefs: ['req_gateway'] },
+      { id: 'purchase', type: 'humanTask', name: 'Providenciar a compra', roleId: 'finance', requirementRefs: ['req_purchase'] },
+      { id: 'end_approved', type: 'end', name: 'Compra providenciada', requirementRefs: [] },
+      { id: 'end_rejected', type: 'end', name: 'Solicitação reprovada', requirementRefs: [] },
+    ],
+    edges: [
+      { id: 'start_submit', source: 'start', target: 'submit', kind: 'sequence', requirementRefs: [] },
+      { id: 'submit_review', source: 'submit', target: 'review', kind: 'sequence', requirementRefs: [] },
+      { id: 'review_decision', source: 'review', target: 'decision', kind: 'sequence', requirementRefs: [] },
+      { id: 'approve_purchase', source: 'decision', target: 'purchase', kind: 'sequence', gatewayId: 'decision', condition: { op: 'eq', variableId: 'var_approved', value: true }, requirementRefs: ['req_approved'] },
+      { id: 'reject_end', source: 'decision', target: 'end_rejected', kind: 'sequence', gatewayId: 'decision', condition: { op: 'eq', variableId: 'var_approved', value: false }, requirementRefs: ['req_rejected'] },
+      { id: 'purchase_end', source: 'purchase', target: 'end_approved', kind: 'sequence', requirementRefs: [] },
+    ],
+    formRefs: [
+      { id: 'form_request', name: 'Solicitação de compra', usage: 'start', fields: [{ key: 'material', label: 'Material solicitado', type: 'text', bindTo: 'var_material', required: true, requirementRefs: ['req_material'] }] },
+      { id: 'form_manager', name: 'Análise do gestor', usage: 'task', fields: [{ key: 'approved', label: 'Decisão', type: 'boolean', bindTo: 'var_approved', required: true, requirementRefs: ['req_decision_field'] }] },
+    ], metadata: { provenance: [] },
+  };
+}
+
+test('GraphIR provider projection supports strict structured outputs and keeps the internal schema authoritative', () => {
+  const schema = graphIrProviderSchema();
+  const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema);
+  const providerValue = graphIrApproval();
+  assert.equal(validate(providerValue), true, JSON.stringify(validate.errors));
+  assert.equal(validateGraphIR(normalizeGraphIrProviderValue(providerValue)).valid, true);
+  const strict = toStrictProviderSchema(schema);
+  assert.equal(strict.properties.response.additionalProperties, false);
+  const optionalCondition = strict.properties.response.properties.edges.items.properties.condition;
+  assert.deepEqual(optionalCondition.type, ['object', 'null']);
+  assert.deepEqual(optionalCondition.properties.op.enum, ['eq', 'ne', 'gt', 'gte', 'lt', 'lte']);
+  const forbidden = graphIrApproval(); forbidden.nodes[2].type = 'serviceTask';
+  assert.equal(validate(forbidden), false, 'provider projection does not authorize undeclared operations');
+  assert.equal(validateGraphIR(normalizeGraphIrProviderValue(graphIrApproval())).valid, true);
+});
+
+test('AI_GRAPH_IR_MODE controlled uses one provider call, lowers to validated ProcessSpec and generates existing artifacts', async () => {
+  const provider = new QueueProvider([graphIrApproval()]);
+  const result = await new AiOrchestrator(provider, 'model', environment({ aiGraphIrMode: 'controlled' })).generate({
+    text: 'Um funcionário solicita compra de material, informando o material solicitado. O gestor analisa a solicitação. Se aprovar, o financeiro recebe para providenciar a compra. Se reprovar, o processo termina.', history: [],
+  });
+  assert.equal(provider.prompts.length, 1);
+  assert.equal(result.kind, 'proposed_spec');
+  if (result.kind !== 'proposed_spec') throw new Error('Expected GraphIR proposal');
+  assert.equal(result.validation.valid, true);
+  assert.equal(result.spec.status, 'needs-input');
+  assert.equal((result.spec.pendingQuestions as any[]).length, 2);
+  assert.match(String(result.artifacts?.bpmnXml), /userTask/);
+  assert.equal(result.artifacts?.forms.length, 2);
+  assert.match(provider.prompts[0].prompt, /GraphIR v1/);
+});
+
+test('AI_GRAPH_IR_MODE controlled rejects invalid GraphIR without trying legacy fallback', async () => {
+  const invalid = graphIrApproval(); invalid.edges[2].target = 'missing';
+  const provider = new QueueProvider([invalid]);
+  await assert.rejects(() => new AiOrchestrator(provider, 'model', environment({ aiGraphIrMode: 'controlled' })).generate({ text: 'Um funcionário solicita compra de material.', history: [] }),
+    (error: any) => error.code === 'GRAPHIR_INVALID');
+  assert.equal(provider.prompts.length, 1);
+});
+
+test('AI_GRAPH_IR_MODE controlled rejects invented activity and a role assigned to the wrong evidence', async () => {
+  const invented = graphIrApproval(); invented.nodes[1].name = 'Executar pagamento';
+  const inventedProvider = new QueueProvider([invented]);
+  await assert.rejects(() => new AiOrchestrator(inventedProvider, 'model', environment({ aiGraphIrMode: 'controlled' })).generate({ text: 'Um funcionário solicita compra de material, informando o material solicitado. O gestor analisa a solicitação. Se aprovar, o financeiro recebe para providenciar a compra. Se reprovar, o processo termina.', history: [] }),
+    (error: any) => error.code === 'GRAPHIR_ACTIVITY_UNGROUNDED');
+  const wrongRole = graphIrApproval(); wrongRole.nodes[1].roleId = 'manager';
+  const wrongRoleProvider = new QueueProvider([wrongRole]);
+  await assert.rejects(() => new AiOrchestrator(wrongRoleProvider, 'model', environment({ aiGraphIrMode: 'controlled' })).generate({ text: 'Um funcionário solicita compra de material, informando o material solicitado. O gestor analisa a solicitação. Se aprovar, o financeiro recebe para providenciar a compra. Se reprovar, o processo termina.', history: [] }),
+    (error: any) => error.code === 'GRAPHIR_ROLE_UNGROUNDED');
+});
+
+test('API GraphIR controlled gera uma proposta, aceita e recupera a revisão sem mudar o contrato público', async () => {
+  const provider = new QueueProvider([graphIrApproval()]);
+  const repository = new InMemoryConversationRepository();
+  const app = await buildApp(environment({ aiGraphIrMode: 'controlled' }), { conversationRepository: repository, modelProvider: provider });
+  try {
+    const project = await app.inject({ method: 'POST', url: '/api/v1/projects', payload: { name: 'Compra sintética', targetProfile: 'generic-bpmn2' } });
+    assert.equal(project.statusCode, 201);
+    const sessionId = project.json().sessionId;
+    const proposal = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload: { text: 'Um funcionário solicita compra de material, informando o material solicitado. O gestor analisa a solicitação. Se aprovar, o financeiro recebe para providenciar a compra. Se reprovar, o processo termina.', baseRevision: 0 } });
+    assert.equal(proposal.statusCode, 200);
+    assert.equal(proposal.json().status, 'validated');
+    assert.ok(proposal.json().artifacts.bpmnXml.includes('<bpmn:process'));
+    assert.equal(proposal.json().artifacts.forms.length, 2);
+    const proposedRevision = await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}/revisions/1` });
+    assert.equal(proposedRevision.json().processSpec.status, 'needs-input');
+    assert.equal(provider.prompts.length, 1);
+    assert.match(provider.prompts[0].prompt, /Retorne somente GraphIR v1/);
+    const accepted = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/revisions/1/accept`, payload: { baseRevision: 0 } });
+    assert.equal(accepted.json().status, 'accepted');
+    const recovered = await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}/revisions/1` });
+    assert.equal(recovered.json().processSpec.id, 'purchase_process');
+    assert.ok(recovered.json().artifacts.bpmnXml.includes('purchase_process'));
+    assert.equal((await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}` })).json().currentRevision, 1);
+  } finally { await app.close(); }
+});
 
 test('Knowledge Engine seleciona módulos versionados por intenção e limita contexto', async () => {
   const knowledge = new BpmKnowledgeEngine();
@@ -147,7 +268,7 @@ test('modo JSON Schema estrito prepara schema interno, normaliza campos nulos e 
   assert.equal(providerSchema.additionalProperties, false);
   assert.equal(providerSchema.properties.response.anyOf[0].additionalProperties, false);
   assert.deepEqual(providerSchema.properties.response.anyOf[0].required, ['kind', 'questions', 'summary']);
-  assert.equal(providerSchema.properties.response.anyOf[0].properties.summary.anyOf[1].type, 'null');
+  assert.deepEqual(providerSchema.properties.response.anyOf[0].properties.summary.type, ['string', 'null']);
   assert.equal(providerSchema.properties.response.anyOf[0].properties.questions.items.additionalProperties, false);
   const recursiveSchema = toStrictProviderSchema(semanticIntentSchema()) as any;
   assert.equal(recursiveSchema.$defs.step.anyOf.length, 4);
