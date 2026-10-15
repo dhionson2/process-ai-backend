@@ -181,7 +181,17 @@ export function toStrictProviderSchema(input: Record<string, unknown>): Record<s
       }
     }
     if (Object.hasOwn(source, 'const')) { delete result.const; result.enum = [source.const]; }
-    if (Array.isArray(source.type) && !source.type.includes('null') && source.type.length > 1) {
+    if (Array.isArray(result.enum) && result.type === undefined) {
+      const enumTypes = [...new Set(result.enum.map((item: unknown) => item === null ? 'null' : typeof item === 'string' ? 'string' : typeof item === 'number' ? 'number' : typeof item === 'boolean' ? 'boolean' : undefined).filter(Boolean))] as string[];
+      if (enumTypes.length === 1) result.type = enumTypes[0];
+      else if (enumTypes.length === 2 && enumTypes.includes('null')) result.type = enumTypes;
+      else if (enumTypes.length > 1) {
+        const values = result.enum;
+        delete result.enum;
+        result.anyOf = enumTypes.map(type => ({ type, enum: values.filter((item: unknown) => (item === null ? 'null' : typeof item) === type) }));
+      }
+    }
+    if (Array.isArray(source.type) && source.type.length > 1 && (source.type.filter((type: string) => type !== 'null').length > 1 || !source.type.includes('null'))) {
       delete result.type;
       result.anyOf = source.type.map((type: string) => ({ type }));
     }
@@ -208,7 +218,7 @@ export function toStrictProviderSchema(input: Record<string, unknown>): Record<s
       const definition = defs[value.$ref.slice('#/$defs/'.length)];
       if (definition) value = convert(definition);
     }
-    if (Array.isArray(value?.type)) return { ...value, type: [...new Set([...value.type, 'null'])] };
+    if (Array.isArray(value?.type)) return { ...value, type: [...new Set([...value.type, 'null'])], ...(Array.isArray(value.enum) ? { enum: [...value.enum, null] } : {}) };
     if (typeof value?.type === 'string') {
       if (Array.isArray(value.enum)) return { ...value, type: [value.type, 'null'], enum: [...value.enum, null] };
       return { ...value, type: [value.type, 'null'] };
