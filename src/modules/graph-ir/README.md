@@ -1,6 +1,6 @@
 # GraphIR V1 — contrato interno e lowering
 
-`GraphIRV1` é uma representação interna e plana de controle de processo. Ela não altera o OpenAPI, o contrato público `ProcessSpec v1`, o caminho atual de geração ou o default legacy. O schema JSON Schema 2020-12 executável é exportado por `graphIrV1Schema` em `graph-ir.ts`.
+`GraphIRV1` é uma representação interna e plana de controle de processo. Ela não altera o OpenAPI nem o contrato público `ProcessSpec v1`; o modo `AI_GRAPH_IR_MODE=off` mantém o pipeline anterior como default. O schema JSON Schema 2020-12 executável é exportado por `graphIrV1Schema` em `graph-ir.ts`.
 
 ## Fronteira
 
@@ -19,11 +19,11 @@ IDs técnicos (`node.id`, `edge.id`, `role.id`, `variable.id`, `formRef.id` e `r
 
 Atividades, gateways, ações, rotas condicionais e ciclos exigem `requirementRefs`. Requisitos obrigatórios sem cobertura, referências a requisitos inexistentes e ciclos/atores/condições divergentes são rejeitados pelo Coverage Gate. `provenance` contém apenas origem, confirmação, referência técnica e hash opcional; o validador não recebe nem tenta reconstruir a evidência original.
 
-## Subconjunto suportado
+## Subconjunto da geração controlada
 
 GraphIR V1 aceita `start`, `end`, `humanTask`, `serviceTask` declarativa e `exclusiveGateway`. Arestas aceitam condição AST tipada, associação ao gateway, uma saída default e marcação `loop-back`. Form refs preservam campos, bindings, obrigatoriedade, opções e condições `visibleWhen`/`requiredWhen`.
 
-Parallel/inclusive/event gateways, subprocessos, eventos, timers, BPMNDI, FormPatch e GraphPatch permanecem fora do contrato. O schema rejeita tipos de nó não declarados. Um `serviceTask` só passa pelo adapter quando o catálogo canônico aprova connector/operação. O adapter atual só certifica `generic-bpmn2`. Papéis `unresolved` são representáveis no grafo, mas não são compilados enquanto GraphIR não transportar a pergunta de configuração exigida por ProcessSpec v1.
+Parallel/inclusive/event gateways, subprocessos, eventos, timers, BPMNDI, FormPatch e GraphPatch permanecem fora do contrato. A projeção enviada ao provider aceita somente `start`, `end`, `humanTask` e `exclusiveGateway`, e condições atômicas tipadas. Ela exclui serviceTask até que a projeção transporte referências verificáveis ao catálogo. O adapter certifica `generic-bpmn2`. Papéis `unresolved` geram prévia `needs-input` e pergunta bloqueante vinculada à tarefa; não atribuem responsável nem habilitam publicação.
 
 ## Validação e compilação
 
@@ -33,4 +33,4 @@ Parallel/inclusive/event gateways, subprocessos, eventos, timers, BPMNDI, FormPa
 4. `lowerGraphIRToProcessSpec` rejeita GraphIR inválido, ordena coleções sem alterar campos de formulário, mapeia IDs de variável, mantém regras condicionais e gera provenance em formato aceito pelo metadata de ProcessSpec.
 5. O ProcessSpec resultante passa por `validateProcessSpec`. Apenas resultado válido é retornado; não se removem fluxos, criam finais, escolhem ramos, alteram operadores nem atribuem papéis.
 
-O adapter é uma fronteira de biblioteca para testes e evolução arquitetural. Não está conectado a rota pública, provider, shadow mode, banco nem caminho padrão. O teste G03 constrói GraphIR manual a partir da fixture determinística e comprova o lowering estrutural; isso **não** é evidência de que uma IA interpretou G03 corretamente.
+O modo `controlled` usa uma única chamada ao provider na geração inicial, valida o GraphIR, faz lowering, valida o ProcessSpec e chama os geradores existentes. Falhas não recorrem automaticamente ao pipeline legacy. Refinamentos seguem temporariamente o caminho ProcessSpec atual. O modo `shadow` apenas registra diagnóstico pendente; não duplica chamadas. Os testes simulados comprovam integração de código, mas não substituem a validação semântica com modelo real.

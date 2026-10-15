@@ -194,7 +194,7 @@ export function toStrictProviderSchema(input: Record<string, unknown>): Record<s
       result.type = 'object';
       result.properties = Object.fromEntries(Object.entries(properties).map(([name, schema]) => {
         const converted = convert(schema);
-        return [name, required.has(name) ? converted : { anyOf: [converted, { type: 'null' }] }];
+        return [name, required.has(name) ? converted : nullable(converted)];
       }));
       result.required = Object.keys(properties);
       result.additionalProperties = false;
@@ -202,6 +202,24 @@ export function toStrictProviderSchema(input: Record<string, unknown>): Record<s
       result.additionalProperties = false;
     }
     return result;
+  };
+  const nullable = (value: any): any => {
+    if (value?.$ref && typeof value.$ref === 'string' && value.$ref.startsWith('#/$defs/')) {
+      const definition = defs[value.$ref.slice('#/$defs/'.length)];
+      if (definition) value = convert(definition);
+    }
+    if (Array.isArray(value?.type)) return { ...value, type: [...new Set([...value.type, 'null'])] };
+    if (typeof value?.type === 'string') {
+      if (Array.isArray(value.enum)) return { ...value, type: [value.type, 'null'], enum: [...value.enum, null] };
+      return { ...value, type: [value.type, 'null'] };
+    }
+    if (Array.isArray(value?.enum)) {
+      const sample = value.enum.find((item: unknown) => item !== null);
+      const type = typeof sample === 'string' ? 'string' : typeof sample === 'number' ? 'number' : typeof sample === 'boolean' ? 'boolean' : undefined;
+      return { ...value, ...(type ? { type: [type, 'null'] } : {}), enum: [...value.enum, null] };
+    }
+    if (Array.isArray(value?.anyOf)) return { anyOf: [...value.anyOf, { type: 'null' }] };
+    return { anyOf: [value, { type: 'null' }] };
   };
   const clean = (value: any): any => {
     if (Array.isArray(value)) return value.map(clean);

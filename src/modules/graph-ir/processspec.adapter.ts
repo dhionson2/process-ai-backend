@@ -19,12 +19,6 @@ export async function lowerGraphIRToProcessSpec(value: unknown): Promise<GraphIR
     valid: false, processSpec: null,
     diagnostics: [{ code: 'GRAPHIR_METADATA_UNSUPPORTED', path: '/metadata/sourceVersion', message: 'ProcessSpec v1 não possui campo equivalente para sourceVersion; o adapter não descarta essa informação.', severity: 'error' }],
   };
-  const unsupported: Diagnostic[] = graph.roles.filter(role => role.resolution === 'unresolved').map(role => ({
-    code: 'GRAPHIR_UNSUPPORTED_UNRESOLVED_ROLE', path: `/roles/${role.id}`,
-    message: 'ProcessSpec v1 exige pergunta de configuração vinculada à tarefa; o GraphIR não carrega o texto da pergunta.', severity: 'error',
-  }));
-  if (unsupported.length) return { valid: false, processSpec: null, diagnostics: unsupported };
-
   const variableById = new Map(graph.variables.map(variable => [variable.id, variable]));
   const toProcessExpression = (expression: any): any => {
     if (Object.hasOwn(expression, 'var')) {
@@ -68,12 +62,17 @@ export async function lowerGraphIRToProcessSpec(value: unknown): Promise<GraphIR
     id: edge.id, source: edge.source, target: edge.target, ...(edge.label ? { label: edge.label } : {}),
     ...(edge.condition ? { condition: toProcessExpression(edge.condition) } : {}), ...(edge.isDefault ? { isDefault: true } : {}),
   }));
+  const unresolvedRoles = new Set(graph.roles.filter(role => role.resolution === 'unresolved').map(role => role.id));
+  const pendingQuestions = nodes.filter((node: Json) => node.type === 'userTask' && unresolvedRoles.has(node.roleId)).map((node: Json) => {
+    const role = graph.roles.find(item => item.id === node.roleId)!;
+    return { id: `resolve_${role.id}_${node.id}`.slice(0, 128), question: `Como o papel “${role.label}” deve ser associado à tarefa “${node.name}” no runtime?`, blocking: true, relatedNodeId: node.id };
+  });
   const provenance = graphProvenance(graph);
   const processSpec: Json = {
     schemaVersion: '1.0.0', id: graph.process.id, name: graph.process.name,
     ...(graph.process.description !== undefined ? { description: graph.process.description } : {}),
-    locale: graph.process.locale, targetProfile: graph.process.targetProfile, status: 'draft', roles, variables, forms, nodes, flows,
-    pendingQuestions: [], assumptions: [], policies: { manualApprovalRequired: true, allowExecution: false },
+    locale: graph.process.locale, targetProfile: graph.process.targetProfile, status: pendingQuestions.length ? 'needs-input' : 'draft', roles, variables, forms, nodes, flows,
+    pendingQuestions, assumptions: [], policies: { manualApprovalRequired: true, allowExecution: false },
     metadata: { revision: 0, ...(provenance.length ? { requirementProvenance: provenance } : {}) },
   };
   const loweredValidation = await validateProcessSpec(processSpec);
