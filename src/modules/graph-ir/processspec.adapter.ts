@@ -15,6 +15,10 @@ export async function lowerGraphIRToProcessSpec(value: unknown): Promise<GraphIR
     valid: false, processSpec: null,
     diagnostics: [{ code: 'GRAPHIR_TARGET_PROFILE_UNSUPPORTED', path: '/process/targetProfile', message: 'O adapter e os geradores atuais só certificam generic-bpmn2.', severity: 'error' }],
   };
+  if (graph.metadata.sourceVersion !== undefined) return {
+    valid: false, processSpec: null,
+    diagnostics: [{ code: 'GRAPHIR_METADATA_UNSUPPORTED', path: '/metadata/sourceVersion', message: 'ProcessSpec v1 não possui campo equivalente para sourceVersion; o adapter não descarta essa informação.', severity: 'error' }],
+  };
   const unsupported: Diagnostic[] = graph.roles.filter(role => role.resolution === 'unresolved').map(role => ({
     code: 'GRAPHIR_UNSUPPORTED_UNRESOLVED_ROLE', path: `/roles/${role.id}`,
     message: 'ProcessSpec v1 exige pergunta de configuração vinculada à tarefa; o GraphIR não carrega o texto da pergunta.', severity: 'error',
@@ -105,5 +109,10 @@ function graphProvenance(graph: GraphIRV1): Json[] {
   for (const node of graph.nodes) append(`/graph/nodes/${node.id}`, node.requirementRefs, node.provenance);
   for (const edge of graph.edges) append(`/graph/edges/${edge.id}/${edge.kind}`, edge.requirementRefs, edge.provenance);
   for (const form of graph.formRefs) for (const field of form.fields) append(`/graph/forms/${form.id}/fields/${String(field.key)}`, (field.requirementRefs as string[] | undefined) || [], undefined);
+  for (const [index, provenance] of graph.metadata.provenance.entries()) entries.push({
+    path: `/graph/metadata/provenance/${index}`, name: `global-${index}`,
+    source: provenance.source || 'inference', confirmed: provenance.confirmed === true,
+    ...(typeof provenance.evidenceSha256 === 'string' ? { evidenceSha256: provenance.evidenceSha256 } : {}),
+  });
   return entries.sort((a, b) => lexical(a.path, b.path));
 }

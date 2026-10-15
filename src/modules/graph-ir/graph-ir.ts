@@ -98,6 +98,13 @@ const error = (code: string, path: string, message: string): Diagnostic => ({ co
 const lexical = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 const stable = (diagnostics: Diagnostic[]): Diagnostic[] => diagnostics.sort((a, b) => lexical(a.path, b.path) || lexical(a.code, b.code) || lexical(a.message, b.message));
 const result = (diagnostics: Diagnostic[]): ValidationResult => ({ valid: !diagnostics.some(item => item.severity === 'error'), diagnostics: stable(diagnostics) });
+function valueMatchesType(value: unknown, type: string): boolean {
+  if (type === 'string' || type === 'date' || type === 'datetime') return typeof value === 'string';
+  if (type === 'integer') return typeof value === 'number' && Number.isInteger(value);
+  if (type === 'decimal') return typeof value === 'number' && Number.isFinite(value);
+  if (type === 'boolean') return typeof value === 'boolean';
+  return false;
+}
 function canonicalJson(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalJson);
   if (!value || typeof value !== 'object') return value;
@@ -190,7 +197,7 @@ export function validateGraphIRSemantics(value: unknown): ValidationResult {
         if (field.type === 'select') {
           const optionValues = new Set(((field.options as Array<{ value: string }> | undefined) || []).map(option => option.value));
           if (!optionValues.size) add('GRAPHIR_SELECT_OPTIONS_REQUIRED', fieldPath, 'Campo select exige opções explícitas');
-          if (variable.enumValues && (variable.enumValues.length !== optionValues.size || variable.enumValues.some(item => !optionValues.has(String(item))))) add('GRAPHIR_SELECT_DOMAIN_MISMATCH', fieldPath, 'Opções devem corresponder ao domínio da variável');
+          if (variable.enumValues && (variable.enumValues.length !== optionValues.size || variable.enumValues.some(item => !optionValues.has(item as string)))) add('GRAPHIR_SELECT_DOMAIN_MISMATCH', fieldPath, 'Opções devem corresponder ao domínio string da variável');
         }
       }
       for (const key of ['visibleWhen', 'requiredWhen']) if (field[key] && visitExpression(field[key], `${fieldPath}/${key}`) !== 'boolean') add('GRAPHIR_FORM_CONDITION_TYPE_INVALID', `${fieldPath}/${key}`, 'Condição de campo deve resultar em booleano');
@@ -203,6 +210,7 @@ export function validateGraphIRSemantics(value: unknown): ValidationResult {
     if (node.type === 'start' && ins.length) add('GRAPHIR_START_HAS_INCOMING', path, 'Nó inicial não pode ter arestas de entrada');
     if (node.type === 'end' && outs.length) add('GRAPHIR_END_HAS_OUTGOING', path, 'Nó final não pode ter arestas de saída');
     if (node.type !== 'end' && !outs.length) add('GRAPHIR_NODE_DEAD_END', path, 'Nó sem aresta de saída');
+    if (node.defaultEdgeId && node.type !== 'exclusiveGateway') add('GRAPHIR_GATEWAY_DEFAULT_REFERENCE_INVALID', `${path}/defaultEdgeId`, 'defaultEdgeId só pode ser usado por gateway XOR');
     if (node.type === 'humanTask' && !node.roleId) add('GRAPHIR_ROLE_REQUIRED', `${path}/roleId`, 'Tarefa humana exige papel explícito');
     if (node.roleId && !roles.has(node.roleId)) add('GRAPHIR_ROLE_REFERENCE_MISSING', `${path}/roleId`, `Papel inexistente: ${node.roleId}`);
     if (node.roleId && node.type !== 'humanTask') add('GRAPHIR_ROLE_ON_UNSUPPORTED_NODE', `${path}/roleId`, 'Papel só pode ser atribuído a tarefa humana no GraphIR v1');
@@ -259,6 +267,8 @@ export function validateGraphIRSemantics(value: unknown): ValidationResult {
   }
   for (const variable of graph.variables) {
     const source = variable.source;
+    if (source?.kind === 'constant' && !valueMatchesType(source.value, variable.type)) add('GRAPHIR_VARIABLE_SOURCE_TYPE_INVALID', `/variables/${variable.id}/source/value`, `Constante incompatível com variável ${variable.type}`);
+    if (variable.enumValues?.some(value => !valueMatchesType(value, variable.type))) add('GRAPHIR_VARIABLE_ENUM_TYPE_INVALID', `/variables/${variable.id}/enumValues`, `Valores enumerados incompatíveis com variável ${variable.type}`);
     if (source?.kind === 'form') {
       const form = forms.get(String(source.formRef));
       if (!form) add('GRAPHIR_FORM_REFERENCE_MISSING', `/variables/${variable.id}/source/formRef`, `Formulário inexistente: ${String(source.formRef)}`);
@@ -289,13 +299,34 @@ export function validateGraphIRCoverage(value: unknown): ValidationResult {
   const diagnostics: Diagnostic[] = [];
   const covered = new Set<string>();
   const refs = [
-    ...graph.nodes.flatMap(node => node.requirementRefs.map(id => ({ id, path: `/nodes/${node.id}` }))),
-    ...graph.edges.flatMap(edge => edge.requirementRefs.map(id => ({ id, path: `/edges/${edge.id}` }))),
-    ...graph.formRefs.flatMap(form => form.fields.flatMap(field => ((field.requirementRefs as string[] | undefined) || []).map(id => ({ id, path: `/formRefs/${form.id}/fields/${String(field.key)}` })))),
+    ...graph.nodes.flatMap(node => node.requirementRefs.map(id => ({ id, path: `/nodes/${node.id}/requirementRefs`, ownerType: 'node' as const, owner: node }))),
+    ...graph.edges.flatMap(edge => edge.requirementRefs.map(id => ({ id, path: `/edges/${edge.id}/requirementRefs`, ownerType: 'edge' as const, owner: edge }))),
+    ...graph.formRefs.flatMap(form => form.fields.flatMap(field => ((field.requirementRefs as string[] | undefined) || []).map(id => ({ id, path: `/formRefs/${form.id}/fields/${String(field.key)}/requirementRefs`, ownerType: 'form-field' as const, owner: { form, field } })))),
   ];
   for (const ref of refs) {
-    if (!graph.requirements.some(item => item.id === ref.id)) diagnostics.push(error('GRAPHIR_REQUIREMENT_REFERENCE_MISSING', ref.path, `Requisito inexistente: ${ref.id}`));
-    else covered.add(ref.id);
+    const requirement = graph.requirements.find(item => item.id === ref.id);
+    if (!requirement) {
+      diagnostics.push(error('GRAPHIR_REQUIREMENT_REFERENCE_MISSING', ref.path, `Requisito inexistente: ${ref.id}`));
+      continue;
+    }
+    covered.add(ref.id);
+    let bindingIsValid = false;
+    if (ref.ownerType === 'node') {
+      const node = ref.owner as GraphIRV1['nodes'][number];
+      bindingIsValid = requirement.kind === 'activity' && requirement.nodeId === node.id && ['humanTask', 'serviceTask'].includes(node.type)
+        || requirement.kind === 'structure' && requirement.nodeId === node.id && node.type === 'exclusiveGateway'
+        || requirement.kind === 'actor' && requirement.nodeId === node.id && requirement.roleId === node.roleId && node.type === 'humanTask'
+        || requirement.kind === 'loop' && requirement.sourceNodeId === node.id && node.type === 'exclusiveGateway';
+    } else if (ref.ownerType === 'edge') {
+      const edge = ref.owner as GraphIRV1['edges'][number];
+      bindingIsValid = requirement.kind === 'loop' && edge.kind === 'loop-back' && requirement.sourceNodeId === edge.source && requirement.targetNodeId === edge.target
+        || requirement.kind === 'condition' && conditionMatches(edge.condition, requirement, graph.variables)
+        || requirement.kind === 'consequence' && edge.kind === 'sequence' && requirement.sourceNodeId === edge.source && requirement.targetNodeId === edge.target;
+    } else {
+      const { form, field } = ref.owner as { form: GraphIRV1['formRefs'][number]; field: GraphIRV1['formRefs'][number]['fields'][number] };
+      bindingIsValid = requirement.kind === 'form-field' && requirement.formRef === form.id && requirement.fieldKey === field.key;
+    }
+    if (!bindingIsValid) diagnostics.push(error('GRAPHIR_REQUIREMENT_BINDING_INVALID', ref.path, `Requisito ${ref.id} não corresponde ao tipo e à identidade deste elemento`));
   }
   for (const node of graph.nodes.filter(item => ['humanTask', 'serviceTask', 'exclusiveGateway'].includes(item.type))) {
     if (!node.requirementRefs.length) diagnostics.push(error('GRAPHIR_ELEMENT_UNGROUNDED', `/nodes/${node.id}`, 'Elemento de negócio sem requisito rastreável'));
@@ -313,9 +344,13 @@ export function validateGraphIRCoverage(value: unknown): ValidationResult {
       const exact = graph.nodes.some(node => node.id === requirement.nodeId && node.type === 'humanTask' && node.roleId === requirement.roleId && node.requirementRefs.includes(requirement.id));
       if (!exact) diagnostics.push(error('GRAPHIR_ROLE_REQUIREMENT_DIVERGENCE', `/requirements/${requirement.id}`, 'Tarefa coberta não usa o papel exigido'));
     }
-    if ((requirement.kind === 'activity' || requirement.kind === 'structure') && requirement.nodeId) {
-      const exact = graph.nodes.some(node => node.id === requirement.nodeId && node.requirementRefs.includes(requirement.id));
-      if (!exact) diagnostics.push(error('GRAPHIR_NODE_REQUIREMENT_DIVERGENCE', `/requirements/${requirement.id}`, 'Nó não corresponde ao requisito de atividade/estrutura'));
+    if (requirement.kind === 'activity' && requirement.nodeId) {
+      const exact = graph.nodes.some(node => node.id === requirement.nodeId && ['humanTask', 'serviceTask'].includes(node.type) && node.requirementRefs.includes(requirement.id));
+      if (!exact) diagnostics.push(error('GRAPHIR_NODE_REQUIREMENT_DIVERGENCE', `/requirements/${requirement.id}`, 'Requisito de atividade precisa cobrir uma tarefa no nodeId declarado'));
+    }
+    if (requirement.kind === 'structure' && requirement.nodeId) {
+      const exact = graph.nodes.some(node => node.id === requirement.nodeId && node.type === 'exclusiveGateway' && node.requirementRefs.includes(requirement.id));
+      if (!exact) diagnostics.push(error('GRAPHIR_NODE_REQUIREMENT_DIVERGENCE', `/requirements/${requirement.id}`, 'Requisito estrutural precisa cobrir um gateway XOR no nodeId declarado'));
     }
     if (requirement.kind === 'consequence' && requirement.sourceNodeId && requirement.targetNodeId) {
       const exact = graph.edges.some(edge => edge.source === requirement.sourceNodeId && edge.target === requirement.targetNodeId && edge.requirementRefs.includes(requirement.id));
@@ -328,6 +363,15 @@ export function validateGraphIRCoverage(value: unknown): ValidationResult {
     if (requirement.kind === 'condition' && requirement.variableId && requirement.operator) {
       const exact = graph.edges.some(edge => edge.requirementRefs.includes(requirement.id) && conditionMatches(edge.condition, requirement, graph.variables));
       if (!exact) diagnostics.push(error('GRAPHIR_CONDITION_REQUIREMENT_DIVERGENCE', `/requirements/${requirement.id}`, 'Condição não corresponde à variável, operador e valor exigidos'));
+    }
+  }
+  for (const node of graph.nodes) {
+    const refs = node.requirementRefs.map(id => graph.requirements.find(item => item.id === id)).filter(Boolean);
+    if (['humanTask', 'serviceTask'].includes(node.type) && !refs.some(item => item?.kind === 'activity' && item.nodeId === node.id)) {
+      diagnostics.push(error('GRAPHIR_ELEMENT_REQUIREMENT_KIND_INVALID', `/nodes/${node.id}/requirementRefs`, 'Tarefa exige requisito de atividade vinculado ao próprio nodeId'));
+    }
+    if (node.type === 'exclusiveGateway' && !refs.some(item => item?.kind === 'structure' && item.nodeId === node.id)) {
+      diagnostics.push(error('GRAPHIR_ELEMENT_REQUIREMENT_KIND_INVALID', `/nodes/${node.id}/requirementRefs`, 'Gateway exige requisito estrutural vinculado ao próprio nodeId'));
     }
   }
   return result(diagnostics);

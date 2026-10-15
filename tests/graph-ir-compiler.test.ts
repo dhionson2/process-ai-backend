@@ -83,6 +83,8 @@ test('GraphIR → ProcessSpec V1 executa fronteira explícita e mantém estrutur
     ['req_loop_f_adjust_return', 'employee_adjust', 'manager_check'],
     ['req_loop_f_docs_return', 'employee_correct_docs', 'finance_check'],
   ].sort());
+  const loweredRequirementRefs = new Set((target.metadata.requirementProvenance || []).map((item: any) => item.name));
+  assert.deepEqual([...graph.requirements.map(item => item.id).filter(id => !loweredRequirementRefs.has(id))], [], 'RequirementRefs de nó, aresta e formulário permanecem ligados no metadata do ProcessSpec');
   assert.ok(target.forms.find((form: any) => form.id === 'form_manager_approval').fields.find((field: any) => field.key === 'manager_rejection_reason').requiredWhen);
   assert.equal(target.policies.allowExecution, false);
 });
@@ -104,6 +106,21 @@ test('GraphIR lowering conserva IDs e proveniência de requisito no metadata com
   const provenance = lowered.processSpec!.metadata.requirementProvenance;
   assert.ok(provenance.some((item: any) => item.path === '/graph/nodes/manager_approval/requirements/req_node_manager_approval' && item.source === 'user' && item.confirmed && item.evidenceSha256 === 'a'.repeat(64)));
   assert.equal(JSON.stringify(lowered.processSpec).includes('turn-8'), false, 'diagnóstico/proveniência não guarda texto de conversa');
+});
+
+test('GraphIR lowering conserva proveniência global segura e recusa metadata sem campo equivalente', async () => {
+  const graph = toGraphIR(g03ReimbursementProcessSpec);
+  graph.metadata.provenance.push({ source: 'confirmed-answer', confirmed: true, evidenceSha256: 'b'.repeat(64) });
+  const lowered = await lowerGraphIRToProcessSpec(graph);
+  assert.equal(lowered.valid, true, JSON.stringify(lowered.diagnostics));
+  assert.ok(lowered.processSpec!.metadata.requirementProvenance.some((item: any) => item.path === '/graph/metadata/provenance/0' && item.source === 'confirmed-answer' && item.confirmed && item.evidenceSha256 === 'b'.repeat(64)));
+  assert.equal(JSON.stringify(lowered.processSpec).includes('sourceRef'), false, 'referências opacas não são serializadas no ProcessSpec');
+
+  graph.metadata.sourceVersion = 'upstream-v2';
+  const unsupported = await lowerGraphIRToProcessSpec(graph);
+  assert.equal(unsupported.valid, false);
+  assert.equal(unsupported.processSpec, null);
+  assert.ok(unsupported.diagnostics.some(item => item.code === 'GRAPHIR_METADATA_UNSUPPORTED'));
 });
 
 test('GraphIR lowering falha explicitamente para papel unresolved sem pergunta de configuração', async () => {
