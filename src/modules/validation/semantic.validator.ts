@@ -1,4 +1,5 @@
 import type { Diagnostic } from '../../domain/contracts.js';
+import { analyzeNumericXor } from './numeric-xor.js';
 
 type JsonMap = Record<string, any>;
 type List = JsonMap[];
@@ -108,6 +109,15 @@ export function validateSemantics(spec: JsonMap, catalog: JsonMap): Diagnostic[]
       if (routes.length < 2 || routes.some(f => !f.condition && !f.isDefault)) add('GATEWAY_ROUTE_MISSING', node.id, 'Gateway XOR deve possuir rotas com condição ou default');
       if (routes.filter(f => f.isDefault).length > 1) add('GATEWAY_DEFAULT_INVALID', node.id, 'Gateway XOR aceita no máximo uma rota default');
       for (const route of routes) if (route.isDefault && route.condition) add('GATEWAY_DEFAULT_INVALID', route.id, 'Rota default não pode possuir condição');
+      const declaredDefault = routes.find(route => route.isDefault);
+      if (node.defaultFlowId && declaredDefault?.id !== node.defaultFlowId)
+        add('GATEWAY_DEFAULT_INVALID', node.id, 'defaultFlowId deve corresponder à única rota marcada como default');
+      if (declaredDefault && declaredDefault.id !== node.defaultFlowId)
+        add('GATEWAY_DEFAULT_INVALID', declaredDefault.id, 'Rota marcada como default deve corresponder a defaultFlowId');
+      for (const issue of analyzeNumericXor(routes as Array<{ id: string; condition?: JsonMap; isDefault?: boolean }>, vars as Array<{ key: string; type: string }>)) {
+        const path = issue.routeIds.length === 1 ? issue.routeIds[0] : node.id;
+        d.push({ code: issue.code, path, message: issue.message, severity: issue.severity });
+      }
     }
     if (node.type === 'serviceTask') {
       if (!node.action) { add('CAPABILITY_NOT_SUPPORTED', node.id, 'Ação declarativa ausente'); continue; }

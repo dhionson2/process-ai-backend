@@ -21,7 +21,7 @@ export async function validateProcessSpec(value: unknown): Promise<ValidationRes
     })) };
   }
   const diagnostics = validateSemantics(value as Record<string, any>, catalog as Record<string, any>);
-  return { valid: diagnostics.length === 0, diagnostics };
+  return { valid: !diagnostics.some(item => item.severity === 'error'), diagnostics };
 }
 
 type FormSubmission = { valid: boolean; diagnostics: Array<{ code: string; path: string; message: string }> };
