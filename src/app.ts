@@ -32,6 +32,7 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
     supportedNodes: ['startEvent', 'endEvent', 'userTask', 'serviceTask', 'exclusiveGateway'],
     catalog: await readFoundationJson('contracts/mock-capability-catalog.json'),
   }));
+  app.get('/api/v1/providers/status', async () => ({ provider: conversations.providerStatus }));
   app.get('/api/v1/examples', async () => listExamples());
   app.get<{ Params: { id: string } }>('/api/v1/examples/:id', async (request, reply) => {
     if (!['ferias', 'http-db'].includes(request.params.id)) return reply.code(404).send({ code: 'EXAMPLE_NOT_FOUND', message: 'Exemplo não encontrado' });
@@ -123,6 +124,6 @@ function sendConversationError(reply: { code: (status: number) => { send: (paylo
   if (error instanceof OperationConflict) return reply.code(409).send({ code: 'OPERATION_ID_CONFLICT', message: error.message });
   if (error instanceof StaleQuestionSet) return reply.code(409).send({ code: 'QUESTION_SET_STALE', message: error.message });
   if (error instanceof ConversationNotFound) return reply.code(404).send({ code: 'SESSION_NOT_FOUND', message: error.message });
-  if (error instanceof ConversationServiceFailure) return reply.code(error.statusCode).send({ code: error.code, message: error.message, ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}) });
+  if (error instanceof ConversationServiceFailure) return reply.code(error.statusCode).send({ code: error.code, message: error.message, ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}), ...(error.generationRunId ? { generationRunId: error.generationRunId } : {}), ...(error.providerDiagnostic ? { providerDiagnostic: { category: error.providerDiagnostic.category, ...(error.providerDiagnostic.httpStatus !== undefined ? { httpStatus: error.providerDiagnostic.httpStatus } : {}), ...(error.providerDiagnostic.providerCode ? { providerCode: error.providerDiagnostic.providerCode } : {}), ...(error.providerDiagnostic.providerType ? { providerType: error.providerDiagnostic.providerType } : {}), ...(error.providerDiagnostic.providerParam ? { providerParam: error.providerDiagnostic.providerParam } : {}), ...(error.providerDiagnostic.requestId ? { requestId: error.providerDiagnostic.requestId } : {}), ...(error.providerDiagnostic.summary ? { summary: error.providerDiagnostic.summary } : {}) } } : {}) });
   return reply.code(503).send({ code: 'PERSISTENCE_UNAVAILABLE', message: 'Não foi possível acessar a persistência configurada' });
 }

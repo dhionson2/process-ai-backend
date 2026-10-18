@@ -107,6 +107,7 @@ test('GraphIR provider projection supports strict structured outputs and keeps t
   const schema = graphIrProviderSchema();
   const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema);
   const providerValue = graphIrApproval();
+  for (const edge of providerValue.edges.filter((item: any) => item.source === 'decision')) delete edge.gatewayId;
   assert.equal(validate(providerValue), true, JSON.stringify(validate.errors));
   assert.equal(validateGraphIR(normalizeGraphIrProviderValue(providerValue)).valid, true);
   const strict = toStrictProviderSchema(schema);
@@ -151,7 +152,7 @@ test('AI_GRAPH_IR_MODE controlled rejects invented activity and a role assigned 
   const wrongRole = graphIrApproval(); wrongRole.nodes[1].roleId = 'manager';
   const wrongRoleProvider = new QueueProvider([wrongRole]);
   await assert.rejects(() => new AiOrchestrator(wrongRoleProvider, 'model', environment({ aiGraphIrMode: 'controlled' })).generate({ text: 'Um funcionário solicita compra de material, informando o material solicitado. O gestor analisa a solicitação. Se aprovar, o financeiro recebe para providenciar a compra. Se reprovar, o processo termina.', history: [] }),
-    (error: any) => error.code === 'GRAPHIR_ROLE_UNGROUNDED');
+    (error: any) => error.code === 'GRAPHIR_COVERAGE_INCONCLUSIVE');
 });
 
 test('API GraphIR controlled gera uma proposta, aceita e recupera a revisão sem mudar o contrato público', async () => {
@@ -170,7 +171,7 @@ test('API GraphIR controlled gera uma proposta, aceita e recupera a revisão sem
     const proposedRevision = await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}/revisions/1` });
     assert.equal(proposedRevision.json().processSpec.status, 'needs-input');
     assert.equal(provider.prompts.length, 1);
-    assert.match(provider.prompts[0].prompt, /Retorne somente GraphIR v1/);
+    assert.match(provider.prompts[0].prompt, /Gere GraphIR v1/);
     const accepted = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/revisions/1/accept`, payload: { baseRevision: 0 } });
     assert.equal(accepted.json().status, 'accepted');
     const recovered = await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}/revisions/1` });

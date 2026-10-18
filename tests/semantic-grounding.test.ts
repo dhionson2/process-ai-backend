@@ -28,6 +28,12 @@ test('S01 — comprova paráfrase morfológica de atividade sem usar o nome como
   assert.equal(coverage.totals.proven, 1, 'controlled correspondence contributes to coverage only after the source span validates');
 });
 
+test('correção é reconhecida como flexão nominal de corrigir sem colapsar outras ações', () => {
+  assert.equal(evaluateActivityGrounding({ name: 'Corrigir solicitação', evidence: 'O funcionário realiza a correção da solicitação.' }).status, 'equivalent');
+  assert.equal(evaluateActivityGrounding({ name: 'Corrigir dados de pagamento', evidence: 'O funcionário realiza a correção dos dados de pagamento.' }).status, 'equivalent');
+  assert.equal(evaluateActivityGrounding({ name: 'Reprovar solicitação', evidence: 'O funcionário realiza a correção da solicitação.' }).status, 'divergent');
+});
+
 test('S02/S25 — ação semanticamente diferente não passa mesmo com citação literal válida', () => {
   const evidence = 'O Gestor aprova a solicitação.';
   const requirement = requirementFromEvidence({ messageId: 's25', text: evidence, type: 'activity', start: 0, end: evidence.length });

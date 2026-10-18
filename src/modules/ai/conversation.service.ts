@@ -1,5 +1,6 @@
 import type { Environment } from '../../config/env.js';
 import type { ModelProvider } from '../providers/model-provider.js';
+import type { ProviderDiagnostic } from '../providers/model-provider.js';
 import { ConversationNotFound, OperationConflict, RevisionConflict, StaleQuestionSet, type ConfirmedFact, type ConversationRepository, type GenerationRun, type ProjectTarget, type StoredRevision } from '../projects/conversation.repository.js';
 import { AiOrchestrator, OrchestrationFailure, type ConversationTurn, type GenerationOutcome } from './orchestrator.js';
 import { reconstructMessageHistory } from './message-provenance.js';
@@ -10,7 +11,7 @@ import { validateProcessSpec } from '../validation/validation.service.js';
 import { generateArtifacts } from '../generation/artifact-generator.js';
 
 export class ConversationServiceFailure extends Error {
-  constructor(readonly code: string, message: string, readonly statusCode: number, readonly retryAfterMs?: number) { super(message); this.name = 'ConversationServiceFailure'; }
+  constructor(readonly code: string, message: string, readonly statusCode: number, readonly retryAfterMs?: number, readonly generationRunId?: string, readonly providerDiagnostic?: ProviderDiagnostic) { super(message); this.name = 'ConversationServiceFailure'; }
 }
 export type ConversationDependencies = { repository: ConversationRepository; orchestrator?: AiOrchestrator };
 
@@ -32,6 +33,25 @@ export class ConversationService {
   get databaseConfigured(): boolean { return !!this.repository; }
   get aiConfigured(): boolean { return !!this.orchestrator; }
   get usesExternalProvider(): boolean { return this.orchestrator?.providerId === 'openai-compatible'; }
+  get providerStatus() {
+    const endpoint = this.environment.externalAiBaseUrl ? new URL(this.environment.externalAiBaseUrl) : undefined;
+    return {
+      enabled: this.aiConfigured,
+      provider: this.orchestrator?.providerId || this.environment.aiProvider,
+      model: this.orchestrator?.modelId || this.environment.aiModel || null,
+      configurationErrorCode: this.providerConfigurationError?.code || null,
+      apiKeyConfigured: Boolean(this.environment.externalAiApiKey),
+      endpointOrigin: endpoint?.origin || null,
+      structuredOutput: this.environment.externalAiStructuredOutput,
+      graphIrMode: this.environment.aiGraphIrMode || 'off',
+      localCallLimit: this.environment.aiMaxProviderCalls,
+      localTokenLimit: this.environment.aiMaxProviderTokens,
+      maxInputCharacters: this.environment.aiMaxInputChars,
+      maxOutputTokens: this.environment.aiMaxOutputTokens,
+      timeoutMs: this.environment.aiTimeoutMs,
+      maxConcurrency: this.environment.aiMaxConcurrency,
+    };
+  }
 
   async createProject(name: string, targetProfile: ProjectTarget) {
     this.ensureRepository();
@@ -40,7 +60,7 @@ export class ConversationService {
   }
   async submitMessage(sessionId: string, text: string, baseRevision: number, dataClassification?: 'synthetic' | 'public', operationId?: string) {
     this.guardExternalData(dataClassification);
-    return this.processTurn(sessionId, text, baseRevision, 'user', undefined, operationId);
+    return this.processTurn(sessionId, text, baseRevision, 'user', undefined, operationId, undefined, undefined, dataClassification);
   }
   async answerQuestions(sessionId: string, answers: string[], baseRevision: number, dataClassification?: 'synthetic' | 'public', questionSetId?: string, operationId?: string) {
     this.guardExternalData(dataClassification);
@@ -62,7 +82,7 @@ export class ConversationService {
         const semanticSlot = question.semanticSlot || identity.semanticSlot;
         return { question: question.question, answer: answers[index].trim(), confirmedAt, answeredAt: confirmedAt, questionId: question.questionId || identity.questionId, requirementId: question.requirementId || identity.requirementId, semanticSlot, semanticFactId: semanticFactId(semanticSlot), questionStatus: 'answered', state: 'confirmed' };
       });
-    return this.processTurn(sessionId, text, baseRevision, 'confirmed-answer', facts, operationId, questionSetId, requestHash);
+    return this.processTurn(sessionId, text, baseRevision, 'confirmed-answer', facts, operationId, questionSetId, requestHash, dataClassification);
   }
   async session(sessionId: string) { this.ensureRepository(); await this.repo().reconcileInterruptedRuns(this.environment.localTenantId, sessionId); const session = await this.sessionOrThrow(sessionId); return { ...session, questionSetId: stableQuestionSetId(session.pendingQuestions), pendingQuestions: publicQuestions(session.pendingQuestions) }; }
   async history(sessionId: string) {
@@ -112,7 +132,7 @@ export class ConversationService {
     return result;
   }
 
-  private async processTurn(sessionId: string, text: string, baseRevision: number, sourceMessageType: 'user' | 'confirmed-answer' = 'user', facts?: ConfirmedFact[], operationId?: string, expectedQuestionSetId?: string, suppliedRequestHash?: string) {
+  private async processTurn(sessionId: string, text: string, baseRevision: number, sourceMessageType: 'user' | 'confirmed-answer' = 'user', facts?: ConfirmedFact[], operationId?: string, expectedQuestionSetId?: string, suppliedRequestHash?: string, dataClassification?: 'synthetic' | 'public') {
     this.ensureRepository();
     if (operationId !== undefined && (typeof operationId !== 'string' || operationId.length < 8 || operationId.length > 128)) throw new ConversationServiceFailure('OPERATION_ID_INVALID', 'operationId deve conter de 8 a 128 caracteres', 400);
     if (expectedQuestionSetId !== undefined && (typeof expectedQuestionSetId !== 'string' || expectedQuestionSetId.length > 64)) throw new ConversationServiceFailure('QUESTION_SET_INVALID', 'questionSetId inválido', 400);
@@ -132,15 +152,21 @@ export class ConversationService {
     if (turn.replay) return { ...(run.result as Record<string, unknown> || {}), generationRunId: run.id, status: run.status, replayed: true };
     let providerCallStarted = Boolean(run.providerStartedAt);
     try {
-      const [storedMessages, currentSpec, confirmedFacts] = await Promise.all([this.repo().listMessages(tenantId, sessionId, 8), this.repo().getCurrentSpec(tenantId, sessionId), this.repo().listConfirmedFacts(tenantId, sessionId)]);
+      const [storedMessages, currentSpec, confirmedFacts] = await Promise.all([this.repo().listMessages(tenantId, sessionId, 100), this.repo().getCurrentSpec(tenantId, sessionId), this.repo().listConfirmedFacts(tenantId, sessionId)]);
       if (this.environment.aiSemanticGroundingMode === 'controlled') await this.persistNumericSemanticCorrection(sessionId, submittedMessage, confirmedFacts);
       const history: ConversationTurn[] = reconstructMessageHistory(storedMessages, confirmedFacts).map(message => ({ role: message.role, content: message.content }));
       let outcome: GenerationOutcome;
-      try { outcome = await this.orchestrator.generate({ text: text.trim(), sourceMessageId: submittedMessage.id, sourceMessageType, history, currentSpec, targetProfile: session.targetProfile, confirmedFacts: confirmedFacts.slice(-40), onProviderCallStart: async () => { await this.repo().markProviderStarted(tenantId, run.id); providerCallStarted = true; } }); }
+      const confirmedAnswerText = new Set(confirmedFacts.map(fact => fact.answer.trim()));
+      const authoritativeUserMessages = storedMessages.filter(message => message.role === 'user' && !confirmedAnswerText.has(message.content.trim())).map(message => ({ id: message.id, text: message.content }));
+      const original = authoritativeUserMessages[0];
+      try { outcome = await this.orchestrator.generate({ text: text.trim(), sourceMessageId: submittedMessage.id, sourceMessageType, originalSource: original, authoritativeUserMessages, dataClassification, history, currentSpec, targetProfile: session.targetProfile, confirmedFacts: confirmedFacts.slice(-40), onProviderCallStart: async () => { await this.repo().markProviderStarted(tenantId, run.id); providerCallStarted = true; } }); }
       catch (error) {
         const mapped = mapServiceError(error);
+        if (this.environment.logLevel !== 'silent' && process.env.NODE_ENV !== 'production' && error instanceof OrchestrationFailure && error.graphIrSchemaDiagnostics) {
+          console.warn(JSON.stringify({ event: 'graph-ir-schema-invalid', runId: run.id, diagnosticSet: error.graphIrSchemaDiagnostics }));
+        }
         await this.repo().completeTurn(tenantId, sessionId, run.id, { status: 'failed', assistantMessage: providerCallStarted ? `Não foi possível concluir a geração (${mapped.code}). Você pode tentar novamente; a revisão atual foi mantida.` : undefined, runPatch: { status: 'failed', errorCode: mapped.code, result: { error: { code: mapped.code, message: mapped.message } }, metrics: { runId: run.id, provider: run.provider, model: run.model, latencyMs: Date.now() - Date.parse(run.createdAt), errorCode: mapped.code, providerCallStarted, providerDiagnostic: error instanceof OrchestrationFailure ? error.providerDiagnostic : undefined, pipeline: error instanceof OrchestrationFailure ? error.diagnostics : undefined } } });
-        throw mapped;
+        throw new ConversationServiceFailure(mapped.code, mapped.message, mapped.statusCode, mapped.retryAfterMs, run.id, mapped.providerDiagnostic);
       }
       return await this.persistOutcome(sessionId, run, baseRevision, outcome);
     } catch (error) {
@@ -238,7 +264,7 @@ function mapServiceError(error: unknown): ConversationServiceFailure {
   if (error instanceof ConversationNotFound) return new ConversationServiceFailure('SESSION_NOT_FOUND', error.message, 404);
   if (error instanceof OrchestrationFailure) {
     const status = error.code === 'PROVIDER_TIMEOUT' ? 504 : error.code === 'PROVIDER_UNAVAILABLE' ? 503 : error.code === 'PROVIDER_RATE_LIMITED' ? 429 : error.code.startsWith('PROVIDER_') || error.code === 'MODEL_RESULT_INVALID' ? 502 : error.code.endsWith('_LIMIT_EXCEEDED') ? 413 : 422;
-    return new ConversationServiceFailure(error.code, error.message, status, error.retryAfterMs);
+    return new ConversationServiceFailure(error.code, error.message, status, error.retryAfterMs, undefined, error.providerDiagnostic);
   }
   return new ConversationServiceFailure('GENERATION_FAILED', 'Falha ao gerar a proposta; revisão atual preservada', 500);
 }

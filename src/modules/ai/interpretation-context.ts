@@ -13,6 +13,9 @@ export function interpretationSchema(includeIntegrations: boolean): Record<strin
 }
 
 export function normalizeInterpretation(value: unknown): unknown {
+  if (value && typeof value === 'object' && !Array.isArray(value) && !(value as any).kind && (value as any).businessIntent && typeof (value as any).businessIntent === 'object') {
+    return normalizeInterpretation((value as any).businessIntent);
+  }
   if (!value || typeof value !== 'object' || (value as any).kind !== 'business_intent') return value;
   return { ...value, pendingConfiguration: (value as any).pendingConfiguration || [] };
 }

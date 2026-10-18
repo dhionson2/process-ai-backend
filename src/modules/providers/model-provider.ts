@@ -1,3 +1,5 @@
+import { ProviderCallBudgetLedger } from './call-budget-ledger.js';
+
 export type ProviderUsage = { inputTokens?: number; outputTokens?: number };
 export type StructuredRequest = {
   model: string;
@@ -8,6 +10,9 @@ export type StructuredRequest = {
   contextTokens: number;
   maxOutputTokens: number;
   temperature?: number;
+  dataClassification?: 'synthetic' | 'public';
+  captureDiagnosticResponse?: boolean;
+  onTransportMetrics?: (metrics: { jsonBytes: number; messageCount: number; systemChars: number; systemBytes: number; promptChars: number; promptBytes: number; schemaChars: number; schemaBytes: number; estimatedInputTokens: number }) => void;
 };
 export type ExternalStructuredOutputMode = 'json-object' | 'json-schema-strict';
 export type StructuredResponse = { value: unknown; usage: ProviderUsage; latencyMs: number; model: string };
@@ -26,7 +31,7 @@ export type ProviderDiagnostic = { httpStatus?: number; providerCode?: string; p
 function safeIdentifier(value: unknown): string | undefined {
   return typeof value === 'string' && /^[a-zA-Z0-9_.-]{1,100}$/.test(value) ? value : undefined;
 }
-const safeProviderParams = new Set(['model', 'messages', 'response_format', 'max_tokens', 'temperature', 'top_p', 'reasoning_effort']);
+const safeProviderParams = new Set(['model', 'messages', 'response_format', 'max_completion_tokens', 'max_tokens', 'temperature', 'top_p', 'reasoning_effort']);
 function classifyProviderMessage(message: unknown, code: string | undefined): { category?: string; summary?: string } {
   if (typeof message !== 'string') return {};
   const normalized = message.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -52,7 +57,7 @@ async function postJson(url: string, requestBody: unknown, timeoutMs: number, he
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const started = Date.now();
   try {
-    const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(requestBody), signal: controller.signal });
+    const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody), signal: controller.signal });
     let body: any;
     try { body = await response.json(); }
     catch { if (!response.ok) body = undefined; else throw new ProviderFailure('PROVIDER_INVALID_RESPONSE', 'O provedor retornou uma resposta que não é JSON válido', undefined, { httpStatus: response.status, category: 'invalid_response', latencyMs: Date.now() - started }); }
@@ -117,11 +122,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
     private readonly budget: { maxCalls?: number; maxTokens?: number } = {},
     private readonly maxRateLimitRetries = 0,
     private readonly observeStructuredResponse?: (value: unknown) => void,
+    private readonly captureRawStructuredResponse?: (raw: string) => void,
+    private readonly durableBudgetLedger?: ProviderCallBudgetLedger,
+    private readonly durableBudget?: { maxCalls?: number; maxTokens?: number },
   ) {}
   private lastRetryAfterMs?: number;
   get usageTotals(): { calls: number; tokens: number; retries: number; lastRetryAfterMs?: number } { return { calls: this.calls, tokens: this.tokens, retries: this.retries, ...(this.lastRetryAfterMs !== undefined ? { lastRetryAfterMs: this.lastRetryAfterMs } : {}) }; }
   async generateStructured(request: StructuredRequest): Promise<StructuredResponse> {
-    const reservation = Math.ceil((request.system.length + request.prompt.length + JSON.stringify(request.outputSchema).length) / 3) + request.maxOutputTokens;
+    const schemaChars = this.structuredOutputMode === 'json-schema-strict' ? JSON.stringify(request.outputSchema).length : 0;
+    const reservation = Math.ceil((request.system.length + request.prompt.length + schemaChars) / 3) + request.maxOutputTokens;
     if (this.budget.maxTokens && this.tokens + reservation > this.budget.maxTokens) throw new ProviderFailure('PROVIDER_RATE_LIMITED', 'Orçamento local de tokens configurado para o provider foi atingido');
     const endpoint = `${this.baseUrl.replace(/\/$/, '')}/chat/completions`;
     const responseFormat = this.structuredOutputMode === 'json-schema-strict'
@@ -130,16 +139,33 @@ export class OpenAICompatibleProvider implements ModelProvider {
     let posted: { body: any; latencyMs: number } | undefined;
     for (let attempt = 0; attempt <= this.maxRateLimitRetries; attempt++) {
       if (this.budget.maxCalls && this.calls >= this.budget.maxCalls) throw new ProviderFailure('PROVIDER_RATE_LIMITED', 'Limite local de chamadas configurado para o provider foi atingido');
+      try { this.durableBudgetLedger?.reserve(reservation, this.durableBudget?.maxCalls || this.budget.maxCalls || 0, this.durableBudget?.maxTokens || this.budget.maxTokens || 0); }
+      catch { throw new ProviderFailure('PROVIDER_RATE_LIMITED', 'Limite cumulativo local de chamadas/tokens foi atingido ou o ledger está indisponível'); }
       this.calls++;
       try {
-        posted = await postJson(endpoint, {
+        const requestBody = {
           model: request.model,
           stream: false,
-          max_tokens: request.maxOutputTokens,
+          max_completion_tokens: request.maxOutputTokens,
           temperature: request.temperature ?? 0.1,
-          messages: [{ role: 'system', content: request.system }, { role: 'user', content: request.prompt }],
+          ...(request.model.startsWith('openai/gpt-oss-') ? { reasoning_effort: 'low' } : {}),
+          messages: [{ role: 'system', content: this.structuredOutputMode === 'json-object' ? `${request.system}\n\nReturn the response as a valid json object.` : request.system }, { role: 'user', content: request.prompt }],
           response_format: responseFormat,
-        }, request.timeoutMs, { authorization: `Bearer ${this.apiKey}` });
+        };
+        const serializedBody = JSON.stringify(requestBody);
+        const schemaText = this.structuredOutputMode === 'json-schema-strict' ? JSON.stringify(responseFormat) : '';
+        const systemText = requestBody.messages[0].content;
+        request.onTransportMetrics?.({
+          jsonBytes: Buffer.byteLength(serializedBody, 'utf8'), messageCount: requestBody.messages.length,
+          systemChars: systemText.length, systemBytes: Buffer.byteLength(systemText, 'utf8'),
+          promptChars: request.prompt.length, promptBytes: Buffer.byteLength(request.prompt, 'utf8'),
+          schemaChars: schemaText.length, schemaBytes: Buffer.byteLength(schemaText, 'utf8'),
+          // Deliberately coarse estimate; provider tokenizers differ and JSON framing is not modeled.
+          estimatedInputTokens: Math.ceil((systemText.length + request.prompt.length + schemaText.length) / 3),
+        });
+        // Permanent HTTP errors (especially 400) are surfaced immediately. Only
+        // explicit 429 Retry-After responses can be retried by the outer loop.
+        posted = await postJson(endpoint, serializedBody, request.timeoutMs, { authorization: `Bearer ${this.apiKey}` });
         break;
       } catch (error) {
         if (error instanceof ProviderFailure && error.code === 'PROVIDER_RATE_LIMITED') this.lastRetryAfterMs = error.retryAfterMs;
@@ -152,8 +178,11 @@ export class OpenAICompatibleProvider implements ModelProvider {
     if (!posted) throw new ProviderFailure('PROVIDER_UNAVAILABLE', 'Provedor não retornou uma resposta');
     const { body, latencyMs } = posted;
     const choice = body.choices?.[0]?.message;
+    if (request.captureDiagnosticResponse === true && request.dataClassification === 'synthetic' && typeof choice?.content === 'string') this.captureRawStructuredResponse?.(choice.content);
     const usage = { inputTokens: Number.isFinite(body.usage?.prompt_tokens) ? body.usage.prompt_tokens : undefined, outputTokens: Number.isFinite(body.usage?.completion_tokens) ? body.usage.completion_tokens : undefined };
-    this.tokens += usage.inputTokens !== undefined && usage.outputTokens !== undefined ? usage.inputTokens + usage.outputTokens : reservation;
+    const actualTokens = usage.inputTokens !== undefined && usage.outputTokens !== undefined ? usage.inputTokens + usage.outputTokens : reservation;
+    this.tokens += actualTokens;
+    try { this.durableBudgetLedger?.settle(reservation, actualTokens); } catch { /* the held reservation remains conservative if durable settlement fails */ }
     return {
       value: parseExternalStructuredContent(choice?.content, request.outputSchema, this.structuredOutputMode, this.observeStructuredResponse),
       usage,

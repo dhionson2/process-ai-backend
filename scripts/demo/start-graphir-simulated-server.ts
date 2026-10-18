@@ -12,7 +12,6 @@ const database = new URL(environment.databaseUrl);
 if (database.hostname !== '127.0.0.1' || database.port !== '55432' || database.pathname !== '/processai_v2c1') {
   throw new Error('Servidor fixture exige o banco descartável local processai_v2c1 em 127.0.0.1:55432.');
 }
-if (environment.port !== 3334) throw new Error('Servidor fixture da demonstração usa a porta local 3334.');
 const fixture = JSON.parse(await readFile(new URL('./graph-ir-approval.fixture.json', import.meta.url), 'utf8'));
 const provider: ModelProvider = {
   id: 'simulated-graph-ir-fixture',
@@ -25,8 +24,8 @@ await runMigrations(migrationPool);
 await migrationPool.end();
 const repository = PostgresConversationRepository.fromConnectionString(environment.databaseUrl);
 const app = await buildApp({ ...environment, aiGraphIrMode: 'controlled' }, { conversationRepository: repository, modelProvider: provider });
-await app.listen({ host: '127.0.0.1', port: 3334 });
-process.stdout.write('Fixture GraphIR server ready at http://127.0.0.1:3334 (simulated provider; disposable PostgreSQL only).\n');
+await app.listen({ host: '127.0.0.1', port: environment.port });
+process.stdout.write(`Fixture GraphIR server ready at http://127.0.0.1:${environment.port} (simulated provider; disposable PostgreSQL only).\n`);
 const shutdown = async () => { await app.close(); process.exit(0); };
 process.on('SIGINT', () => void shutdown());
 process.on('SIGTERM', () => void shutdown());

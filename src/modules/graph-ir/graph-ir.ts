@@ -84,7 +84,7 @@ export interface GraphIRV1 {
   schemaVersion: '1.0.0';
   process: { id: string; name: string; description?: string; locale: string; targetProfile: 'generic-bpmn2' | 'flowable-oss' | 'unique-future' };
   roles: Array<{ id: string; label: string; resolution: string; groupKey?: string }>;
-  variables: Array<{ id: string; key: string; type: string; required?: boolean; sensitive?: boolean; scope?: string; enumValues?: Array<string | number | boolean>; source?: Record<string, unknown> }>;
+  variables: Array<{ id: string; key: string; type: string; required?: boolean; sensitive?: boolean; scope?: string; enumValues?: Array<string | number | boolean>; source: Record<string, unknown> }>;
   requirements: Array<{ id: string; kind: string; mandatory: boolean; nodeId?: string; sourceNodeId?: string; targetNodeId?: string; roleId?: string; variableId?: string; formRef?: string; fieldKey?: string; operator?: string; value?: unknown }>;
   nodes: Array<{ id: string; type: string; name: string; roleId?: string; formRef?: string; defaultEdgeId?: string; action?: Record<string, unknown>; requirementRefs: string[]; provenance?: Record<string, unknown> }>;
   edges: Array<{ id: string; source: string; target: string; kind: 'sequence' | 'loop-back'; gatewayId?: string; condition?: Record<string, unknown>; isDefault?: boolean; label?: string; requirementRefs: string[]; provenance?: Record<string, unknown> }>;
@@ -94,6 +94,113 @@ export interface GraphIRV1 {
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const checkSchema = ajv.compile(graphIrV1Schema);
+const MAX_GRAPHIR_SCHEMA_ERRORS = 25;
+
+export type GraphIRSchemaViolation = {
+  code: 'GRAPHIR_SCHEMA_INVALID';
+  stage: 'graph-ir-schema';
+  path: string;
+  keyword: string;
+  schemaPath: string;
+  missingProperty?: string;
+  additionalProperty?: string;
+  expectedType?: string | string[];
+  receivedType?: 'null' | 'array' | 'object' | 'string' | 'number' | 'boolean' | 'undefined';
+  expectedValues?: Array<string | number | boolean | null>;
+  arrayIndex?: number;
+  arrayPath?: string;
+  arrayIndices?: Array<{ arrayPath: string; index: number }>;
+};
+export type GraphIRSchemaDiagnosticSet = { stage: 'graph-ir-schema'; totalErrors: number; truncated: number; errors: GraphIRSchemaViolation[] };
+
+/** Bounded, value-free diagnostics suitable for generation-run telemetry. */
+export function sanitizeGraphIrDiagnostics(diagnostics: Diagnostic[], limit = 25): Array<{ stage: 'graph-ir-schema' | 'graph-ir-semantic' | 'graph-ir-coverage'; code: string; path: string; type: 'schema' | 'semantic' | 'coverage'; requirementId?: string }> {
+  return diagnostics.slice(0, Math.max(0, Math.min(25, limit))).map(item => {
+    const requirementSegment = item.path.split('/').slice(1).map(part => part.replaceAll('~1', '/').replaceAll('~0', '~'));
+    const requirementIndex = requirementSegment.indexOf('requirements');
+    const rawRequirementId = item.requirementId || (requirementIndex >= 0 ? requirementSegment[requirementIndex + 1] : undefined);
+    const requirementId = rawRequirementId && /^req_[A-Za-z0-9_-]{1,60}$/.test(rawRequirementId) && safeSchemaProperty(rawRequirementId) ? rawRequirementId : undefined;
+    const schema = item.code === 'GRAPHIR_SCHEMA_INVALID';
+    const coverage = item.code.includes('REQUIREMENT_UNCOVERED') || item.code.includes('REQUIREMENT_DIVERGENCE') || item.code.includes('ELEMENT_UNGROUNDED') || item.code.includes('BINDING_INVALID') || item.code === 'GRAPHIR_ELEMENT_REQUIREMENT_KIND_INVALID' || item.code === 'GRAPHIR_LOOP_DESTINATION_DIVERGENCE' || item.code === 'GRAPHIR_ROLE_REQUIREMENT_DIVERGENCE' || item.code === 'GRAPHIR_CONSEQUENCE_DIVERGENCE' || item.code === 'GRAPHIR_CONDITION_REQUIREMENT_DIVERGENCE' || item.code === 'GRAPHIR_FORM_REQUIREMENT_DIVERGENCE' || item.code === 'GRAPHIR_REQUIREMENT_REFERENCE_MISSING' && item.path.endsWith('/requirementRefs');
+    const type = schema ? 'schema' as const : coverage ? 'coverage' as const : 'semantic' as const;
+    const path = `/${requirementSegment.map((part, index) => {
+      if (['nodes', 'edges', 'roles', 'variables', 'formRefs', 'requirements'].includes(requirementSegment[index - 1]) && !/^\d{1,6}$/.test(part)) return '[id]';
+      if (index > 0 && requirementSegment[index - 1] === 'fields' && !/^\d{1,6}$/.test(part)) return '[key]';
+      return /^\d{1,6}$/.test(part) ? part : safeSchemaProperty(part) || '[redacted]';
+    }).map(part => part.replaceAll('~', '~0').replaceAll('/', '~1')).join('/')}`;
+    return {
+      stage: type === 'schema' ? 'graph-ir-schema' as const : type === 'coverage' ? 'graph-ir-coverage' as const : 'graph-ir-semantic' as const,
+      code: /^[A-Z0-9_]{1,80}$/.test(item.code) ? item.code : 'GRAPHIR_DIAGNOSTIC',
+      path,
+      type,
+      ...(requirementId ? { requirementId } : {}),
+    };
+  });
+}
+
+function safeSchemaProperty(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  if (!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value)) return '[redacted]';
+  if (/(?:secret|password|token|credential|authorization|email|phone|customer|client)/i.test(value)) return '[redacted]';
+  return value;
+}
+
+function safeJsonPointer(pointer: string): string {
+  if (!pointer || pointer === '/') return '/';
+  const parts = pointer.split('/').slice(1).map(part => part.replaceAll('~1', '/').replaceAll('~0', '~'));
+  return `/${parts.map(part => /^\d{1,6}$/.test(part) ? part : safeSchemaProperty(part) || '[redacted]').map(part => part.replaceAll('~', '~0').replaceAll('/', '~1')).join('/')}`;
+}
+
+/** Returns bounded schema-only diagnostics. Instance values are never included. */
+export function diagnoseGraphIRSchema(value: unknown): GraphIRSchemaDiagnosticSet | undefined {
+  const valid = checkSchema(value);
+  if (valid) return undefined;
+  const ajvErrors = checkSchema.errors || [];
+  const receivedTypeAt = (pointer: string): GraphIRSchemaViolation['receivedType'] => {
+    let current: any = value;
+    for (const raw of pointer.split('/').slice(1)) {
+      const key = raw.replaceAll('~1', '/').replaceAll('~0', '~');
+      if (current === null || typeof current !== 'object' || !Object.hasOwn(current, key)) return 'undefined';
+      current = current[key];
+    }
+    if (current === null) return 'null';
+    if (Array.isArray(current)) return 'array';
+    if (typeof current === 'object') return 'object';
+    if (typeof current === 'string') return 'string';
+    if (typeof current === 'boolean') return 'boolean';
+    if (typeof current === 'number') return 'number';
+    return 'undefined';
+  };
+  const errors: GraphIRSchemaViolation[] = ajvErrors.slice(0, MAX_GRAPHIR_SCHEMA_ERRORS).map(item => {
+    const params = item.params as Record<string, unknown>;
+    const rawPath = item.instancePath || '/';
+    const path = safeJsonPointer(rawPath);
+    const rawSegments = rawPath.split('/').slice(1).map(part => part.replaceAll('~1', '/').replaceAll('~0', '~'));
+    const arrayIndices: Array<{ arrayPath: string; index: number }> = [];
+    const schemaSegments: string[] = [];
+    for (const segment of rawSegments) {
+      if (/^\d{1,6}$/.test(segment)) arrayIndices.push({ arrayPath: safeJsonPointer(`/${schemaSegments.join('/')}`), index: Number(segment) });
+      schemaSegments.push(segment);
+    }
+    const expectedValues = Array.isArray(params.allowedValues)
+      ? params.allowedValues.filter((entry): entry is string | number | boolean | null => entry === null || ['string', 'number', 'boolean'].includes(typeof entry)).slice(0, 20)
+      : undefined;
+    const expectedType = typeof params.type === 'string' ? params.type
+      : Array.isArray(params.type) ? params.type.filter((entry): entry is string => typeof entry === 'string').slice(0, 8) : undefined;
+    return {
+      code: 'GRAPHIR_SCHEMA_INVALID', stage: 'graph-ir-schema', path,
+      keyword: /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(item.keyword) ? item.keyword : 'unknown',
+      schemaPath: /^[#/$A-Za-z0-9_.-]{1,256}$/.test(item.schemaPath) ? item.schemaPath : '#',
+      ...(typeof params.missingProperty === 'string' ? { missingProperty: safeSchemaProperty(params.missingProperty) } : {}),
+      ...(typeof params.additionalProperty === 'string' ? { additionalProperty: safeSchemaProperty(params.additionalProperty) } : {}),
+      ...(expectedType ? { expectedType } : {}),
+      ...(item.keyword === 'type' ? { receivedType: receivedTypeAt(rawPath) } : {}),
+      ...(expectedValues?.length ? { expectedValues } : {}),
+      ...(arrayIndices.length ? { arrayIndex: arrayIndices[arrayIndices.length - 1].index, arrayPath: arrayIndices[arrayIndices.length - 1].arrayPath, arrayIndices } : {}),
+    };
+  });
+  return { stage: 'graph-ir-schema', totalErrors: ajvErrors.length, truncated: Math.max(0, ajvErrors.length - errors.length), errors };
+}
 const error = (code: string, path: string, message: string): Diagnostic => ({ code, path, message, severity: 'error' });
 const lexical = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 const stable = (diagnostics: Diagnostic[]): Diagnostic[] => diagnostics.sort((a, b) => lexical(a.path, b.path) || lexical(a.code, b.code) || lexical(a.message, b.message));
@@ -112,8 +219,9 @@ function canonicalJson(value: unknown): unknown {
 }
 
 export function validateGraphIRStructure(value: unknown): ValidationResult {
-  if (checkSchema(value)) return { valid: true, diagnostics: [] };
-  return result((checkSchema.errors || []).map(item => error('GRAPHIR_SCHEMA_INVALID', item.instancePath || '/', `${item.keyword}: ${item.message || 'contrato inválido'}`)));
+  const diagnosticSet = diagnoseGraphIRSchema(value);
+  if (!diagnosticSet) return { valid: true, diagnostics: [] };
+  return result(diagnosticSet.errors.map(item => error(item.code, item.path, `${item.keyword}: JSON Schema violation`)));
 }
 
 export function validateGraphIRSemantics(value: unknown): ValidationResult {
@@ -326,7 +434,7 @@ export function validateGraphIRCoverage(value: unknown): ValidationResult {
       const { form, field } = ref.owner as { form: GraphIRV1['formRefs'][number]; field: GraphIRV1['formRefs'][number]['fields'][number] };
       bindingIsValid = requirement.kind === 'form-field' && requirement.formRef === form.id && requirement.fieldKey === field.key;
     }
-    if (!bindingIsValid) diagnostics.push(error('GRAPHIR_REQUIREMENT_BINDING_INVALID', ref.path, `Requisito ${ref.id} não corresponde ao tipo e à identidade deste elemento`));
+    if (!bindingIsValid) diagnostics.push({ ...error('GRAPHIR_REQUIREMENT_BINDING_INVALID', ref.path, 'Requisito não corresponde ao tipo e à identidade deste elemento'), requirementId: ref.id });
   }
   for (const node of graph.nodes.filter(item => ['humanTask', 'serviceTask', 'exclusiveGateway'].includes(item.type))) {
     if (!node.requirementRefs.length) diagnostics.push(error('GRAPHIR_ELEMENT_UNGROUNDED', `/nodes/${node.id}`, 'Elemento de negócio sem requisito rastreável'));

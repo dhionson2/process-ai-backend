@@ -262,6 +262,47 @@
         }
       }
     },
+    "/api/v1/providers/status": {
+      "get": {
+        "summary": "Diagnóstico sanitizado da configuração efetiva do provider",
+        "responses": {
+          "200": {
+            "description": "Provider e limites locais efetivos; nunca inclui a credencial",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": {
+                    "provider": {
+                      "type": "object",
+                      "required": ["enabled", "provider", "model", "configurationErrorCode", "apiKeyConfigured", "endpointOrigin", "structuredOutput", "graphIrMode", "localCallLimit", "localTokenLimit", "maxInputCharacters", "maxOutputTokens", "timeoutMs", "maxConcurrency"],
+                      "properties": {
+                        "enabled": { "type": "boolean" },
+                        "provider": { "type": "string" },
+                        "model": { "type": ["string", "null"] },
+                        "configurationErrorCode": { "type": ["string", "null"] },
+                        "apiKeyConfigured": { "type": "boolean" },
+                        "endpointOrigin": { "type": ["string", "null"], "format": "uri" },
+                        "structuredOutput": { "type": "string", "enum": ["json-object", "json-schema-strict"] },
+                        "graphIrMode": { "type": "string", "enum": ["off", "shadow", "controlled"] },
+                        "localCallLimit": { "type": "integer", "minimum": 0 },
+                        "localTokenLimit": { "type": "integer", "minimum": 0 },
+                        "maxInputCharacters": { "type": "integer", "minimum": 0 },
+                        "maxOutputTokens": { "type": "integer", "minimum": 0 },
+                        "timeoutMs": { "type": "integer", "minimum": 0 },
+                        "maxConcurrency": { "type": "integer", "minimum": 1 }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/projects": {
       "post": {
         "summary": "Criar projeto e sessão",
@@ -447,7 +488,14 @@
             }
           },
           "422": {
-            "description": "ProcessSpec inválido"
+        "description": "Geração rejeitada por validação, com ID consultável do run",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiError"
+            }
+          }
+        }
           },
           "429": {
             "description": "Limite local de concorrência atingido",
@@ -2626,6 +2674,11 @@
             "type": "integer",
             "minimum": 0,
             "description": "Aguardar este intervalo antes de uma nova tentativa, quando informado pelo provedor."
+          },
+          "generationRunId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Run persistido da tentativa; use o endpoint generation-runs para consultar métricas e diagnóstico sanitizado."
           },
           "diagnostics": {
             "type": "array",

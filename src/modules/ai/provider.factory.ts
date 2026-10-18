@@ -1,5 +1,7 @@
 import type { Environment } from '../../config/env.js';
 import { OllamaProvider, OpenAICompatibleProvider, type ModelProvider } from '../providers/model-provider.js';
+import { configuredSyntheticDiagnosticCapture } from '../providers/diagnostic-capture.js';
+import { ProviderCallBudgetLedger } from '../providers/call-budget-ledger.js';
 import { OrchestrationFailure } from './orchestrator.js';
 
 export function configuredProvider(environment: Environment): { provider: ModelProvider; model: string } | undefined {
@@ -8,5 +10,11 @@ export function configuredProvider(environment: Environment): { provider: ModelP
   if (environment.aiProvider === 'ollama') return { provider: new OllamaProvider(environment.ollamaBaseUrl), model: environment.aiModel };
   if (!environment.externalAiApproved) throw new OrchestrationFailure('AI_PROVIDER_NOT_APPROVED', 'O provedor externo não foi habilitado pela política do servidor');
   if (!environment.externalAiBaseUrl || !environment.externalAiApiKey) throw new OrchestrationFailure('AI_CONFIGURATION_INVALID', 'Endpoint e credencial do provedor externo precisam estar configurados no backend');
-  return { provider: new OpenAICompatibleProvider(environment.externalAiBaseUrl, environment.externalAiApiKey, environment.externalAiStructuredOutput, { maxCalls: environment.aiMaxProviderCalls, maxTokens: environment.aiMaxProviderTokens }), model: environment.aiModel };
+  const ledgerPath = process.env.AI_PROVIDER_BUDGET_LEDGER_PATH;
+  const durableLedger = ledgerPath ? new ProviderCallBudgetLedger(ledgerPath) : undefined;
+  const cumulativeCalls = Number(process.env.AI_MAX_CUMULATIVE_PROVIDER_CALLS || 0);
+  const durableBudget = durableLedger && Number.isSafeInteger(cumulativeCalls) && cumulativeCalls > 0
+    ? { maxCalls: cumulativeCalls, maxTokens: environment.aiMaxProviderTokens }
+    : undefined;
+  return { provider: new OpenAICompatibleProvider(environment.externalAiBaseUrl, environment.externalAiApiKey, environment.externalAiStructuredOutput, { maxCalls: environment.aiMaxProviderCalls, maxTokens: environment.aiMaxProviderTokens }, 1, undefined, configuredSyntheticDiagnosticCapture(), durableLedger, durableBudget), model: environment.aiModel };
 }

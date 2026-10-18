@@ -19,6 +19,11 @@ const compiledVacation = await compileProcessIntent({ kind: 'process_intent', na
     onApproved: [{ kind: 'task', name: 'Registrar férias', actor: 'RH' }], onRejected: [] }],
 }, { targetProfile: 'generic-bpmn2', knowledgeVersion: '1.0.0', model: 'chromium-regression' });
 const refinedVacation = applySemanticRefinement(compiledVacation, { kind: 'refinement', changeSummary: 'Segunda aprovação', operations: [{ kind: 'insertApprovalBefore', beforeActivity: 'Registrar férias', rejectedTargetActivity: 'Processo encerrado', approval: { name: 'Segunda aprovação', actor: { name: 'Diretor', resolution: 'manual' } } }] });
+const attachmentSpec = await compileProcessIntent({ kind: 'process_intent', name: 'Solicitação com comprovante', purpose: 'Prévia controlada de campo attachment.',
+  actors: [{ name: 'Solicitante', resolution: 'requester' }, { name: 'Gestor', resolution: 'manual' }],
+  startFields: [{ name: 'Comprovante', type: 'attachment', required: true }],
+  steps: [{ kind: 'task', name: 'Conferir comprovante', actor: 'Gestor' }],
+}, { targetProfile: 'generic-bpmn2', knowledgeVersion: '1.0.0', model: 'chromium-attachment' });
 const previewVacation = await compileBusinessIntent({ kind: 'business_intent', name: 'Solicitação de férias prévia', purpose: 'Solicitar férias, aprovar ou reprovar, registrar no RH e informar motivo na reprovação.',
   actors: [{ name: 'Servidor', evidence: 'O servidor faz a solicitação', resolution: 'requester', resolutionEvidence: 'O servidor faz a solicitação' }, { name: 'Gestor', evidence: 'O gestor aprova ou reprova' }, { name: 'RH', evidence: 'o RH registra as férias' }],
   startFields: [], activities: [{ kind: 'approval', name: 'Aprovar ou reprovar férias', actor: 'Gestor', evidence: 'O gestor aprova ou reprova', requiresRejectionReason: true, onApproved: [{ kind: 'task', name: 'Registrar as férias', actor: 'RH', evidence: 'o RH registra as férias' }], onRejected: [{ kind: 'task', name: 'Receber motivo', actor: 'Servidor', evidence: 'o Servidor recebe motivo na reprovação' }] }],
@@ -92,12 +97,14 @@ test('generated forms import and serialize in form-js Viewer/Editor without prop
     formExamples.push({ id: 'business-intent-vacation-preview', spec: previewVacation.spec });
     formExamples.push({ id: 'business-intent-complex-purchase', spec: purchasePreview.spec });
     formExamples.push({ id: 'refined-vacation', spec: refinedVacation });
+    formExamples.push({ id: 'attachment-filepicker', spec: attachmentSpec });
     for (const { id, spec } of formExamples) {
       const artifacts = await generateArtifacts(spec);
       for (const { id: formId, json: schema } of artifacts.forms) {
         const result = await page.evaluate(async (formSchema) => {
           const viewer = new (window as any).Form({ container: document.querySelector('#viewer') });
           const viewerResult = await viewer.importSchema(formSchema);
+          viewer.attachTo(document.querySelector('#viewer'));
           const editor = new (window as any).FormEditor({ container: document.querySelector('#editor') });
           const editorResult = await editor.importSchema(formSchema);
           const saved = editor.saveSchema();
@@ -122,12 +129,20 @@ test('generated forms import and serialize in form-js Viewer/Editor without prop
             conditionalSemantics = { reasonKey: reasonComponent.key, optionalInFormJs: reasonComponent.validate?.required !== true, hiddenConditionPreserved: Boolean(reasonComponent.conditional?.hide), editorSavedCondition: Boolean(saved.components.find(component => component.key === reasonComponent.key)?.conditional?.hide), reimportWarnings: reimportResult.warnings, approvalErrors, rejectionErrors, approvalVisible, rejectionVisible };
             reimportedViewer.destroy();
           }
+          const filePickerInput = document.querySelector('#viewer input[type="file"]');
+          const filePicker = formSchema.components.find((component: any) => component.type === 'filepicker');
+          const filePickerResult = filePicker ? { inputRendered: Boolean(filePickerInput), inputEnabled: filePickerInput ? !(filePickerInput as HTMLInputElement).disabled : false, editorPreserved: saved.components.some((component: any) => component.type === 'filepicker') } : null;
           viewer.destroy(); editor.destroy();
-          return { viewerWarnings: viewerResult.warnings, editorWarnings: editorResult.warnings, saved, conditionalSemantics };
+          return { viewerWarnings: viewerResult.warnings, editorWarnings: editorResult.warnings, saved, conditionalSemantics, filePicker: filePickerResult };
         }, schema);
         assert.deepEqual(result.viewerWarnings, [], `${id}-${formId} viewer warnings`);
         assert.deepEqual(result.editorWarnings, [], `${id}-${formId} editor warnings`);
         assert.equal(result.saved.components.length, schema.components.length);
+        if (id === 'attachment-filepicker') {
+          assert.equal(result.filePicker.inputRendered, true, 'viewer 2.1.1 renderiza o input filepicker');
+          assert.equal(result.filePicker.inputEnabled, true, 'fileRegistry interno padrão está disponível sem serviço externo de armazenamento');
+          assert.equal(result.filePicker.editorPreserved, true, 'FormEditor preserva o componente filepicker no round-trip');
+        }
         if ((id === 'ferias' && formId === 'form_gestor') || (id === 'compiled-vacation' && result.conditionalSemantics)) {
           assert.equal(result.conditionalSemantics.optionalInFormJs, true);
           assert.equal(result.conditionalSemantics.hiddenConditionPreserved, true);

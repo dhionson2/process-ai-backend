@@ -105,7 +105,8 @@ test('golden corpus includes the full G01-G33 matrix and separates future claims
   const corpus = JSON.parse(await readFile('tests/golden/corpus.json', 'utf8')) as Array<{ id: string; class: string; observed: string; expected: any }>;
   assert.equal(corpus.length, 33);
   assert.deepEqual(corpus.map(item => item.id), Array.from({ length: 33 }, (_, index) => `G${String(index + 1).padStart(2, '0')}`));
-  assert.ok(corpus.filter(item => item.class === 'supported-positive' || item.class === 'supported-negative').every(item => item.observed === 'PASS'));
+  assert.ok(corpus.filter(item => (item.class === 'supported-positive' || item.class === 'supported-negative') && item.id !== 'G03').every(item => item.observed === 'PASS'));
+  assert.equal(corpus.find(item => item.id === 'G03')?.observed, 'NOT-YET-EVALUATED', 'the new exact reimbursement target is tracked but not claimed as passing');
   assert.ok(corpus.filter(item => item.class === 'future-capability' || item.class === 'semantic-future').every(item => item.observed === 'UNSUPPORTED' && item.expected.valid === null));
 });
 

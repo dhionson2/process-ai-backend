@@ -509,6 +509,16 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
     if (matches.length !== 1) throw new IntentCompilationError(matches.length ? `Qual campo “${name}” deve ser usado? Há referências ambíguas.` : `Em qual campo existente está “${name}”?`);
     return matches[0];
   };
+  const decisionFieldBinding = (step: Json): FieldBinding => {
+    try { return variableFor(step.field); }
+    catch (error) {
+      const evidence = normalized(`${step.name} ${step.evidence || ''} ${step.field}`);
+      const numericThreshold = step.alternatives.length >= 2 && step.alternatives.every((alternative: Json) => typeof alternative.value === 'number' && ['gt', 'gte', 'lt', 'lte'].includes(alternative.operator || 'eq'));
+      const numericFields = [...new Map(fieldBindings.filter(binding => ['integer', 'decimal'].includes(binding.type)).map(binding => [binding.variable, binding])).values()];
+      if (numericThreshold && /\b(valor|montante|quantia|amount)\b/.test(evidence) && numericFields.length === 1) return numericFields[0];
+      throw error;
+    }
+  };
   const resolveReturnTarget = (name: string, roots: StepIntent[], stepMetadata: Map<object, StepMeta>): string => {
     const matches: StepIntent[] = [];
     const visit = (steps: StepIntent[]) => {
@@ -548,7 +558,7 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
       return meta.id;
     }
     if (step.kind === 'decision') {
-      const binding = variableFor(step.field);
+      const binding = decisionFieldBinding(step);
       const type = binding.type;
       const valueCompatible = (value: unknown) => type === 'boolean' ? typeof value === 'boolean' : ['integer', 'decimal'].includes(type) ? typeof value === 'number' : type === 'string' ? typeof value === 'string' : false;
       if ((step.alternatives as Json[]).some(alternative => !valueCompatible(alternative.value))) throw new IntentCompilationError(`Os valores das alternativas não são compatíveis com o tipo do campo “${step.field}”.`);

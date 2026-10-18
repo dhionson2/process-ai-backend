@@ -65,6 +65,12 @@ function actionLemmas(text: string): Set<string> {
   const nominalObjects = new Set(['solicitacao', 'processo', 'atividade', 'etapa', 'documento', 'pedido', 'usuario', 'formulario', 'valor', 'campo', 'aprovador']);
   for (const token of normalize(text).split(' ')) {
     if (token.length < 5 || nominalObjects.has(token)) continue;
+    // Treat the explicit correction noun and its verb as the same action.
+    // This is intentionally narrow; generic token similarity is not proof.
+    if (token === 'correcao' || token === 'correcoes' || token === 'corrige' || token === 'corrigem' || token === 'corrigiu' || token === 'corrigindo') {
+      lemmas.add('corrigir');
+      continue;
+    }
     const lemma = portugueseActionLemma(token);
     if (lemma) lemmas.add(lemma);
   }

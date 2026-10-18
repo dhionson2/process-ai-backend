@@ -118,7 +118,7 @@ function generateBpmn(spec: Dict): string {
   return lines.join('\n');
 }
 
-const componentType: Record<string, string> = { text: 'textfield', textarea: 'textarea', integer: 'number', decimal: 'number', boolean: 'checkbox', select: 'select', date: 'datetime', datetime: 'datetime', email: 'textfield' };
+const componentType: Record<string, string> = { text: 'textfield', textarea: 'textarea', integer: 'number', decimal: 'number', boolean: 'checkbox', select: 'select', date: 'datetime', datetime: 'datetime', email: 'textfield', attachment: 'filepicker' };
 function compileForm(form: Dict): Record<string, unknown> {
   const components: Dict[] = form.fields.map((field: Dict, index: number) => {
     const component: Dict = { type: componentType[field.type], key: field.bindTo, label: field.label, id: `Field_${form.id}_${index}` };

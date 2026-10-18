@@ -1,4 +1,4 @@
-export type Diagnostic = { code: string; path: string; message: string; severity: 'error' | 'warning' | 'info' };
+export type Diagnostic = { code: string; path: string; message: string; severity: 'error' | 'warning' | 'info'; requirementId?: string };
 export type ValidationResult = { valid: boolean; diagnostics: Diagnostic[] };
 export type GeneratedArtifacts = {
   bpmnXml: string;
