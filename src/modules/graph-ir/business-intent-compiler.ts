@@ -73,6 +73,11 @@ export async function compileBusinessIntentToGraphIR(intent: BusinessIntentV1, o
   const roles = new Map<string, { id: string; label: string; resolution: string; groupKey?: string }>();
   const forms: GraphIRV1['formRefs'] = [];
   const activitySymbols = new Map<string, { nodeId: string; formId?: string; roleId?: string; activity: BusinessActivity }>();
+  const activityEntries = flatten(intent.activities, `activity/${intent.name}`);
+  const resolveReturnTarget = (name: string) => {
+    const matches = activityEntries.filter(entry => (entry.activity.kind === 'task' || entry.activity.kind === 'approval') && norm(entry.activity.name) === norm(name));
+    return matches;
+  };
   const activityKey = (path: string, activity: BusinessActivity) => `${path}/${activity.kind}/${activity.name}`;
   const addRole = (name?: string) => {
     if (!name) return undefined;
@@ -100,7 +105,7 @@ export async function compileBusinessIntentToGraphIR(intent: BusinessIntentV1, o
   const startFormId = stableId('form', 'solicitacao');
   forms.push({ id: startFormId, name: 'Dados da solicitação', usage: 'start', fields: [] });
   for (const field of intent.startFields) registerField(field, 'start', startFormId);
-  const activities = flatten(intent.activities, `activity/${intent.name}`);
+  const activities = activityEntries;
   const registerActivitySymbols = (items: BusinessActivity[], path: string) => {
     for (const activity of items) {
       const key = activityKey(path, activity); const nodeId = stableId('node', key);
@@ -203,6 +208,30 @@ export async function compileBusinessIntentToGraphIR(intent: BusinessIntentV1, o
       else {
         let tail = emit(first, branchPath, gatewayId, true, alternative.steps.length > 1);
         for (let i = 1; i < alternative.steps.length; i++) tail = emit(alternative.steps[i], `${branchPath}/${alternative.steps[i - 1].kind}/${alternative.steps[i - 1].name}`, tail, false, i < alternative.steps.length - 1);
+        if (alternative.returnTo) {
+          const returnTarget = alternative.returnTo;
+          const targets = resolveReturnTarget(returnTarget);
+          const returnPath = `/activities/${key}/alternatives/${alternative.label}/returnTo`;
+          if (!targets.length) add('BUSINESS_RETURN_TARGET_MISSING', returnPath, `Destino de retorno não encontrado: ${returnTarget}`);
+          else if (targets.length > 1) add('BUSINESS_RETURN_TARGET_AMBIGUOUS', returnPath, `Destino de retorno ambíguo: ${returnTarget}`);
+          else {
+            const sourceNode = graph.nodes.find(node => node.id === tail);
+            if (sourceNode?.type !== 'humanTask' && sourceNode?.type !== 'serviceTask') add('BUSINESS_RETURN_SOURCE_INVALID', returnPath, 'O retorno precisa partir de uma tarefa terminal identificável do ramo.');
+            else {
+              // flatten() and symbol registration use the same full occurrence path.
+              const targetNodeId = activitySymbols.get(targets[0].path)?.nodeId;
+              const loopObligations = obligations.filter(ob => ob.kind === 'loop'
+                && (!ob.intentPath || norm(ob.intentPath) === norm(`${key}/branch/${alternative.label}`))
+                && (!ob.expectedTarget || norm(ob.expectedTarget) === norm(returnTarget))
+                && (norm(ob.subject) === norm(returnTarget) || norm(ob.subject) === norm(`${activity.name}:${alternative.label}`)));
+              if (!loopObligations.length) add('BUSINESS_LOOP_REQUIREMENT_MISSING', returnPath, 'O retorno explícito exige uma obrigação de loop correspondente no ledger.');
+              else if (targetNodeId) {
+                const loopRefs = loopObligations.map(ob => addRequirement(ob, { sourceNodeId: tail, targetNodeId }));
+                connect(tail, targetNodeId, `${branchPath}/loop-back`, { kind: 'loop-back', label: 'Retorno', requirementRefs: loopRefs });
+              }
+            }
+          }
+        }
         terminals.push(tail);
       }
     }
@@ -227,7 +256,8 @@ export async function compileBusinessIntentToGraphIR(intent: BusinessIntentV1, o
     if (field) for (const ob of obligationFor('field', fieldIntent.name)) field.requirementRefs = [...field.requirementRefs, addRequirement(ob, { formRef: form.id, fieldKey: String(field.key) })];
   }
   for (const entry of activities) if (entry.activity.kind === 'task') {
-    const key = activityKey(entry.path, entry.activity); const formId = stableId('form', key);
+    // flatten() already returns the complete occurrence key used by pass 1.
+    const formId = stableId('form', entry.path);
     for (const fieldIntent of entry.activity.fields || []) {
       const form = graph.formRefs.find(item => item.id === formId)!;
       const field = form.fields.find((item: any) => norm(String(item.label)) === norm(fieldIntent.name)) as any;
@@ -245,6 +275,10 @@ export async function compileBusinessIntentToGraphIR(intent: BusinessIntentV1, o
   }
   for (const ob of obligations) {
     const edgeForObligation = () => {
+      if (ob.kind === 'loop') {
+        const requirementId = stableId('req', ob.key);
+        return graph.edges.find(edge => edge.kind === 'loop-back' && edge.requirementRefs.includes(requirementId));
+      }
       if (ob.intentPath) {
         const marker = ob.intentPath.lastIndexOf('/branch/');
         if (marker >= 0) {

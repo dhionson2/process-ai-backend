@@ -28,6 +28,36 @@ export interface BusinessIntentV1 {
   pendingConfiguration: Array<{ scope: string; question: string; blocking: boolean }>;
 }
 
+/** Versioned semantic control flow. References name business concepts, never BPMN/GraphIR IDs. */
+export type BusinessIntentV2Target = { kind: 'activity'; activityRef: string } | { kind: 'decision'; decisionRef: string } | { kind: 'end'; name: string };
+export interface BusinessIntentV2 {
+  schemaVersion: '2.0.0'; kind: 'business_intent'; name: string; purpose: string;
+  actors: BusinessIntentV1['actors']; startFields: FieldIntent[];
+  activities: Array<{ ref: string; kind: 'task'; name: string; actor: string; fields?: FieldIntent[]; next: BusinessIntentV2Target }>;
+  decisions: Array<{ ref: string; name: string; afterActivityRef: string; outcomes: Array<{ ref: string; label: string; condition: { field: string; operator: 'eq'|'ne'|'gt'|'gte'|'lt'|'lte'; value: string|number|boolean }; target: BusinessIntentV2Target }> }>;
+  returns: Array<{ fromActivityRef: string; toActivityRef: string }>;
+  rules?: Array<{ text: string }>; suggestions?: Array<{ text: string }>; pendingConfiguration?: Array<{ scope: string; question: string; blocking: boolean }>;
+}
+
+/** JSON contract for offline V2 producers; technical compiler IDs are intentionally absent. */
+export function businessIntentV2Schema(): Json {
+  const text={type:'string',minLength:1,maxLength:255};
+  const target={oneOf:[
+    {type:'object',additionalProperties:false,required:['kind','activityRef'],properties:{kind:{const:'activity'},activityRef:text}},
+    {type:'object',additionalProperties:false,required:['kind','decisionRef'],properties:{kind:{const:'decision'},decisionRef:text}},
+    {type:'object',additionalProperties:false,required:['kind','name'],properties:{kind:{const:'end'},name:text}},
+  ]};
+  const field={type:'object',additionalProperties:false,required:['name','type'],properties:{name:text,type:{enum:['text','paragraph','integer','decimal','boolean','date','datetime','email','attachment','choice']},required:{type:'boolean'},choices:{type:'array',items:{type:'object',additionalProperties:false,required:['label','value'],properties:{label:text,value:{type:'string',maxLength:100}}}}}};
+  const actor={type:'object',additionalProperties:false,required:['name'],properties:{name:text,resolution:{enum:['requester','manual','group','manager-of-requester','system','unresolved']},groupName:text}};
+  return {$schema:'https://json-schema.org/draft/2020-12/schema',type:'object',additionalProperties:false,required:['schemaVersion','kind','name','purpose','actors','startFields','activities','decisions','returns'],properties:{
+    schemaVersion:{const:'2.0.0'},kind:{const:'business_intent'},name:text,purpose:{type:'string',maxLength:2000},actors:{type:'array',maxItems:20,items:actor},startFields:{type:'array',maxItems:50,items:field},
+    activities:{type:'array',minItems:1,maxItems:60,items:{type:'object',additionalProperties:false,required:['ref','kind','name','actor','next'],properties:{ref:text,kind:{const:'task'},name:text,actor:text,fields:{type:'array',maxItems:50,items:field},next:target}}},
+    decisions:{type:'array',maxItems:60,items:{type:'object',additionalProperties:false,required:['ref','name','afterActivityRef','outcomes'],properties:{ref:text,name:text,afterActivityRef:text,outcomes:{type:'array',minItems:2,maxItems:20,items:{type:'object',additionalProperties:false,required:['ref','label','condition','target'],properties:{ref:text,label:text,condition:{type:'object',additionalProperties:false,required:['field','operator','value'],properties:{field:text,operator:{enum:['eq','ne','gt','gte','lt','lte']},value:{type:['string','number','boolean']}}},target}}}}}},
+    returns:{type:'array',maxItems:60,items:{type:'object',additionalProperties:false,required:['fromActivityRef','toActivityRef'],properties:{fromActivityRef:text,toActivityRef:text}}},
+    rules:{type:'array',maxItems:60,items:{type:'object',additionalProperties:false,required:['text'],properties:{text:{type:'string',maxLength:1000}}}},suggestions:{type:'array',maxItems:40,items:{type:'object',additionalProperties:false,required:['text'],properties:{text:{type:'string',maxLength:1000}}}},pendingConfiguration:{type:'array',maxItems:20,items:{type:'object',additionalProperties:false,required:['scope','question','blocking'],properties:{scope:text,question:text,blocking:{type:'boolean'}}}},
+  }};
+}
+
 /** The model contract expresses business meaning; graph and ProcessSpec details are compiler output. */
 export function businessIntentSchema(): Json {
   const text = { type: 'string', minLength: 1, maxLength: 255 };

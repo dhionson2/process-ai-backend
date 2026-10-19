@@ -9,6 +9,8 @@ import { extname } from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import { applySemanticRefinement, compileBusinessIntent, compileProcessIntent } from '../src/modules/ai/semantic-process.js';
 import { generateArtifacts } from '../src/modules/generation/artifact-generator.js';
+import { compileBusinessIntentV2ToGraphIR } from '../src/modules/graph-ir/business-intent-v2-compiler.js';
+import { r04V2 } from './fixtures/business-intent-v2-r04.js';
 import { complexPurchaseIntent, complexPurchaseText } from './fixtures/complex-purchase.js';
 
 const generated = resolve(process.cwd(), 'specs/foundation/examples/generated');
@@ -30,6 +32,8 @@ const previewVacation = await compileBusinessIntent({ kind: 'business_intent', n
   rules: [{ text: 'Motivo obrigatório em caso de reprovação', evidence: 'Se reprovado, o Servidor recebe motivo na reprovação' }], suggestions: [], pendingConfiguration: [] },
 { targetProfile: 'generic-bpmn2', knowledgeVersion: '1.0.0', model: 'chromium-business-intent', sourceText: 'O servidor faz a solicitação. O gestor aprova ou reprova. Se aprovado, o RH registra as férias. Se reprovado, o Servidor recebe motivo na reprovação.', activitySourceText: 'O servidor faz a solicitação. O gestor aprova ou reprova. Se aprovado, o RH registra as férias. Se reprovado, o Servidor recebe motivo na reprovação.' });
 const purchasePreview = await compileBusinessIntent(complexPurchaseIntent(), { targetProfile: 'generic-bpmn2', knowledgeVersion: '1.0.0', model: 'chromium-complex-business-intent', sourceText: complexPurchaseText, activitySourceText: complexPurchaseText });
+const r04V2Preview = await compileBusinessIntentV2ToGraphIR(r04V2);
+if (!r04V2Preview.valid || !r04V2Preview.processSpec) throw new Error(`R04 V2 inválido para importação: ${JSON.stringify(r04V2Preview.diagnostics)}`);
 
 async function startStaticServer(): Promise<{ url: string; close: () => Promise<void> }> {
   const server = createServer(async (request, response) => {
@@ -64,6 +68,7 @@ test('BPMN examples import and serialize through bpmn-js Modeler in Chromium', a
     examples.push({ id: 'business-intent-vacation-preview', xml: (await generateArtifacts(previewVacation.spec)).bpmnXml });
     examples.push({ id: 'business-intent-complex-purchase', xml: (await generateArtifacts(purchasePreview.spec)).bpmnXml });
     examples.push({ id: 'refined-vacation', xml: (await generateArtifacts(refinedVacation)).bpmnXml });
+    examples.push({ id: 'r04-business-intent-v2-convergence', xml: r04V2Preview.artifacts!.bpmnXml });
     for (const { id, xml } of examples) {
       const imported = await page.evaluate(async source => {
         const modeler = new (window as any).BpmnJS({ container: document.querySelector('#canvas') });
@@ -98,6 +103,7 @@ test('generated forms import and serialize in form-js Viewer/Editor without prop
     formExamples.push({ id: 'business-intent-complex-purchase', spec: purchasePreview.spec });
     formExamples.push({ id: 'refined-vacation', spec: refinedVacation });
     formExamples.push({ id: 'attachment-filepicker', spec: attachmentSpec });
+    formExamples.push({ id: 'r04-business-intent-v2-convergence', spec: r04V2Preview.processSpec });
     for (const { id, spec } of formExamples) {
       const artifacts = await generateArtifacts(spec);
       for (const { id: formId, json: schema } of artifacts.forms) {
