@@ -38,7 +38,7 @@ export class ConversationService {
   }
   get databaseConfigured(): boolean { return !!this.repository; }
   get aiConfigured(): boolean { return !!this.orchestrator; }
-  get usesExternalProvider(): boolean { return this.orchestrator?.providerId === 'openai-compatible' || this.orchestrator?.providerId === 'claude-cli'; }
+  get usesExternalProvider(): boolean { return ['openai-compatible', 'claude-cli', 'anthropic'].includes(this.orchestrator?.providerId ?? ''); }
   get providerStatus() {
     const endpoint = this.environment.externalAiBaseUrl ? new URL(this.environment.externalAiBaseUrl) : undefined;
     return {

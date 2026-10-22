@@ -1,4 +1,6 @@
+import { SpanStatusCode } from '@opentelemetry/api';
 import type { Environment } from '../../config/env.js';
+import { tracer } from '../observability/otel.js';
 import { generateArtifacts } from '../generation/artifact-generator.js';
 import { BpmKnowledgeEngine } from '../knowledge/knowledge.engine.js';
 import { ProviderConcurrencyLimit, type ModelProvider, type StructuredRequest } from '../providers/model-provider.js';
@@ -27,27 +29,43 @@ export type { ConversationTurn, GenerationOutcome, PipelineDiagnostic } from './
 export class AiOrchestrator {
   private readonly concurrency: ProviderConcurrencyLimit;
   private readonly knowledge = new BpmKnowledgeEngine();
-  constructor(private readonly provider: ModelProvider, private readonly model: string, private readonly environment: Pick<Environment, 'aiReadinessGate' | 'aiTimeoutMs' | 'aiContextTokens' | 'aiMaxOutputTokens' | 'aiMaxInputChars' | 'aiMaxConcurrency' | 'externalAiStructuredOutput' | 'aiSemanticGroundingMode' | 'aiGraphIrMode'>) {
+  constructor(private readonly provider: ModelProvider, private readonly model: string, private readonly environment: Pick<Environment, 'aiRepairModel' | 'aiReadinessGate' | 'aiTimeoutMs' | 'aiContextTokens' | 'aiMaxOutputTokens' | 'aiMaxInputChars' | 'aiMaxConcurrency' | 'externalAiStructuredOutput' | 'aiSemanticGroundingMode' | 'aiGraphIrMode'>) {
     this.concurrency = new ProviderConcurrencyLimit(environment.aiMaxConcurrency);
   }
   get providerId(): string { return this.provider.id; }
   get modelId(): string { return this.model; }
 
   async generate(args: GenerationArguments): Promise<GenerationOutcome> {
-    const diagnostics: PipelineDiagnostic[] = [];
-    if (args.onStage) {
-      // Progress is observational: a failing listener never affects the turn.
+    return tracer().startActiveSpan('process_ai.turn', async span => {
+      span.setAttributes({ 'ai.provider': this.provider.id, 'ai.model': this.model, 'ai.refinement': Boolean(args.currentSpec), 'ai.confirmed_facts': args.confirmedFacts?.length ?? 0 });
+      const diagnostics: PipelineDiagnostic[] = [];
+      // Progress is observational: stage events go to the span and to the caller; a failing listener never affects the turn.
       const record = diagnostics.push.bind(diagnostics);
-      diagnostics.push = (...items: PipelineDiagnostic[]) => { for (const item of items) { try { args.onStage!(item); } catch { /* ignore */ } } return record(...items); };
-    }
-    try {
-      const result = await this.generateTracked(args, diagnostics);
-      return { ...result, diagnostics };
-    } catch (error) {
-      diagnostics.push({ stage: 'outcome', status: 'failed', details: { code: error instanceof OrchestrationFailure ? error.code : 'UNCLASSIFIED' } });
-      if (error instanceof OrchestrationFailure) error.diagnostics = diagnostics;
-      throw error;
-    }
+      diagnostics.push = (...items: PipelineDiagnostic[]) => {
+        for (const item of items) {
+          span.addEvent(`${item.stage}:${item.status}`);
+          try { args.onStage?.(item); } catch { /* ignore */ }
+        }
+        return record(...items);
+      };
+      try {
+        const result = await this.generateTracked(args, diagnostics);
+        span.setAttributes({
+          'ai.outcome': result.kind, 'ai.model.used': result.model, 'ai.latency_ms': result.latencyMs,
+          'ai.tokens.input': result.usage.inputTokens ?? 0, 'ai.tokens.output': result.usage.outputTokens ?? 0, 'ai.tokens.cached': result.usage.cachedInputTokens ?? 0,
+          ...(result.usage.costUsd !== undefined ? { 'ai.cost_usd': result.usage.costUsd } : {}),
+          ...(result.kind === 'proposed_spec' ? { 'ai.repair_attempts': result.repairAttempts, 'ai.valid': result.validation.valid } : { 'ai.questions': result.questions.length }),
+        });
+        return { ...result, diagnostics };
+      } catch (error) {
+        const code = error instanceof OrchestrationFailure ? error.code : 'UNCLASSIFIED';
+        diagnostics.push({ stage: 'outcome', status: 'failed', details: { code } });
+        span.setAttribute('ai.error_code', code);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: code });
+        if (error instanceof OrchestrationFailure) error.diagnostics = diagnostics;
+        throw error;
+      } finally { span.end(); }
+    });
   }
 
   private async generateTracked(args: GenerationArguments, trace: PipelineDiagnostic[]): Promise<GenerationOutcome> {
@@ -58,7 +76,7 @@ export class AiOrchestrator {
     if (graphMode === 'controlled' && args.currentSpec) trace.push({ stage: 'graph-ir-refinement', status: 'legacy-path', details: { reason: 'Refinamentos preservam o ProcessSpec existente pelo mecanismo transitório; GraphPatch não está implementado.' } });
 
     const ctx = await buildTurnContext(args, this.environment, this.model, this.provider.id, this.knowledge, trace);
-    const stage = { ctx, calls: new ModelCalls(this.provider, this.concurrency, ctx.request, args.onProviderCallStart, trace), budget: new RepairBudget() };
+    const stage = { ctx, calls: new ModelCalls(this.provider, this.concurrency, ctx.request, args.onProviderCallStart, trace, this.environment.aiRepairModel), budget: new RepairBudget() };
     const interpreted = await recoverRepeatedQuestion(stage, await interpret(stage));
     if (interpreted.kind === 'need_clarification') return clarificationOutcome(interpreted, stage.calls.lastModel, stage.calls.latencyMs, { ...stage.calls.usage }, stage.calls.providerId, ctx.knowledge.version, ctx.knowledge.moduleIds, interpreted);
     const ready = readiness(stage, interpreted);

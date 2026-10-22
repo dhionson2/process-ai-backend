@@ -31,14 +31,17 @@ export class ModelCalls {
     private readonly onProviderCallStart?: () => Promise<void> | void,
     /** Receives `model-call: started` before each call, so progress shows the model is working. */
     private readonly trace?: PipelineDiagnostic[],
+    /** Model cascade: corrective calls escalate to this model when set. */
+    private readonly repairModel?: string,
   ) { this.lastModel = request.model; }
   get providerId(): string { return this.provider.id; }
 
-  async call(prompt: string): Promise<StructuredResponse> {
+  async call(prompt: string, purpose: 'primary' | 'repair' = 'primary'): Promise<StructuredResponse> {
+    const model = purpose === 'repair' && this.repairModel ? this.repairModel : this.request.model;
     await this.onProviderCallStart?.();
-    this.trace?.push({ stage: 'model-call', status: 'started', details: { call: this.calls + 1 } });
+    this.trace?.push({ stage: 'model-call', status: 'started', details: { call: this.calls + 1, purpose, model } });
     let completion: StructuredResponse;
-    try { completion = await this.concurrency.run(() => this.provider.generateStructured(prompt === this.request.prompt ? this.request : { ...this.request, prompt })); }
+    try { completion = await this.concurrency.run(() => this.provider.generateStructured(prompt === this.request.prompt && model === this.request.model ? this.request : { ...this.request, prompt, model })); }
     catch (error) { throw mapProviderError(error); }
     this.calls += 1;
     this.latencyMs += completion.latencyMs;

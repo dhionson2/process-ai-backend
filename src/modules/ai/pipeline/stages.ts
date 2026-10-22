@@ -33,7 +33,7 @@ export async function interpret({ ctx, calls, budget }: Stage): Promise<Json> {
     const repairPrompt = `${ctx.prompt}\n\nA resposta JSON anterior está fora do contrato BusinessIntent. Corrija somente a estrutura apontada pelos diagnósticos; preserve todos os fatos, atores, campos, atividades, decisões, condições, retornos e destinos. Retorne um único objeto json no formato BusinessIntent descrito nas instruções, sem envelope e sem campos adicionais. Diagnósticos: ${JSON.stringify(schemaDiagnostics)}\nResposta anterior: ${JSON.stringify(value)}`;
     if (repairPrompt.length + ctx.schemaChars > ctx.environment.aiMaxInputChars) throw new OrchestrationFailure('AI_INPUT_LIMIT_EXCEEDED', 'A correção estrutural ultrapassaria o limite de contexto; nenhuma proposta parcial foi salva');
     budget.consume('structural');
-    value = normalizeInterpretation((await calls.call(repairPrompt)).value) as Json;
+    value = normalizeInterpretation((await calls.call(repairPrompt, 'repair')).value) as Json;
     if (!ctx.validator(value)) {
       ctx.trace.push({ stage: 'normalization', status: 'repair-rejected', details: { code: 'MODEL_PLAN_INVALID', schemaDiagnostics: safeSchemaDiagnostics(ctx.validator.errors) } });
       throw new OrchestrationFailure('MODEL_PLAN_INVALID', 'A resposta continuou fora do contrato BusinessIntent após uma correção estrutural');
@@ -52,7 +52,7 @@ export async function recoverRepeatedQuestion({ ctx, calls, budget }: Stage, val
   if (!repeatedFact) return value;
   const recoveryPrompt = `${ctx.prompt}\n\nCorreção obrigatória: você repetiu uma pergunta já respondida. Fato confirmado:\nPergunta: ${repeatedFact.question}\nResposta: ${repeatedFact.answer}\nEste fato resolve a pergunta. Não retorne need_clarification para o mesmo assunto, nem com uma paráfrase. Continue a geração/refinamento usando a resposta confirmada. Se faltar outra informação independente, pergunte somente essa informação.`;
   budget.consume('repeated-question');
-  const recovered = normalizeInterpretation((await calls.call(recoveryPrompt)).value) as Json;
+  const recovered = normalizeInterpretation((await calls.call(recoveryPrompt, 'repair')).value) as Json;
   if (!ctx.validator(recovered)) {
     ctx.trace.push({ stage: 'normalization', status: 'recovery-rejected', details: { code: 'MODEL_PLAN_INVALID', schemaDiagnostics: safeSchemaDiagnostics(ctx.validator.errors) } });
     throw new OrchestrationFailure('MODEL_PLAN_INVALID', 'A recuperação de pergunta repetida retornou estrutura fora do contrato interno');
@@ -118,7 +118,7 @@ export async function compile(stage: Stage, plan: Json): Promise<StageResult<Com
     if (omissionPrompt.length + ctx.schemaChars > ctx.environment.aiMaxInputChars) return stop(compilerGapOutcome(stage, error, plan));
     budget.consume('omission');
     ctx.trace.push({ stage: 'compilation', status: 'omission-repair', details: {} });
-    const candidate = normalizeInterpretation((await calls.call(omissionPrompt)).value) as Json;
+    const candidate = normalizeInterpretation((await calls.call(omissionPrompt, 'repair')).value) as Json;
     if (!ctx.validator(candidate) || candidate.kind !== 'business_intent') return stop(compilerGapOutcome(stage, error, plan));
     ctx.enforcePlanBounds(candidate);
     try {
@@ -149,7 +149,7 @@ export async function validate(stage: Stage, compiled: Compiled): Promise<StageR
     repairKnowledge = repairKnowledge.slice(0, availableKnowledgeChars).replace(/\n[^\n]*$/, '').trim();
     repairPrompt = `${ctx.composePrompt(repairKnowledge)}${repairDetails}`;
   }
-  const repaired = normalizeInterpretation((await calls.call(repairPrompt)).value) as Json;
+  const repaired = normalizeInterpretation((await calls.call(repairPrompt, 'repair')).value) as Json;
   if (!ctx.validator(repaired)) {
     ctx.trace.push({ stage: 'normalization', status: 'repair-rejected', details: { code: 'MODEL_PLAN_INVALID', schemaDiagnostics: safeSchemaDiagnostics(ctx.validator.errors) } });
     throw new OrchestrationFailure('MODEL_PLAN_INVALID', 'A tentativa única de correção retornou uma estrutura fora do contrato interno de plano BPMN');

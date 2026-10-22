@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ENVELOPE_KEY, structuredOutputEnvelope } from './schema-projection.js';
 import { ProviderFailure, type ModelProvider, type ProviderUsage, type StructuredRequest, type StructuredResponse } from './model-provider.js';
 
 export type ClaudeCliOptions = {
@@ -77,7 +78,7 @@ export class ClaudeCliProvider implements ModelProvider {
       if (status >= 500) throw new ProviderFailure('PROVIDER_UNAVAILABLE', 'Provedor temporariamente indisponível', undefined, diagnostic);
       throw new ProviderFailure('PROVIDER_REJECTED', 'Provedor recusou a solicitação configurada', undefined, diagnostic);
     }
-    const value = body.structured_output?.[envelopeKey];
+    const value = body.structured_output?.[ENVELOPE_KEY];
     if (value === undefined || value === null) throw new ProviderFailure('PROVIDER_INVALID_RESPONSE', 'Conteúdo estruturado ausente na resposta do Claude Code CLI', undefined, { category: 'structured_output_mismatch', latencyMs });
     const usage = claudeUsage(body);
     this.tokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
@@ -85,17 +86,8 @@ export class ClaudeCliProvider implements ModelProvider {
   }
 }
 
-const envelopeKey = 'response';
-
-/**
- * The CLI sends `--json-schema` as a tool input schema: the root must be `type: object` without
- * oneOf/anyOf/allOf, and its validator does not load the draft 2020-12 meta-schema. The contract is
- * wrapped unchanged under one property; `$defs` move to the root so `#/$defs/...` references still resolve.
- */
-export function cliSchemaEnvelope(schema: Record<string, unknown>): Record<string, unknown> {
-  const { $schema: _metaSchema, $id: _id, $defs, ...contract } = structuredClone(schema) as Record<string, any>;
-  return { type: 'object', properties: { [envelopeKey]: contract }, required: [envelopeKey], additionalProperties: false, ...($defs ? { $defs } : {}) };
-}
+/** The CLI sends `--json-schema` as a tool input schema; see structuredOutputEnvelope. */
+export const cliSchemaEnvelope = structuredOutputEnvelope;
 
 function finite(value: unknown): number | undefined { return typeof value === 'number' && Number.isFinite(value) ? value : undefined; }
 

@@ -286,7 +286,7 @@ async function main() {
   if (external && !flag('approve-external')) throw new Error('Provider externo exige --approve-external (somente texto sintético é enviado)');
   const maxCalls = Number(option('max-calls') ?? selected.length * 4);
   // Same baseline as replay, plus only what selects and bounds the live provider: prompts must hash identically.
-  const liveOverrides = Object.fromEntries(['AI_TIMEOUT_MS', 'CLAUDE_CLI_BINARY', 'CLAUDE_CLI_BARE', 'CLAUDE_CLI_MAX_BUDGET_USD', 'EXTERNAL_AI_BASE_URL', 'EXTERNAL_AI_API_KEY', 'EXTERNAL_AI_STRUCTURED_OUTPUT', 'OLLAMA_BASE_URL'].filter(name => process.env[name] !== undefined).map(name => [name, process.env[name]]));
+  const liveOverrides = Object.fromEntries(['AI_TIMEOUT_MS', 'AI_REPAIR_MODEL', 'ANTHROPIC_EFFORT', 'ANTHROPIC_FALLBACKS', 'ANTHROPIC_MAX_RETRIES', 'CLAUDE_CLI_BINARY', 'CLAUDE_CLI_BARE', 'CLAUDE_CLI_MAX_BUDGET_USD', 'EXTERNAL_AI_BASE_URL', 'EXTERNAL_AI_API_KEY', 'EXTERNAL_AI_STRUCTURED_OUTPUT', 'OLLAMA_BASE_URL'].filter(name => process.env[name] !== undefined).map(name => [name, process.env[name]]));
   const environment = replayEnvironment({ ...liveOverrides, AI_PROVIDER: providerName, AI_MODEL: model, EXTERNAL_AI_APPROVED: external ? 'true' : 'false', AI_MAX_PROVIDER_CALLS: '0' });
   const configured = configuredProvider(environment);
   if (!configured) throw new Error('Provider não configurado');

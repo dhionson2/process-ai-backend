@@ -18,6 +18,13 @@ finalize      → artefatos BPMN/Form ou pergunta orientada pelos diagnósticos
 
 Todas as chamadas passam por `ModelCalls`, que acumula latência, tokens, cache e custo. A política de correções fica em `RepairBudget` (`pipeline/types.ts`), no máximo uma estrutural e uma semântica por turno. O GraphIR (`AI_GRAPH_IR_MODE=controlled`) é um caminho experimental e opt-in; o BusinessIntent é o caminho suportado.
 
+## Providers, cascata e observabilidade
+
+- `AI_PROVIDER=anthropic`: Messages API pelo SDK oficial, com saída estruturada (`output_config.format`) sobre uma projeção do contrato (`oneOf`→`anyOf`, sem restrições de tamanho, envelope `response`). Cache no system prompt e no prefixo estável do prompt (perfil e conhecimento), que os reparos reaproveitam. Sem parâmetros de amostragem; a profundidade vem de `ANTHROPIC_EFFORT`. Fallback de recusa no servidor (`fallbacks: "default"`) nos modelos que o aceitam. O custo do run é estimado pelo preço de tabela.
+- `AI_PROVIDER=claude-cli`: Claude Code CLI local, só para demo.
+- `AI_REPAIR_MODEL`: cascata. A chamada principal usa `AI_MODEL` e as correções escalam para este modelo. O cache de prompt é por modelo, então meça no placar antes de adotar.
+- OpenTelemetry: com `OTEL_EXPORTER_OTLP_ENDPOINT`, cada turno vira o span `process_ai.turn`, com um evento por etapa e atributos de provider, modelo, tokens, cache, custo e resultado. Nunca leva prompt nem texto do usuário.
+
 ## Gate de qualidade
 
 `npm run eval:claude` roda o corpus sintético contra o modelo real e grava uma cassete em `reports/eval/cassettes/`. O `npm test` (`tests/eval-gate.test.ts`) e o `npm run eval:replay` reexecutam o corpus contra a cassete, de forma determinística e sem rede, e cobram os limites de `scripts/eval/gate.json`. Um prompt alterado torna a cassete desatualizada e reprova o gate até uma nova gravação real.
