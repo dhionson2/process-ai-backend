@@ -1,0 +1,1139 @@
+{
+  "provider": "claude-cli",
+  "model": "sonnet",
+  "startedAt": "2026-10-22T22:58:24.948Z",
+  "finishedAt": "2026-10-22T22:58:46.444Z",
+  "scenarioIds": [
+    "S01-ferias",
+    "S04-ferias-incompleto",
+    "S05-correcao-ciclo"
+  ],
+  "summary": {
+    "scenarios": 3,
+    "passed": 3,
+    "passRate": 1,
+    "validRate": 1,
+    "meanCoverage": 1,
+    "inventedElements": 0,
+    "repeatedQuestions": 0,
+    "calls": 4,
+    "inputTokens": 24880,
+    "cachedInputTokens": 13065,
+    "outputTokens": 2506,
+    "meanLatencyMs": 7082,
+    "totalCostUsd": 0.082127,
+    "costPerValidProcessUsd": 0.02737566666666667,
+    "tokensPerScenario": 9129
+  },
+  "results": [
+    {
+      "id": "S01-ferias",
+      "title": "Férias com aprovação do gestor e registro no RH",
+      "outcome": "validated",
+      "clarificationRounds": 0,
+      "questionsAsked": 0,
+      "repeatedQuestions": 0,
+      "askedFirst": false,
+      "calls": 1,
+      "latencyMs": 5229,
+      "inputTokens": 6075,
+      "cachedInputTokens": 0,
+      "outputTokens": 647,
+      "costUsd": 0.032462000000000005,
+      "spec": {
+        "schemaVersion": "1.0.0",
+        "id": "process_solicitacao_de_ferias",
+        "name": "Solicitação de férias",
+        "description": "Permitir que o servidor solicite férias informando data inicial e final, com aprovação do gestor, registro pelo RH quando aprovado e comunicação do motivo ao servidor quando reprovado.",
+        "locale": "pt-BR",
+        "targetProfile": "generic-bpmn2",
+        "status": "needs-input",
+        "roles": [
+          {
+            "id": "role_servidor",
+            "label": "Servidor",
+            "resolution": "unresolved"
+          },
+          {
+            "id": "role_gestor",
+            "label": "Gestor",
+            "resolution": "unresolved"
+          },
+          {
+            "id": "role_rh",
+            "label": "RH",
+            "resolution": "unresolved"
+          }
+        ],
+        "variables": [
+          {
+            "key": "var_form_solicitacao_de_ferias_request_data_inic",
+            "type": "date",
+            "required": true,
+            "sensitive": false,
+            "scope": "process",
+            "source": {
+              "kind": "form",
+              "formId": "form_solicitacao_de_ferias_request",
+              "fieldKey": "field_data_inicial"
+            }
+          },
+          {
+            "key": "var_form_solicitacao_de_ferias_request_data_fina",
+            "type": "date",
+            "required": true,
+            "sensitive": false,
+            "scope": "process",
+            "source": {
+              "kind": "form",
+              "formId": "form_solicitacao_de_ferias_request",
+              "fieldKey": "field_data_final"
+            }
+          },
+          {
+            "key": "var_aprovar_ou_reprovar_ferias_decision",
+            "type": "string",
+            "required": true,
+            "sensitive": false,
+            "scope": "process",
+            "source": {
+              "kind": "form",
+              "formId": "form_aprovar_ou_reprovar_ferias",
+              "fieldKey": "field_decisao"
+            },
+            "enumValues": [
+              "approved",
+              "rejected"
+            ]
+          },
+          {
+            "key": "var_aprovar_ou_reprovar_ferias_rejection_reason",
+            "type": "string",
+            "required": false,
+            "sensitive": false,
+            "scope": "process",
+            "source": {
+              "kind": "form",
+              "formId": "form_aprovar_ou_reprovar_ferias",
+              "fieldKey": "field_motivo_da_rejeicao"
+            }
+          }
+        ],
+        "forms": [
+          {
+            "id": "form_solicitacao_de_ferias_request",
+            "name": "Solicitação de férias — solicitação",
+            "usage": "start",
+            "fields": [
+              {
+                "key": "field_data_inicial",
+                "label": "Data inicial",
+                "type": "date",
+                "required": true,
+                "bindTo": "var_form_solicitacao_de_ferias_request_data_inic"
+              },
+              {
+                "key": "field_data_final",
+                "label": "Data final",
+                "type": "date",
+                "required": true,
+                "bindTo": "var_form_solicitacao_de_ferias_request_data_fina"
+              }
+            ]
+          },
+          {
+            "id": "form_aprovar_ou_reprovar_ferias",
+            "name": "Aprovar ou reprovar férias",
+            "usage": "task",
+            "fields": [
+              {
+                "key": "field_decisao",
+                "label": "Decisão",
+                "type": "select",
+                "required": true,
+                "bindTo": "var_aprovar_ou_reprovar_ferias_decision",
+                "options": [
+                  {
+                    "label": "Aprovar",
+                    "value": "approved"
+                  },
+                  {
+                    "label": "Rejeitar",
+                    "value": "rejected"
+                  }
+                ]
+              },
+              {
+                "key": "field_motivo_da_rejeicao",
+                "label": "Motivo da rejeição",
+                "type": "textarea",
+                "required": false,
+                "bindTo": "var_aprovar_ou_reprovar_ferias_rejection_reason",
+                "visibleWhen": {
+                  "op": "eq",
+                  "left": {
+                    "var": "var_aprovar_ou_reprovar_ferias_decision"
+                  },
+                  "right": {
+                    "literal": "rejected"
+                  }
+                },
+                "requiredWhen": {
+                  "op": "eq",
+                  "left": {
+                    "var": "var_aprovar_ou_reprovar_ferias_decision"
+                  },
+                  "right": {
+                    "literal": "rejected"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "start_solicitacao_de_ferias",
+            "type": "startEvent",
+            "name": "Solicitação de férias",
+            "formId": "form_solicitacao_de_ferias_request"
+          },
+          {
+            "id": "end_process_finished",
+            "type": "endEvent",
+            "name": "Processo encerrado"
+          },
+          {
+            "id": "task_aprovar_ou_reprovar_ferias",
+            "type": "userTask",
+            "name": "Aprovar ou reprovar férias",
+            "roleId": "role_gestor",
+            "formId": "form_aprovar_ou_reprovar_ferias"
+          },
+          {
+            "id": "gateway_aprovar_ou_reprovar_ferias",
+            "type": "exclusiveGateway",
+            "name": "Aprovar ou reprovar férias"
+          },
+          {
+            "id": "task_registrar_ferias",
+            "type": "userTask",
+            "name": "Registrar férias",
+            "roleId": "role_rh"
+          },
+          {
+            "id": "task_informar_motivo_da_reprovacao",
+            "type": "userTask",
+            "name": "Informar motivo da reprovação",
+            "roleId": "role_servidor"
+          },
+          {
+            "id": "task_solicitar_ferias",
+            "type": "userTask",
+            "name": "Solicitar férias",
+            "roleId": "role_servidor"
+          }
+        ],
+        "flows": [
+          {
+            "id": "flow_0001",
+            "source": "task_aprovar_ou_reprovar_ferias",
+            "target": "gateway_aprovar_ou_reprovar_ferias"
+          },
+          {
+            "id": "flow_0002",
+            "source": "task_registrar_ferias",
+            "target": "end_process_finished"
+          },
+          {
+            "id": "flow_0003",
+            "source": "task_informar_motivo_da_reprovacao",
+            "target": "end_process_finished"
+          },
+          {
+            "id": "flow_0004",
+            "source": "gateway_aprovar_ou_reprovar_ferias",
+            "target": "task_registrar_ferias",
+            "label": "Aprovado",
+            "condition": {
+              "op": "eq",
+              "left": {
+                "var": "var_aprovar_ou_reprovar_ferias_decision"
+              },
+              "right": {
+                "literal": "approved"
+              }
+            }
+          },
+          {
+            "id": "flow_0005",
+            "source": "gateway_aprovar_ou_reprovar_ferias",
+            "target": "task_informar_motivo_da_reprovacao",
+            "label": "Rejeitado",
+            "condition": {
+              "op": "eq",
+              "left": {
+                "var": "var_aprovar_ou_reprovar_ferias_decision"
+              },
+              "right": {
+                "literal": "rejected"
+              }
+            }
+          },
+          {
+            "id": "flow_0006",
+            "source": "task_solicitar_ferias",
+            "target": "task_aprovar_ou_reprovar_ferias"
+          },
+          {
+            "id": "flow_0007",
+            "source": "start_solicitacao_de_ferias",
+            "target": "task_solicitar_ferias"
+          }
+        ],
+        "pendingQuestions": [
+          {
+            "id": "pq_1",
+            "question": "Como o runtime deve atribuir o papel “Servidor”? A identidade do responsável pode ser configurada depois da prévia.",
+            "blocking": true,
+            "relatedNodeId": "task_informar_motivo_da_reprovacao"
+          },
+          {
+            "id": "pq_2",
+            "question": "Como o runtime deve atribuir o papel “Gestor”? A identidade do responsável pode ser configurada depois da prévia.",
+            "blocking": true,
+            "relatedNodeId": "task_aprovar_ou_reprovar_ferias"
+          },
+          {
+            "id": "pq_3",
+            "question": "Como o runtime deve atribuir o papel “RH”? A identidade do responsável pode ser configurada depois da prévia.",
+            "blocking": true,
+            "relatedNodeId": "task_registrar_ferias"
+          }
+        ],
+        "assumptions": [],
+        "policies": {
+          "manualApprovalRequired": true,
+          "allowExecution": false
+        },
+        "metadata": {
+          "knowledgeVersion": "1.1.0",
+          "modelId": "claude-sonnet-5-5",
+          "revision": 0,
+          "requirementProvenance": [
+            {
+              "path": "roles/servidor",
+              "name": "Servidor",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "ef69c5fbcc97a904d4e1310e7399579f1b6975f034dade52d96c098d69cd5ca8"
+            },
+            {
+              "path": "roles/servidor/assignment",
+              "name": "Servidor",
+              "source": "inference",
+              "confirmed": false
+            },
+            {
+              "path": "roles/gestor",
+              "name": "Gestor",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "fb1c32770c5c53d8f137092be38a18fb17d4d938ea944ecac8cfbf422d543678"
+            },
+            {
+              "path": "roles/gestor/assignment",
+              "name": "Gestor",
+              "source": "inference",
+              "confirmed": false
+            },
+            {
+              "path": "roles/rh",
+              "name": "RH",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "458a2d6711be00e63f364e6453cebcc019e1148a10c92da9299542de1e99fe2b"
+            },
+            {
+              "path": "roles/rh/assignment",
+              "name": "RH",
+              "source": "inference",
+              "confirmed": false
+            },
+            {
+              "path": "startFields/data_inicial",
+              "name": "Data inicial",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "ee825f7495335c9afd89842ccd5a91b8f222065a5e3b95d17e1f86fa30b71bf7"
+            },
+            {
+              "path": "startFields/data_final",
+              "name": "Data final",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "c7087382fb7192f2a74dfb444601fc715ccc0accb6f390f4441026557524da87"
+            },
+            {
+              "path": "activities/0",
+              "name": "Solicitar férias",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "ef69c5fbcc97a904d4e1310e7399579f1b6975f034dade52d96c098d69cd5ca8"
+            },
+            {
+              "path": "activities/1",
+              "name": "Aprovar ou reprovar férias",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "fb1c32770c5c53d8f137092be38a18fb17d4d938ea944ecac8cfbf422d543678"
+            },
+            {
+              "path": "activities/1/0",
+              "name": "Registrar férias",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "458a2d6711be00e63f364e6453cebcc019e1148a10c92da9299542de1e99fe2b"
+            },
+            {
+              "path": "activities/1/1",
+              "name": "Informar motivo da reprovação",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "471cffbfe3c58d9ba33868f9da475f9e67b7a9468a98f3322a50619ec6124287"
+            },
+            {
+              "path": "rules/0",
+              "name": "Se aprovado, o RH registra as férias.",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "ba4c6f9ebb1ea51ec81557b96f9c5d04656eda6cb5358e82b35a5adbd31e8419"
+            },
+            {
+              "path": "rules/1",
+              "name": "Se reprovado, o servidor é informado do motivo.",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "7f23566c657757053a4650eb859c51e4a57fdc051253add0b88f6c2f83a1452c"
+            }
+          ]
+        }
+      },
+      "pass": true,
+      "failureReasons": [],
+      "coverage": {
+        "activities": "2/2",
+        "roles": "3/3",
+        "decisions": "1/1+",
+        "ratio": 1
+      },
+      "forbiddenHits": [],
+      "unexpectedTasks": [
+        "Informar motivo da reprovação",
+        "Solicitar férias"
+      ]
+    },
+    {
+      "id": "S04-ferias-incompleto",
+      "title": "Pedido vago de férias (deve perguntar antes)",
+      "outcome": "validated",
+      "clarificationRounds": 1,
+      "questionsAsked": 3,
+      "repeatedQuestions": 0,
+      "askedFirst": true,
+      "calls": 2,
+      "latencyMs": 8781,
+      "inputTokens": 12700,
+      "cachedInputTokens": 8710,
+      "outputTokens": 927,
+      "costUsd": 0.03075,
+      "spec": {
+        "schemaVersion": "1.0.0",
+        "id": "process_solicitacao_de_ferias",
+        "name": "Solicitação de férias",
+        "description": "Permitir que o servidor solicite férias para aprovação do gestor, com registro pelo RH quando aprovado e ciência do motivo ao servidor quando reprovado.",
+        "locale": "pt-BR",
+        "targetProfile": "generic-bpmn2",
+        "status": "needs-input",
+        "roles": [
+          {
+            "id": "role_servidor",
+            "label": "Servidor",
+            "resolution": "unresolved"
+          },
+          {
+            "id": "role_gestor",
+            "label": "Gestor",
+            "resolution": "unresolved"
+          },
+          {
+            "id": "role_rh",
+            "label": "RH",
+            "resolution": "unresolved"
+          }
+        ],
+        "variables": [
+          {
+            "key": "var_form_solicitacao_de_ferias_request_data_inic",
+            "type": "date",
+            "required": true,
+            "sensitive": false,
+            "scope": "process",
+            "source": {
+              "kind": "form",
+              "formId": "form_solicitacao_de_ferias_request",
+              "fieldKey": "field_data_inicial_das_ferias"
+            }
+          },
+          {
+            "key": "var_form_solicitacao_de_ferias_request_data_fina",
+            "type": "date",
+            "required": true,
+            "sensitive": false,
+            "scope": "process",
+            "source": {
+              "kind": "form",
+              "formId": "form_solicitacao_de_ferias_request",
+              "fieldKey": "field_data_final_das_ferias"
+            }
+          },
+          {
+            "key": "var_aprovar_solicitacao_de_ferias_decision",
+            "type": "string",
+            "required": true,
+            "sensitive": false,
+            "scope": "process",
+            "source": {
+              "kind": "form",
+              "formId": "form_aprovar_solicitacao_de_ferias",
+              "fieldKey": "field_decisao"
+            },
+            "enumValues": [
+              "approved",
+              "rejected"
+            ]
+          },
+          {
+            "key": "var_aprovar_solicitacao_de_ferias_rejection_reas",
+            "type": "string",
+            "required": false,
+            "sensitive": false,
+            "scope": "process",
+            "source": {
+              "kind": "form",
+              "formId": "form_aprovar_solicitacao_de_ferias",
+              "fieldKey": "field_motivo_da_rejeicao"
+            }
+          }
+        ],
+        "forms": [
+          {
+            "id": "form_solicitacao_de_ferias_request",
+            "name": "Solicitação de férias — solicitação",
+            "usage": "start",
+            "fields": [
+              {
+                "key": "field_data_inicial_das_ferias",
+                "label": "Data inicial das férias",
+                "type": "date",
+                "required": true,
+                "bindTo": "var_form_solicitacao_de_ferias_request_data_inic"
+              },
+              {
+                "key": "field_data_final_das_ferias",
+                "label": "Data final das férias",
+                "type": "date",
+                "required": true,
+                "bindTo": "var_form_solicitacao_de_ferias_request_data_fina"
+              }
+            ]
+          },
+          {
+            "id": "form_aprovar_solicitacao_de_ferias",
+            "name": "Aprovar solicitação de férias",
+            "usage": "task",
+            "fields": [
+              {
+                "key": "field_decisao",
+                "label": "Decisão",
+                "type": "select",
+                "required": true,
+                "bindTo": "var_aprovar_solicitacao_de_ferias_decision",
+                "options": [
+                  {
+                    "label": "Aprovar",
+                    "value": "approved"
+                  },
+                  {
+                    "label": "Rejeitar",
+                    "value": "rejected"
+                  }
+                ]
+              },
+              {
+                "key": "field_motivo_da_rejeicao",
+                "label": "Motivo da rejeição",
+                "type": "textarea",
+                "required": false,
+                "bindTo": "var_aprovar_solicitacao_de_ferias_rejection_reas",
+                "visibleWhen": {
+                  "op": "eq",
+                  "left": {
+                    "var": "var_aprovar_solicitacao_de_ferias_decision"
+                  },
+                  "right": {
+                    "literal": "rejected"
+                  }
+                },
+                "requiredWhen": {
+                  "op": "eq",
+                  "left": {
+                    "var": "var_aprovar_solicitacao_de_ferias_decision"
+                  },
+                  "right": {
+                    "literal": "rejected"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "start_solicitacao_de_ferias",
+            "type": "startEvent",
+            "name": "Solicitação de férias",
+            "formId": "form_solicitacao_de_ferias_request"
+          },
+          {
+            "id": "end_process_finished",
+            "type": "endEvent",
+            "name": "Processo encerrado"
+          },
+          {
+            "id": "task_aprovar_solicitacao_de_ferias",
+            "type": "userTask",
+            "name": "Aprovar solicitação de férias",
+            "roleId": "role_gestor",
+            "formId": "form_aprovar_solicitacao_de_ferias"
+          },
+          {
+            "id": "gateway_aprovar_solicitacao_de_ferias",
+            "type": "exclusiveGateway",
+            "name": "Aprovar solicitação de férias"
+          },
+          {
+            "id": "task_registrar_as_ferias",
+            "type": "userTask",
+            "name": "Registrar as férias",
+            "roleId": "role_rh"
+          },
+          {
+            "id": "task_informar_o_motivo_da_reprovacao_ao_servidor",
+            "type": "userTask",
+            "name": "Informar o motivo da reprovação ao servidor",
+            "roleId": "role_servidor"
+          }
+        ],
+        "flows": [
+          {
+            "id": "flow_0001",
+            "source": "task_aprovar_solicitacao_de_ferias",
+            "target": "gateway_aprovar_solicitacao_de_ferias"
+          },
+          {
+            "id": "flow_0002",
+            "source": "task_registrar_as_ferias",
+            "target": "end_process_finished"
+          },
+          {
+            "id": "flow_0003",
+            "source": "task_informar_o_motivo_da_reprovacao_ao_servidor",
+            "target": "end_process_finished"
+          },
+          {
+            "id": "flow_0004",
+            "source": "gateway_aprovar_solicitacao_de_ferias",
+            "target": "task_registrar_as_ferias",
+            "label": "Aprovado",
+            "condition": {
+              "op": "eq",
+              "left": {
+                "var": "var_aprovar_solicitacao_de_ferias_decision"
+              },
+              "right": {
+                "literal": "approved"
+              }
+            }
+          },
+          {
+            "id": "flow_0005",
+            "source": "gateway_aprovar_solicitacao_de_ferias",
+            "target": "task_informar_o_motivo_da_reprovacao_ao_servidor",
+            "label": "Rejeitado",
+            "condition": {
+              "op": "eq",
+              "left": {
+                "var": "var_aprovar_solicitacao_de_ferias_decision"
+              },
+              "right": {
+                "literal": "rejected"
+              }
+            }
+          },
+          {
+            "id": "flow_0006",
+            "source": "start_solicitacao_de_ferias",
+            "target": "task_aprovar_solicitacao_de_ferias"
+          }
+        ],
+        "pendingQuestions": [
+          {
+            "id": "pq_1",
+            "question": "Como o runtime deve atribuir o papel “Servidor”? A identidade do responsável pode ser configurada depois da prévia.",
+            "blocking": true,
+            "relatedNodeId": "task_informar_o_motivo_da_reprovacao_ao_servidor"
+          },
+          {
+            "id": "pq_2",
+            "question": "Como o runtime deve atribuir o papel “Gestor”? A identidade do responsável pode ser configurada depois da prévia.",
+            "blocking": true,
+            "relatedNodeId": "task_aprovar_solicitacao_de_ferias"
+          },
+          {
+            "id": "pq_3",
+            "question": "Como o runtime deve atribuir o papel “RH”? A identidade do responsável pode ser configurada depois da prévia.",
+            "blocking": true,
+            "relatedNodeId": "task_registrar_as_ferias"
+          }
+        ],
+        "assumptions": [],
+        "policies": {
+          "manualApprovalRequired": true,
+          "allowExecution": false
+        },
+        "metadata": {
+          "knowledgeVersion": "1.1.0",
+          "modelId": "claude-sonnet-5-5",
+          "revision": 0,
+          "requirementProvenance": [
+            {
+              "path": "roles/servidor",
+              "name": "Servidor",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "1e2c8383b5d606a7c20f13c1867027327668111cc5d6ef9ca06b7cf6e159057b"
+            },
+            {
+              "path": "roles/servidor/assignment",
+              "name": "Servidor",
+              "source": "inference",
+              "confirmed": false
+            },
+            {
+              "path": "roles/gestor",
+              "name": "Gestor",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "6fec72fc1e9143502822d28a1f08177eb3a23743c75286ccb066c566f8527507"
+            },
+            {
+              "path": "roles/gestor/assignment",
+              "name": "Gestor",
+              "source": "inference",
+              "confirmed": false
+            },
+            {
+              "path": "roles/rh",
+              "name": "RH",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "458a2d6711be00e63f364e6453cebcc019e1148a10c92da9299542de1e99fe2b"
+            },
+            {
+              "path": "roles/rh/assignment",
+              "name": "RH",
+              "source": "inference",
+              "confirmed": false
+            },
+            {
+              "path": "startFields/data_inicial_das_ferias",
+              "name": "Data inicial das férias",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "de9fec2fcc8843907aa488dbbd6b228a19114aa6d84309138b0eb236dae247ed"
+            },
+            {
+              "path": "startFields/data_final_das_ferias",
+              "name": "Data final das férias",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "de9fec2fcc8843907aa488dbbd6b228a19114aa6d84309138b0eb236dae247ed"
+            },
+            {
+              "path": "activities/0",
+              "name": "Aprovar solicitação de férias",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "6fec72fc1e9143502822d28a1f08177eb3a23743c75286ccb066c566f8527507"
+            },
+            {
+              "path": "activities/0/0",
+              "name": "Registrar as férias",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "458a2d6711be00e63f364e6453cebcc019e1148a10c92da9299542de1e99fe2b"
+            },
+            {
+              "path": "activities/0/1",
+              "name": "Informar o motivo da reprovação ao servidor",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "471cffbfe3c58d9ba33868f9da475f9e67b7a9468a98f3322a50619ec6124287"
+            },
+            {
+              "path": "rules/0",
+              "name": "Se a solicitação for aprovada, o RH registra as férias.",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "ba4c6f9ebb1ea51ec81557b96f9c5d04656eda6cb5358e82b35a5adbd31e8419"
+            },
+            {
+              "path": "rules/1",
+              "name": "Se a solicitação for reprovada, o servidor é informado do motivo e o processo termina.",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "12b7c7f3b248ad474933a403990fd6abde2de90cf78f7d91bdb22a83dfbf4a4e"
+            }
+          ]
+        }
+      },
+      "pass": true,
+      "failureReasons": [],
+      "coverage": {
+        "activities": "1/1",
+        "roles": "1/1",
+        "decisions": "1/1+",
+        "ratio": 1
+      },
+      "forbiddenHits": [],
+      "unexpectedTasks": [
+        "Registrar as férias",
+        "Informar o motivo da reprovação ao servidor"
+      ]
+    },
+    {
+      "id": "S05-correcao-ciclo",
+      "title": "Devolução para correção antes da aprovação",
+      "outcome": "validated",
+      "clarificationRounds": 0,
+      "questionsAsked": 0,
+      "repeatedQuestions": 0,
+      "askedFirst": false,
+      "calls": 1,
+      "latencyMs": 7237,
+      "inputTokens": 6105,
+      "cachedInputTokens": 4355,
+      "outputTokens": 932,
+      "costUsd": 0.018915,
+      "spec": {
+        "schemaVersion": "1.0.0",
+        "id": "process_pedido_de_certidao",
+        "name": "Pedido de certidão",
+        "description": "Permitir que o requerente solicite uma certidão, com conferência dos dados pelo atendente, correção quando incompletos e emissão da certidão quando completos.",
+        "locale": "pt-BR",
+        "targetProfile": "generic-bpmn2",
+        "status": "needs-input",
+        "roles": [
+          {
+            "id": "role_requerente",
+            "label": "Requerente",
+            "resolution": "unresolved"
+          },
+          {
+            "id": "role_atendente",
+            "label": "Atendente",
+            "resolution": "unresolved"
+          }
+        ],
+        "variables": [
+          {
+            "key": "var_form_pedido_de_certidao_request_tipo_de_cert",
+            "type": "string",
+            "required": true,
+            "sensitive": false,
+            "scope": "process",
+            "source": {
+              "kind": "form",
+              "formId": "form_pedido_de_certidao_request",
+              "fieldKey": "field_tipo_de_certidao"
+            }
+          },
+          {
+            "key": "var_form_conferir_os_dados_resultado_da_conferen",
+            "type": "string",
+            "required": true,
+            "sensitive": false,
+            "scope": "process",
+            "source": {
+              "kind": "form",
+              "formId": "form_conferir_os_dados",
+              "fieldKey": "field_resultado_da_conferencia"
+            },
+            "enumValues": [
+              "incompletos",
+              "completos"
+            ]
+          }
+        ],
+        "forms": [
+          {
+            "id": "form_pedido_de_certidao_request",
+            "name": "Pedido de certidão — solicitação",
+            "usage": "start",
+            "fields": [
+              {
+                "key": "field_tipo_de_certidao",
+                "label": "Tipo de certidão",
+                "type": "text",
+                "required": true,
+                "bindTo": "var_form_pedido_de_certidao_request_tipo_de_cert"
+              }
+            ]
+          },
+          {
+            "id": "form_conferir_os_dados",
+            "name": "Conferir os dados",
+            "usage": "task",
+            "fields": [
+              {
+                "key": "field_resultado_da_conferencia",
+                "label": "Resultado da conferência",
+                "type": "select",
+                "required": true,
+                "bindTo": "var_form_conferir_os_dados_resultado_da_conferen",
+                "options": [
+                  {
+                    "label": "Dados incompletos",
+                    "value": "incompletos"
+                  },
+                  {
+                    "label": "Dados completos",
+                    "value": "completos"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "start_pedido_de_certidao",
+            "type": "startEvent",
+            "name": "Pedido de certidão",
+            "formId": "form_pedido_de_certidao_request"
+          },
+          {
+            "id": "end_process_finished",
+            "type": "endEvent",
+            "name": "Processo encerrado"
+          },
+          {
+            "id": "gateway_dados_completos",
+            "type": "exclusiveGateway",
+            "name": "Dados completos?"
+          },
+          {
+            "id": "task_corrigir_o_pedido",
+            "type": "userTask",
+            "name": "Corrigir o pedido",
+            "roleId": "role_requerente"
+          },
+          {
+            "id": "task_emitir_a_certidao",
+            "type": "userTask",
+            "name": "Emitir a certidão",
+            "roleId": "role_atendente"
+          },
+          {
+            "id": "task_conferir_os_dados",
+            "type": "userTask",
+            "name": "Conferir os dados",
+            "roleId": "role_atendente",
+            "formId": "form_conferir_os_dados"
+          }
+        ],
+        "flows": [
+          {
+            "id": "flow_0001",
+            "source": "task_corrigir_o_pedido",
+            "target": "task_conferir_os_dados"
+          },
+          {
+            "id": "flow_0002",
+            "source": "gateway_dados_completos",
+            "target": "task_corrigir_o_pedido",
+            "label": "Dados incompletos",
+            "condition": {
+              "op": "eq",
+              "left": {
+                "var": "var_form_conferir_os_dados_resultado_da_conferen"
+              },
+              "right": {
+                "literal": "incompletos"
+              }
+            }
+          },
+          {
+            "id": "flow_0003",
+            "source": "task_emitir_a_certidao",
+            "target": "end_process_finished"
+          },
+          {
+            "id": "flow_0004",
+            "source": "gateway_dados_completos",
+            "target": "task_emitir_a_certidao",
+            "label": "Dados completos",
+            "condition": {
+              "op": "eq",
+              "left": {
+                "var": "var_form_conferir_os_dados_resultado_da_conferen"
+              },
+              "right": {
+                "literal": "completos"
+              }
+            }
+          },
+          {
+            "id": "flow_0005",
+            "source": "task_conferir_os_dados",
+            "target": "gateway_dados_completos"
+          },
+          {
+            "id": "flow_0006",
+            "source": "start_pedido_de_certidao",
+            "target": "task_conferir_os_dados"
+          }
+        ],
+        "pendingQuestions": [
+          {
+            "id": "pq_1",
+            "question": "Como o runtime deve atribuir o papel “Requerente”? A identidade do responsável pode ser configurada depois da prévia.",
+            "blocking": true,
+            "relatedNodeId": "task_corrigir_o_pedido"
+          },
+          {
+            "id": "pq_2",
+            "question": "Como o runtime deve atribuir o papel “Atendente”? A identidade do responsável pode ser configurada depois da prévia.",
+            "blocking": true,
+            "relatedNodeId": "task_emitir_a_certidao"
+          }
+        ],
+        "assumptions": [],
+        "policies": {
+          "manualApprovalRequired": true,
+          "allowExecution": false
+        },
+        "metadata": {
+          "knowledgeVersion": "1.1.0",
+          "modelId": "claude-sonnet-5-5",
+          "revision": 0,
+          "requirementProvenance": [
+            {
+              "path": "roles/requerente",
+              "name": "Requerente",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "d11a1a5d8db0fb997947975fb3b323df572ff5c706faed6284c5f5a2a61d547d"
+            },
+            {
+              "path": "roles/requerente/assignment",
+              "name": "Requerente",
+              "source": "inference",
+              "confirmed": false
+            },
+            {
+              "path": "roles/atendente",
+              "name": "Atendente",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "b992d081db2d09dd613ff058e9e520a804e792728037562e1b7ded61396fadad"
+            },
+            {
+              "path": "roles/atendente/assignment",
+              "name": "Atendente",
+              "source": "inference",
+              "confirmed": false
+            },
+            {
+              "path": "startFields/tipo_de_certidao",
+              "name": "Tipo de certidão",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "cfbfaec67549e1355cf7a70e017f1102e9df0c9d3dc7d9afc21996bdc4fd3b10"
+            },
+            {
+              "path": "activities/0",
+              "name": "Conferir os dados",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "b992d081db2d09dd613ff058e9e520a804e792728037562e1b7ded61396fadad"
+            },
+            {
+              "path": "activities/0/fields/resultado_da_conferencia",
+              "name": "Resultado da conferência",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "fa110f5940dec804617a6b0dafffe810b783a04fb36bdffe3c23b8b6bb997c04"
+            },
+            {
+              "path": "activities/1",
+              "name": "Dados completos?",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "f1a54bf04f68868706d2c48ba13af3e5843aaf4034bcd0668bf4a8944d6f873b"
+            },
+            {
+              "path": "activities/1/0",
+              "name": "Corrigir o pedido",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "543526dc9b0ebe1d627764eb58c11e4aeaefd43f55226b11170e203f1fab0897"
+            },
+            {
+              "path": "activities/1/1",
+              "name": "Emitir a certidão",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "baec900a8cb9c36eeebedb4e477dbdd9ccf551eb238ac149d63110f55df4b23a"
+            },
+            {
+              "path": "rules/0",
+              "name": "Se os dados estiverem incompletos, o pedido volta ao requerente para correção e depois retorna ao atendente.",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "36c28cb17f9785d99ae5c262e052cae5a5713e49e9de25d10a3cdee6ec0426b9"
+            },
+            {
+              "path": "rules/1",
+              "name": "Se os dados estiverem completos, o atendente emite a certidão.",
+              "source": "user",
+              "confirmed": true,
+              "evidenceSha256": "18300db42d12f775f9e187644ce917d0c01339b92dd2eb2cd962460d830a6a2f"
+            }
+          ]
+        }
+      },
+      "pass": true,
+      "failureReasons": [],
+      "coverage": {
+        "activities": "3/3",
+        "roles": "2/2",
+        "decisions": "1/1+",
+        "ratio": 1
+      },
+      "forbiddenHits": [],
+      "unexpectedTasks": []
+    }
+  ]
+}

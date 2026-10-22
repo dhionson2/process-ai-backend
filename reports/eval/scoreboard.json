@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-22T21:29:15.042Z",
+  "generatedAt": "2026-10-22T23:02:16.772Z",
   "corpus": [
     {
       "id": "S01-ferias",
@@ -67,8 +67,8 @@
       "provider": "claude-cli",
       "model": "sonnet",
       "label": "depois",
-      "startedAt": "2026-10-22T21:05:42.864Z",
-      "finishedAt": "2026-10-22T21:07:26.667Z",
+      "startedAt": "2026-10-22T23:00:16.786Z",
+      "finishedAt": "2026-10-22T23:02:16.694Z",
       "scenarioIds": [
         "S01-ferias",
         "S02-compra",
@@ -92,13 +92,13 @@
         "inventedElements": 0,
         "repeatedQuestions": 0,
         "calls": 16,
-        "inputTokens": 100220,
-        "cachedInputTokens": 85828,
-        "outputTokens": 12895,
-        "meanLatencyMs": 8596,
-        "totalCostUsd": 0.23292859999999999,
-        "costPerValidProcessUsd": 0.019410716666666664,
-        "tokensPerScenario": 9426
+        "inputTokens": 99348,
+        "cachedInputTokens": 73297,
+        "outputTokens": 12116,
+        "meanLatencyMs": 9794,
+        "totalCostUsd": 0.2686394,
+        "costPerValidProcessUsd": 0.022386616666666664,
+        "tokensPerScenario": 9289
       },
       "results": [
         {
@@ -110,16 +110,16 @@
           "repeatedQuestions": 0,
           "askedFirst": false,
           "calls": 1,
-          "latencyMs": 5229,
-          "inputTokens": 6077,
+          "latencyMs": 5319,
+          "inputTokens": 6080,
           "cachedInputTokens": 5567,
-          "outputTokens": 644,
-          "costUsd": 0.011285400000000001,
+          "outputTokens": 621,
+          "costUsd": 0.011062399999999998,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_solicitacao_de_ferias",
             "name": "Solicitação de férias",
-            "description": "Permitir que o servidor solicite férias, que o gestor aprove ou reprove, e que o RH registre as férias aprovadas ou o servidor seja informado do motivo da reprovação.",
+            "description": "Permitir que o servidor solicite férias, com aprovação do gestor, registro pelo RH quando aprovado e informação do motivo ao servidor quando reprovado.",
             "locale": "pt-BR",
             "targetProfile": "generic-bpmn2",
             "status": "needs-input",
@@ -447,7 +447,7 @@
                   "name": "Data final",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "c7087382fb7192f2a74dfb444601fc715ccc0accb6f390f4441026557524da87"
+                  "evidenceSha256": "f906a3863c78052a7900fed8bc50b97160fa352ea901434bbf254b30883b31bf"
                 },
                 {
                   "path": "activities/0",
@@ -517,16 +517,16 @@
           "repeatedQuestions": 0,
           "askedFirst": false,
           "calls": 1,
-          "latencyMs": 5454,
-          "inputTokens": 6089,
-          "cachedInputTokens": 5581,
-          "outputTokens": 635,
-          "costUsd": 0.011189200000000002,
+          "latencyMs": 5169,
+          "inputTokens": 6088,
+          "cachedInputTokens": 4355,
+          "outputTokens": 624,
+          "costUsd": 0.015739,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_solicitacao_de_compra_de_material",
             "name": "Solicitação de compra de material",
-            "description": "Permitir que um funcionário solicite a compra de material, com análise do gestor e encaminhamento ao setor de compras ou retorno da justificativa ao funcionário.",
+            "description": "Permitir que um funcionário solicite a compra de material, com análise do gestor e encaminhamento ao setor de compras ou retorno de justificativa ao funcionário.",
             "locale": "pt-BR",
             "targetProfile": "generic-bpmn2",
             "status": "needs-input",
@@ -561,14 +561,14 @@
                 }
               },
               {
-                "key": "var_analisar_a_solicitacao_decision",
+                "key": "var_analisar_solicitacao_decision",
                 "type": "string",
                 "required": true,
                 "sensitive": false,
                 "scope": "process",
                 "source": {
                   "kind": "form",
-                  "formId": "form_analisar_a_solicitacao",
+                  "formId": "form_analisar_solicitacao",
                   "fieldKey": "field_decisao"
                 },
                 "enumValues": [
@@ -577,14 +577,14 @@
                 ]
               },
               {
-                "key": "var_analisar_a_solicitacao_rejection_reason",
+                "key": "var_analisar_solicitacao_rejection_reason",
                 "type": "string",
                 "required": false,
                 "sensitive": false,
                 "scope": "process",
                 "source": {
                   "kind": "form",
-                  "formId": "form_analisar_a_solicitacao",
+                  "formId": "form_analisar_solicitacao",
                   "fieldKey": "field_motivo_da_rejeicao"
                 }
               }
@@ -605,8 +605,8 @@
                 ]
               },
               {
-                "id": "form_analisar_a_solicitacao",
-                "name": "Analisar a solicitação",
+                "id": "form_analisar_solicitacao",
+                "name": "Analisar solicitação",
                 "usage": "task",
                 "fields": [
                   {
@@ -614,7 +614,7 @@
                     "label": "Decisão",
                     "type": "select",
                     "required": true,
-                    "bindTo": "var_analisar_a_solicitacao_decision",
+                    "bindTo": "var_analisar_solicitacao_decision",
                     "options": [
                       {
                         "label": "Aprovar",
@@ -631,11 +631,11 @@
                     "label": "Motivo da rejeição",
                     "type": "textarea",
                     "required": false,
-                    "bindTo": "var_analisar_a_solicitacao_rejection_reason",
+                    "bindTo": "var_analisar_solicitacao_rejection_reason",
                     "visibleWhen": {
                       "op": "eq",
                       "left": {
-                        "var": "var_analisar_a_solicitacao_decision"
+                        "var": "var_analisar_solicitacao_decision"
                       },
                       "right": {
                         "literal": "rejected"
@@ -644,7 +644,7 @@
                     "requiredWhen": {
                       "op": "eq",
                       "left": {
-                        "var": "var_analisar_a_solicitacao_decision"
+                        "var": "var_analisar_solicitacao_decision"
                       },
                       "right": {
                         "literal": "rejected"
@@ -667,16 +667,16 @@
                 "name": "Processo encerrado"
               },
               {
-                "id": "task_analisar_a_solicitacao",
+                "id": "task_analisar_solicitacao",
                 "type": "userTask",
-                "name": "Analisar a solicitação",
+                "name": "Analisar solicitação",
                 "roleId": "role_gestor",
-                "formId": "form_analisar_a_solicitacao"
+                "formId": "form_analisar_solicitacao"
               },
               {
-                "id": "gateway_analisar_a_solicitacao",
+                "id": "gateway_analisar_solicitacao",
                 "type": "exclusiveGateway",
-                "name": "Analisar a solicitação"
+                "name": "Analisar solicitação"
               },
               {
                 "id": "task_providenciar_a_compra",
@@ -685,17 +685,17 @@
                 "roleId": "role_setor_de_compras"
               },
               {
-                "id": "task_receber_a_justificativa",
+                "id": "task_receber_justificativa",
                 "type": "userTask",
-                "name": "Receber a justificativa",
+                "name": "Receber justificativa",
                 "roleId": "role_funcionario"
               }
             ],
             "flows": [
               {
                 "id": "flow_0001",
-                "source": "task_analisar_a_solicitacao",
-                "target": "gateway_analisar_a_solicitacao"
+                "source": "task_analisar_solicitacao",
+                "target": "gateway_analisar_solicitacao"
               },
               {
                 "id": "flow_0002",
@@ -704,18 +704,18 @@
               },
               {
                 "id": "flow_0003",
-                "source": "task_receber_a_justificativa",
+                "source": "task_receber_justificativa",
                 "target": "end_process_finished"
               },
               {
                 "id": "flow_0004",
-                "source": "gateway_analisar_a_solicitacao",
+                "source": "gateway_analisar_solicitacao",
                 "target": "task_providenciar_a_compra",
                 "label": "Aprovado",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_analisar_a_solicitacao_decision"
+                    "var": "var_analisar_solicitacao_decision"
                   },
                   "right": {
                     "literal": "approved"
@@ -724,13 +724,13 @@
               },
               {
                 "id": "flow_0005",
-                "source": "gateway_analisar_a_solicitacao",
-                "target": "task_receber_a_justificativa",
+                "source": "gateway_analisar_solicitacao",
+                "target": "task_receber_justificativa",
                 "label": "Rejeitado",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_analisar_a_solicitacao_decision"
+                    "var": "var_analisar_solicitacao_decision"
                   },
                   "right": {
                     "literal": "rejected"
@@ -740,7 +740,7 @@
               {
                 "id": "flow_0006",
                 "source": "start_solicitacao_de_compra_de_material",
-                "target": "task_analisar_a_solicitacao"
+                "target": "task_analisar_solicitacao"
               }
             ],
             "pendingQuestions": [
@@ -748,13 +748,13 @@
                 "id": "pq_1",
                 "question": "Como o runtime deve atribuir o papel “Funcionário”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_receber_a_justificativa"
+                "relatedNodeId": "task_receber_justificativa"
               },
               {
                 "id": "pq_2",
                 "question": "Como o runtime deve atribuir o papel “Gestor”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_analisar_a_solicitacao"
+                "relatedNodeId": "task_analisar_solicitacao"
               },
               {
                 "id": "pq_3",
@@ -828,7 +828,7 @@
                 },
                 {
                   "path": "activities/0",
-                  "name": "Analisar a solicitação",
+                  "name": "Analisar solicitação",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "8feabf63182fdee61e9a7cdd8c1a71e499cce328761f4a51f1b2386f281c9d67"
@@ -842,7 +842,7 @@
                 },
                 {
                   "path": "activities/0/1",
-                  "name": "Receber a justificativa",
+                  "name": "Receber justificativa",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "fd335bf070b5afca9e69084e8272067f6312dce650488ba6b76307f98ccf12b7"
@@ -874,7 +874,7 @@
           },
           "forbiddenHits": [],
           "unexpectedTasks": [
-            "Receber a justificativa"
+            "Receber justificativa"
           ]
         },
         {
@@ -886,11 +886,11 @@
           "repeatedQuestions": 0,
           "askedFirst": false,
           "calls": 1,
-          "latencyMs": 8619,
+          "latencyMs": 8706,
           "inputTokens": 6123,
-          "cachedInputTokens": 5612,
-          "outputTokens": 1189,
-          "costUsd": 0.0167974,
+          "cachedInputTokens": 4355,
+          "outputTokens": 1125,
+          "costUsd": 0.020934,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_reembolso_de_despesa",
@@ -919,11 +919,6 @@
                 "id": "role_financeiro",
                 "label": "Financeiro",
                 "resolution": "unresolved"
-              },
-              {
-                "id": "role_responsavel_pendente",
-                "label": "Responsável pendente",
-                "resolution": "unresolved"
               }
             ],
             "variables": [
@@ -937,6 +932,18 @@
                   "kind": "form",
                   "formId": "form_reembolso_de_despesa_request",
                   "fieldKey": "field_valor"
+                }
+              },
+              {
+                "key": "var_form_reembolso_de_despesa_request_descricao",
+                "type": "string",
+                "required": true,
+                "sensitive": false,
+                "scope": "process",
+                "source": {
+                  "kind": "form",
+                  "formId": "form_reembolso_de_despesa_request",
+                  "fieldKey": "field_descricao"
                 }
               },
               {
@@ -956,14 +963,14 @@
                 ]
               },
               {
-                "key": "var_aprovacao_do_diretor_decision",
+                "key": "var_segunda_aprovacao_do_diretor_decision",
                 "type": "string",
                 "required": true,
                 "sensitive": false,
                 "scope": "process",
                 "source": {
                   "kind": "form",
-                  "formId": "form_aprovacao_do_diretor",
+                  "formId": "form_segunda_aprovacao_do_diretor",
                   "fieldKey": "field_decisao_2"
                 },
                 "enumValues": [
@@ -984,6 +991,13 @@
                     "type": "decimal",
                     "required": true,
                     "bindTo": "var_form_reembolso_de_despesa_request_valor"
+                  },
+                  {
+                    "key": "field_descricao",
+                    "label": "Descrição",
+                    "type": "textarea",
+                    "required": true,
+                    "bindTo": "var_form_reembolso_de_despesa_request_descricao"
                   }
                 ]
               },
@@ -1012,8 +1026,8 @@
                 ]
               },
               {
-                "id": "form_aprovacao_do_diretor",
-                "name": "Aprovação do diretor",
+                "id": "form_segunda_aprovacao_do_diretor",
+                "name": "Segunda aprovação do diretor",
                 "usage": "task",
                 "fields": [
                   {
@@ -1021,7 +1035,7 @@
                     "label": "Decisão",
                     "type": "select",
                     "required": true,
-                    "bindTo": "var_aprovacao_do_diretor_decision",
+                    "bindTo": "var_segunda_aprovacao_do_diretor_decision",
                     "options": [
                       {
                         "label": "Aprovar",
@@ -1061,39 +1075,33 @@
                 "name": "Aprovação do gestor"
               },
               {
-                "id": "task_aprovacao_do_diretor",
+                "id": "task_segunda_aprovacao_do_diretor",
                 "type": "userTask",
-                "name": "Aprovação do diretor",
+                "name": "Segunda aprovação do diretor",
                 "roleId": "role_diretor",
-                "formId": "form_aprovacao_do_diretor"
+                "formId": "form_segunda_aprovacao_do_diretor"
               },
               {
-                "id": "gateway_aprovacao_do_diretor",
+                "id": "gateway_segunda_aprovacao_do_diretor",
                 "type": "exclusiveGateway",
-                "name": "Aprovação do diretor"
+                "name": "Segunda aprovação do diretor"
               },
               {
-                "id": "task_pagar_reembolso",
+                "id": "task_pagar_o_reembolso",
                 "type": "userTask",
-                "name": "Pagar reembolso",
+                "name": "Pagar o reembolso",
                 "roleId": "role_financeiro"
               },
               {
-                "id": "task_informar_colaborador_da_reprovacao",
+                "id": "task_informar_o_colaborador_sobre_a_reprovacao",
                 "type": "userTask",
-                "name": "Informar colaborador da reprovação",
-                "roleId": "role_responsavel_pendente"
+                "name": "Informar o colaborador sobre a reprovação",
+                "roleId": "role_colaborador"
               },
               {
-                "id": "task_informar_colaborador_da_reprovacao_2",
+                "id": "task_informar_o_colaborador_sobre_a_reprovacao_2",
                 "type": "userTask",
-                "name": "Informar colaborador da reprovação",
-                "roleId": "role_responsavel_pendente"
-              },
-              {
-                "id": "task_solicitar_reembolso_de_despesa",
-                "type": "userTask",
-                "name": "Solicitar reembolso de despesa",
+                "name": "Informar o colaborador sobre a reprovação",
                 "roleId": "role_colaborador"
               }
             ],
@@ -1105,28 +1113,28 @@
               },
               {
                 "id": "flow_0002",
-                "source": "task_aprovacao_do_diretor",
-                "target": "gateway_aprovacao_do_diretor"
+                "source": "task_segunda_aprovacao_do_diretor",
+                "target": "gateway_segunda_aprovacao_do_diretor"
               },
               {
                 "id": "flow_0003",
-                "source": "task_pagar_reembolso",
+                "source": "task_pagar_o_reembolso",
                 "target": "end_process_finished"
               },
               {
                 "id": "flow_0004",
-                "source": "task_informar_colaborador_da_reprovacao",
+                "source": "task_informar_o_colaborador_sobre_a_reprovacao",
                 "target": "end_process_finished"
               },
               {
                 "id": "flow_0005",
-                "source": "gateway_aprovacao_do_diretor",
-                "target": "task_pagar_reembolso",
+                "source": "gateway_segunda_aprovacao_do_diretor",
+                "target": "task_pagar_o_reembolso",
                 "label": "Aprovado",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_aprovacao_do_diretor_decision"
+                    "var": "var_segunda_aprovacao_do_diretor_decision"
                   },
                   "right": {
                     "literal": "approved"
@@ -1135,13 +1143,13 @@
               },
               {
                 "id": "flow_0006",
-                "source": "gateway_aprovacao_do_diretor",
-                "target": "task_informar_colaborador_da_reprovacao",
+                "source": "gateway_segunda_aprovacao_do_diretor",
+                "target": "task_informar_o_colaborador_sobre_a_reprovacao",
                 "label": "Rejeitado",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_aprovacao_do_diretor_decision"
+                    "var": "var_segunda_aprovacao_do_diretor_decision"
                   },
                   "right": {
                     "literal": "rejected"
@@ -1150,13 +1158,13 @@
               },
               {
                 "id": "flow_0007",
-                "source": "task_informar_colaborador_da_reprovacao_2",
+                "source": "task_informar_o_colaborador_sobre_a_reprovacao_2",
                 "target": "end_process_finished"
               },
               {
                 "id": "flow_0008",
                 "source": "gateway_aprovacao_do_gestor",
-                "target": "task_aprovacao_do_diretor",
+                "target": "task_segunda_aprovacao_do_diretor",
                 "label": "Aprovado",
                 "condition": {
                   "op": "eq",
@@ -1171,7 +1179,7 @@
               {
                 "id": "flow_0009",
                 "source": "gateway_aprovacao_do_gestor",
-                "target": "task_informar_colaborador_da_reprovacao_2",
+                "target": "task_informar_o_colaborador_sobre_a_reprovacao_2",
                 "label": "Rejeitado",
                 "condition": {
                   "op": "eq",
@@ -1185,13 +1193,8 @@
               },
               {
                 "id": "flow_0010",
-                "source": "task_solicitar_reembolso_de_despesa",
-                "target": "task_aprovacao_do_gestor"
-              },
-              {
-                "id": "flow_0011",
                 "source": "start_reembolso_de_despesa",
-                "target": "task_solicitar_reembolso_de_despesa"
+                "target": "task_aprovacao_do_gestor"
               }
             ],
             "pendingQuestions": [
@@ -1199,7 +1202,7 @@
                 "id": "pq_1",
                 "question": "Como o runtime deve atribuir o papel “Colaborador”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_solicitar_reembolso_de_despesa"
+                "relatedNodeId": "task_informar_o_colaborador_sobre_a_reprovacao"
               },
               {
                 "id": "pq_2",
@@ -1211,29 +1214,16 @@
                 "id": "pq_3",
                 "question": "Como o runtime deve atribuir o papel “Diretor”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_aprovacao_do_diretor"
+                "relatedNodeId": "task_segunda_aprovacao_do_diretor"
               },
               {
                 "id": "pq_4",
                 "question": "Como o runtime deve atribuir o papel “Financeiro”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_pagar_reembolso"
-              },
-              {
-                "id": "pq_5",
-                "question": "Qual papel deve executar uma das atividades descritas?",
-                "blocking": true,
-                "relatedNodeId": "task_informar_colaborador_da_reprovacao"
+                "relatedNodeId": "task_pagar_o_reembolso"
               }
             ],
-            "assumptions": [
-              {
-                "id": "suggestion_o_campo_descricao_foi_sugerido_mas_nao_ha_tr",
-                "text": "O campo “Descrição” foi sugerido, mas não há trecho confirmado que peça sua coleta; ele ficou fora do formulário.",
-                "confirmed": false,
-                "origin": "inference"
-              }
-            ],
+            "assumptions": [],
             "policies": {
               "manualApprovalRequired": true,
               "allowExecution": false
@@ -1296,65 +1286,53 @@
                   "confirmed": false
                 },
                 {
-                  "path": "roles/responsavel_pendente",
-                  "name": "Responsável pendente",
-                  "source": "inference",
-                  "confirmed": false
-                },
-                {
-                  "path": "roles/responsavel_pendente/assignment",
-                  "name": "Responsável pendente",
-                  "source": "inference",
-                  "confirmed": false
-                },
-                {
                   "path": "startFields/valor",
                   "name": "Valor",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "1fdd720692f248285b6d43352f86205ce2432ec6999840b642a196c23aa8b4cd"
+                  "evidenceSha256": "b4fb32196152ad89faeb5afb67ff9802fc0ebc3f6b9b88b7d48c16b41ef22fc1"
+                },
+                {
+                  "path": "startFields/descricao",
+                  "name": "Descrição",
+                  "source": "user",
+                  "confirmed": true,
+                  "evidenceSha256": "b4fb32196152ad89faeb5afb67ff9802fc0ebc3f6b9b88b7d48c16b41ef22fc1"
                 },
                 {
                   "path": "activities/0",
-                  "name": "Solicitar reembolso de despesa",
-                  "source": "user",
-                  "confirmed": true,
-                  "evidenceSha256": "f2122cdb4f458b2738b5b2c94b2a0097f16a7d42ddc91196a8253593300cba89"
-                },
-                {
-                  "path": "activities/1",
                   "name": "Aprovação do gestor",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "fb1c32770c5c53d8f137092be38a18fb17d4d938ea944ecac8cfbf422d543678"
                 },
                 {
-                  "path": "activities/1/0",
-                  "name": "Aprovação do diretor",
+                  "path": "activities/0/0",
+                  "name": "Segunda aprovação do diretor",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "7e3409dc35dc3e0640eb3a16a5b1a86f04305228b1247ca9cf990c735d895902"
                 },
                 {
-                  "path": "activities/1/0/0",
-                  "name": "Pagar reembolso",
+                  "path": "activities/0/0/0",
+                  "name": "Pagar o reembolso",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "29f82b2555c73bfa2458fe3504542dab05d0ae8ab5b09cf0145bb5363d3da63f"
                 },
                 {
-                  "path": "activities/1/0/1",
-                  "name": "Informar colaborador da reprovação",
+                  "path": "activities/0/0/1",
+                  "name": "Informar o colaborador sobre a reprovação",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "41697b60f8b2cad9577f10a1a7d03f60624a52edacdbac8599a1b9ea37e9db9d"
+                  "evidenceSha256": "98980d7f977242d92277d1b8de4c5949c50b577e5c76ca57da8f0ebc583dc9f8"
                 },
                 {
-                  "path": "activities/1/1",
-                  "name": "Informar colaborador da reprovação",
+                  "path": "activities/0/1",
+                  "name": "Informar o colaborador sobre a reprovação",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "41697b60f8b2cad9577f10a1a7d03f60624a52edacdbac8599a1b9ea37e9db9d"
+                  "evidenceSha256": "98980d7f977242d92277d1b8de4c5949c50b577e5c76ca57da8f0ebc583dc9f8"
                 },
                 {
                   "path": "rules/0",
@@ -1390,8 +1368,8 @@
           },
           "forbiddenHits": [],
           "unexpectedTasks": [
-            "Informar colaborador da reprovação",
-            "Informar colaborador da reprovação"
+            "Informar o colaborador sobre a reprovação",
+            "Informar o colaborador sobre a reprovação"
           ]
         },
         {
@@ -1402,17 +1380,17 @@
           "questionsAsked": 3,
           "repeatedQuestions": 0,
           "askedFirst": true,
-          "calls": 3,
-          "latencyMs": 16237,
-          "inputTokens": 20161,
-          "cachedInputTokens": 14232,
-          "outputTokens": 1900,
-          "costUsd": 0.0520084,
+          "calls": 2,
+          "latencyMs": 9705,
+          "inputTokens": 12707,
+          "cachedInputTokens": 9877,
+          "outputTokens": 858,
+          "costUsd": 0.0256414,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_solicitacao_de_ferias",
             "name": "Solicitação de férias",
-            "description": "Permitir que o servidor solicite férias para aprovação do gestor, com registro pelo RH quando aprovado e comunicação do motivo ao servidor quando reprovado, encerrando o processo.",
+            "description": "Permitir que o servidor solicite férias, com aprovação do gestor e registro das férias pelo RH quando aprovado.",
             "locale": "pt-BR",
             "targetProfile": "generic-bpmn2",
             "status": "needs-input",
@@ -1584,21 +1562,15 @@
                 "name": "Aprovar solicitação de férias"
               },
               {
-                "id": "task_registrar_ferias",
+                "id": "task_registrar_as_ferias",
                 "type": "userTask",
-                "name": "Registrar férias",
+                "name": "Registrar as férias",
                 "roleId": "role_rh"
               },
               {
-                "id": "task_informar_o_servidor_do_motivo_da_reprovacao",
+                "id": "task_informar_o_motivo_da_reprovacao_ao_servidor",
                 "type": "userTask",
-                "name": "Informar o servidor do motivo da reprovação",
-                "roleId": "role_servidor"
-              },
-              {
-                "id": "task_solicitar_ferias",
-                "type": "userTask",
-                "name": "Solicitar férias",
+                "name": "Informar o motivo da reprovação ao servidor",
                 "roleId": "role_servidor"
               }
             ],
@@ -1610,18 +1582,18 @@
               },
               {
                 "id": "flow_0002",
-                "source": "task_registrar_ferias",
+                "source": "task_registrar_as_ferias",
                 "target": "end_process_finished"
               },
               {
                 "id": "flow_0003",
-                "source": "task_informar_o_servidor_do_motivo_da_reprovacao",
+                "source": "task_informar_o_motivo_da_reprovacao_ao_servidor",
                 "target": "end_process_finished"
               },
               {
                 "id": "flow_0004",
                 "source": "gateway_aprovar_solicitacao_de_ferias",
-                "target": "task_registrar_ferias",
+                "target": "task_registrar_as_ferias",
                 "label": "Aprovado",
                 "condition": {
                   "op": "eq",
@@ -1636,7 +1608,7 @@
               {
                 "id": "flow_0005",
                 "source": "gateway_aprovar_solicitacao_de_ferias",
-                "target": "task_informar_o_servidor_do_motivo_da_reprovacao",
+                "target": "task_informar_o_motivo_da_reprovacao_ao_servidor",
                 "label": "Rejeitado",
                 "condition": {
                   "op": "eq",
@@ -1650,13 +1622,8 @@
               },
               {
                 "id": "flow_0006",
-                "source": "task_solicitar_ferias",
-                "target": "task_aprovar_solicitacao_de_ferias"
-              },
-              {
-                "id": "flow_0007",
                 "source": "start_solicitacao_de_ferias",
-                "target": "task_solicitar_ferias"
+                "target": "task_aprovar_solicitacao_de_ferias"
               }
             ],
             "pendingQuestions": [
@@ -1664,7 +1631,7 @@
                 "id": "pq_1",
                 "question": "Como o runtime deve atribuir o papel “Servidor”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_informar_o_servidor_do_motivo_da_reprovacao"
+                "relatedNodeId": "task_informar_o_motivo_da_reprovacao_ao_servidor"
               },
               {
                 "id": "pq_2",
@@ -1676,7 +1643,7 @@
                 "id": "pq_3",
                 "question": "Como o runtime deve atribuir o papel “RH”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_registrar_ferias"
+                "relatedNodeId": "task_registrar_as_ferias"
               }
             ],
             "assumptions": [],
@@ -1694,7 +1661,7 @@
                   "name": "Servidor",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "1e2c8383b5d606a7c20f13c1867027327668111cc5d6ef9ca06b7cf6e159057b"
+                  "evidenceSha256": "625e7700cce7a47caf98c045201f62088668d75f2d4c3f7f7488841d0296744a"
                 },
                 {
                   "path": "roles/servidor/assignment",
@@ -1733,42 +1700,35 @@
                   "name": "Data inicial das férias",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "de9fec2fcc8843907aa488dbbd6b228a19114aa6d84309138b0eb236dae247ed"
+                  "evidenceSha256": "cad1a4566f45fc65229dec042ba0fad58feb104ea96efcb83fb3dbab14d23bb0"
                 },
                 {
                   "path": "startFields/data_final_das_ferias",
                   "name": "Data final das férias",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "de9fec2fcc8843907aa488dbbd6b228a19114aa6d84309138b0eb236dae247ed"
+                  "evidenceSha256": "265857bb3badf90ed415008fe4211c13c520bba7933f9195bfd382b61ae3294b"
                 },
                 {
                   "path": "activities/0",
-                  "name": "Solicitar férias",
-                  "source": "user",
-                  "confirmed": true,
-                  "evidenceSha256": "1e2c8383b5d606a7c20f13c1867027327668111cc5d6ef9ca06b7cf6e159057b"
-                },
-                {
-                  "path": "activities/1",
                   "name": "Aprovar solicitação de férias",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "6fec72fc1e9143502822d28a1f08177eb3a23743c75286ccb066c566f8527507"
                 },
                 {
-                  "path": "activities/1/0",
-                  "name": "Registrar férias",
+                  "path": "activities/0/0",
+                  "name": "Registrar as férias",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "ba4c6f9ebb1ea51ec81557b96f9c5d04656eda6cb5358e82b35a5adbd31e8419"
+                  "evidenceSha256": "458a2d6711be00e63f364e6453cebcc019e1148a10c92da9299542de1e99fe2b"
                 },
                 {
-                  "path": "activities/1/1",
-                  "name": "Informar o servidor do motivo da reprovação",
+                  "path": "activities/0/1",
+                  "name": "Informar o motivo da reprovação ao servidor",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "8aba801b72d8fcc2be34c77315a1350f1f27e9fe0dfc9f86d2d39d61f77a90fa"
+                  "evidenceSha256": "471cffbfe3c58d9ba33868f9da475f9e67b7a9468a98f3322a50619ec6124287"
                 },
                 {
                   "path": "rules/0",
@@ -1797,30 +1757,29 @@
           },
           "forbiddenHits": [],
           "unexpectedTasks": [
-            "Registrar férias",
-            "Informar o servidor do motivo da reprovação",
-            "Solicitar férias"
+            "Registrar as férias",
+            "Informar o motivo da reprovação ao servidor"
           ]
         },
         {
           "id": "S05-correcao-ciclo",
           "title": "Devolução para correção antes da aprovação",
           "outcome": "validated",
-          "clarificationRounds": 0,
-          "questionsAsked": 0,
+          "clarificationRounds": 1,
+          "questionsAsked": 1,
           "repeatedQuestions": 0,
-          "askedFirst": false,
-          "calls": 1,
-          "latencyMs": 8164,
-          "inputTokens": 6103,
-          "cachedInputTokens": 5593,
-          "outputTokens": 1034,
-          "costUsd": 0.015227599999999999,
+          "askedFirst": true,
+          "calls": 2,
+          "latencyMs": 17136,
+          "inputTokens": 12459,
+          "cachedInputTokens": 9948,
+          "outputTokens": 1966,
+          "costUsd": 0.035318600000000006,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_pedido_de_certidao",
             "name": "Pedido de certidão",
-            "description": "Permitir que o requerente solicite uma certidão, com conferência dos dados pelo atendente, correção quando incompletos e emissão da certidão quando completos.",
+            "description": "Permitir que o requerente envie um pedido de certidão, que o atendente confira os dados e emita a certidão quando estiverem completos, devolvendo ao requerente para correção quando estiverem incompletos.",
             "locale": "pt-BR",
             "targetProfile": "generic-bpmn2",
             "status": "needs-input",
@@ -1850,16 +1809,20 @@
                 }
               },
               {
-                "key": "var_form_conferir_dados_dados_completos",
-                "type": "boolean",
+                "key": "var_form_conferir_os_dados_dados_completos",
+                "type": "string",
                 "required": true,
                 "sensitive": false,
                 "scope": "process",
                 "source": {
                   "kind": "form",
-                  "formId": "form_conferir_dados",
+                  "formId": "form_conferir_os_dados",
                   "fieldKey": "field_dados_completos"
-                }
+                },
+                "enumValues": [
+                  "completos",
+                  "incompletos"
+                ]
               }
             ],
             "forms": [
@@ -1878,16 +1841,26 @@
                 ]
               },
               {
-                "id": "form_conferir_dados",
-                "name": "Conferir dados",
+                "id": "form_conferir_os_dados",
+                "name": "Conferir os dados",
                 "usage": "task",
                 "fields": [
                   {
                     "key": "field_dados_completos",
-                    "label": "Dados completos",
-                    "type": "boolean",
+                    "label": "Dados completos?",
+                    "type": "select",
                     "required": true,
-                    "bindTo": "var_form_conferir_dados_dados_completos"
+                    "bindTo": "var_form_conferir_os_dados_dados_completos",
+                    "options": [
+                      {
+                        "label": "Completos",
+                        "value": "completos"
+                      },
+                      {
+                        "label": "Incompletos",
+                        "value": "incompletos"
+                      }
+                    ]
                   }
                 ]
               }
@@ -1905,9 +1878,9 @@
                 "name": "Processo encerrado"
               },
               {
-                "id": "gateway_dados_estao_completos",
+                "id": "gateway_dados_completos",
                 "type": "exclusiveGateway",
-                "name": "Dados estão completos?"
+                "name": "Dados completos?"
               },
               {
                 "id": "task_corrigir_pedido",
@@ -1922,11 +1895,11 @@
                 "roleId": "role_atendente"
               },
               {
-                "id": "task_conferir_dados",
+                "id": "task_conferir_os_dados",
                 "type": "userTask",
-                "name": "Conferir dados",
+                "name": "Conferir os dados",
                 "roleId": "role_atendente",
-                "formId": "form_conferir_dados"
+                "formId": "form_conferir_os_dados"
               },
               {
                 "id": "task_enviar_pedido_de_certidao",
@@ -1939,20 +1912,20 @@
               {
                 "id": "flow_0001",
                 "source": "task_corrigir_pedido",
-                "target": "task_conferir_dados"
+                "target": "task_conferir_os_dados"
               },
               {
                 "id": "flow_0002",
-                "source": "gateway_dados_estao_completos",
+                "source": "gateway_dados_completos",
                 "target": "task_corrigir_pedido",
                 "label": "Incompletos",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_form_conferir_dados_dados_completos"
+                    "var": "var_form_conferir_os_dados_dados_completos"
                   },
                   "right": {
-                    "literal": false
+                    "literal": "incompletos"
                   }
                 }
               },
@@ -1963,28 +1936,28 @@
               },
               {
                 "id": "flow_0004",
-                "source": "gateway_dados_estao_completos",
+                "source": "gateway_dados_completos",
                 "target": "task_emitir_certidao",
                 "label": "Completos",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_form_conferir_dados_dados_completos"
+                    "var": "var_form_conferir_os_dados_dados_completos"
                   },
                   "right": {
-                    "literal": true
+                    "literal": "completos"
                   }
                 }
               },
               {
                 "id": "flow_0005",
-                "source": "task_conferir_dados",
-                "target": "gateway_dados_estao_completos"
+                "source": "task_conferir_os_dados",
+                "target": "gateway_dados_completos"
               },
               {
                 "id": "flow_0006",
                 "source": "task_enviar_pedido_de_certidao",
-                "target": "task_conferir_dados"
+                "target": "task_conferir_os_dados"
               },
               {
                 "id": "flow_0007",
@@ -2058,24 +2031,24 @@
                 },
                 {
                   "path": "activities/1",
-                  "name": "Conferir dados",
+                  "name": "Conferir os dados",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "b992d081db2d09dd613ff058e9e520a804e792728037562e1b7ded61396fadad"
                 },
                 {
                   "path": "activities/1/fields/dados_completos",
-                  "name": "Dados completos",
+                  "name": "Dados completos?",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "fa110f5940dec804617a6b0dafffe810b783a04fb36bdffe3c23b8b6bb997c04"
                 },
                 {
                   "path": "activities/2",
-                  "name": "Dados estão completos?",
+                  "name": "Dados completos?",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "f1a54bf04f68868706d2c48ba13af3e5843aaf4034bcd0668bf4a8944d6f873b"
+                  "evidenceSha256": "18300db42d12f775f9e187644ce917d0c01339b92dd2eb2cd962460d830a6a2f"
                 },
                 {
                   "path": "activities/2/0",
@@ -2128,16 +2101,16 @@
           "repeatedQuestions": 0,
           "askedFirst": false,
           "calls": 1,
-          "latencyMs": 8497,
-          "inputTokens": 6115,
-          "cachedInputTokens": 5609,
-          "outputTokens": 1127,
-          "costUsd": 0.0161538,
+          "latencyMs": 9818,
+          "inputTokens": 6122,
+          "cachedInputTokens": 4355,
+          "outputTokens": 1185,
+          "costUsd": 0.021507000000000005,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_abertura_de_vaga",
             "name": "Abertura de vaga",
-            "description": "Permitir que o gestor solicite a abertura de uma vaga, com análise do RH e decisão da diretoria, publicação da vaga pelo RH quando aprovada e comunicação ao gestor quando reprovada.",
+            "description": "Permitir que o gestor solicite a abertura de uma vaga, com análise do RH, decisão da diretoria e publicação da vaga pelo RH, comunicando o gestor em caso de reprovação.",
             "locale": "pt-BR",
             "targetProfile": "generic-bpmn2",
             "status": "needs-input",
@@ -2172,6 +2145,18 @@
                 }
               },
               {
+                "key": "var_form_abertura_de_vaga_request_justificativa",
+                "type": "string",
+                "required": true,
+                "sensitive": false,
+                "scope": "process",
+                "source": {
+                  "kind": "form",
+                  "formId": "form_abertura_de_vaga_request",
+                  "fieldKey": "field_justificativa"
+                }
+              },
+              {
                 "key": "var_analisar_solicitacao_de_vaga_decision",
                 "type": "string",
                 "required": true,
@@ -2188,14 +2173,14 @@
                 ]
               },
               {
-                "key": "var_decidir_abertura_da_vaga_decision",
+                "key": "var_decidir_sobre_abertura_da_vaga_decision",
                 "type": "string",
                 "required": true,
                 "sensitive": false,
                 "scope": "process",
                 "source": {
                   "kind": "form",
-                  "formId": "form_decidir_abertura_da_vaga",
+                  "formId": "form_decidir_sobre_abertura_da_vaga",
                   "fieldKey": "field_decisao_2"
                 },
                 "enumValues": [
@@ -2216,6 +2201,13 @@
                     "type": "text",
                     "required": true,
                     "bindTo": "var_form_abertura_de_vaga_request_cargo"
+                  },
+                  {
+                    "key": "field_justificativa",
+                    "label": "Justificativa",
+                    "type": "textarea",
+                    "required": true,
+                    "bindTo": "var_form_abertura_de_vaga_request_justificativa"
                   }
                 ]
               },
@@ -2244,8 +2236,8 @@
                 ]
               },
               {
-                "id": "form_decidir_abertura_da_vaga",
-                "name": "Decidir abertura da vaga",
+                "id": "form_decidir_sobre_abertura_da_vaga",
+                "name": "Decidir sobre abertura da vaga",
                 "usage": "task",
                 "fields": [
                   {
@@ -2253,7 +2245,7 @@
                     "label": "Decisão",
                     "type": "select",
                     "required": true,
-                    "bindTo": "var_decidir_abertura_da_vaga_decision",
+                    "bindTo": "var_decidir_sobre_abertura_da_vaga_decision",
                     "options": [
                       {
                         "label": "Aprovar",
@@ -2293,16 +2285,16 @@
                 "name": "Analisar solicitação de vaga"
               },
               {
-                "id": "task_decidir_abertura_da_vaga",
+                "id": "task_decidir_sobre_abertura_da_vaga",
                 "type": "userTask",
-                "name": "Decidir abertura da vaga",
+                "name": "Decidir sobre abertura da vaga",
                 "roleId": "role_diretoria",
-                "formId": "form_decidir_abertura_da_vaga"
+                "formId": "form_decidir_sobre_abertura_da_vaga"
               },
               {
-                "id": "gateway_decidir_abertura_da_vaga",
+                "id": "gateway_decidir_sobre_abertura_da_vaga",
                 "type": "exclusiveGateway",
-                "name": "Decidir abertura da vaga"
+                "name": "Decidir sobre abertura da vaga"
               },
               {
                 "id": "task_publicar_vaga",
@@ -2337,8 +2329,8 @@
               },
               {
                 "id": "flow_0002",
-                "source": "task_decidir_abertura_da_vaga",
-                "target": "gateway_decidir_abertura_da_vaga"
+                "source": "task_decidir_sobre_abertura_da_vaga",
+                "target": "gateway_decidir_sobre_abertura_da_vaga"
               },
               {
                 "id": "flow_0003",
@@ -2352,13 +2344,13 @@
               },
               {
                 "id": "flow_0005",
-                "source": "gateway_decidir_abertura_da_vaga",
+                "source": "gateway_decidir_sobre_abertura_da_vaga",
                 "target": "task_publicar_vaga",
                 "label": "Aprovado",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_decidir_abertura_da_vaga_decision"
+                    "var": "var_decidir_sobre_abertura_da_vaga_decision"
                   },
                   "right": {
                     "literal": "approved"
@@ -2367,13 +2359,13 @@
               },
               {
                 "id": "flow_0006",
-                "source": "gateway_decidir_abertura_da_vaga",
+                "source": "gateway_decidir_sobre_abertura_da_vaga",
                 "target": "task_comunicar_reprovacao_ao_gestor",
                 "label": "Rejeitado",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_decidir_abertura_da_vaga_decision"
+                    "var": "var_decidir_sobre_abertura_da_vaga_decision"
                   },
                   "right": {
                     "literal": "rejected"
@@ -2388,7 +2380,7 @@
               {
                 "id": "flow_0008",
                 "source": "gateway_analisar_solicitacao_de_vaga",
-                "target": "task_decidir_abertura_da_vaga",
+                "target": "task_decidir_sobre_abertura_da_vaga",
                 "label": "Aprovado",
                 "condition": {
                   "op": "eq",
@@ -2443,17 +2435,10 @@
                 "id": "pq_3",
                 "question": "Como o runtime deve atribuir o papel “Diretoria”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_decidir_abertura_da_vaga"
+                "relatedNodeId": "task_decidir_sobre_abertura_da_vaga"
               }
             ],
-            "assumptions": [
-              {
-                "id": "suggestion_o_campo_justificativa_foi_sugerido_mas_nao_h",
-                "text": "O campo “Justificativa” foi sugerido, mas não há trecho confirmado que peça sua coleta; ele ficou fora do formulário.",
-                "confirmed": false,
-                "origin": "inference"
-              }
-            ],
+            "assumptions": [],
             "policies": {
               "manualApprovalRequired": true,
               "allowExecution": false
@@ -2507,7 +2492,14 @@
                   "name": "Cargo",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "ea5f59b254afabfa52a5bb4acce4f5e59415925548d0a6788f8579e8c9c38f74"
+                  "evidenceSha256": "c97032d4021a15604a813f59663acd032a716563e968f1d995723bebba52760c"
+                },
+                {
+                  "path": "startFields/justificativa",
+                  "name": "Justificativa",
+                  "source": "user",
+                  "confirmed": true,
+                  "evidenceSha256": "c97032d4021a15604a813f59663acd032a716563e968f1d995723bebba52760c"
                 },
                 {
                   "path": "activities/0",
@@ -2525,7 +2517,7 @@
                 },
                 {
                   "path": "activities/1/0",
-                  "name": "Decidir abertura da vaga",
+                  "name": "Decidir sobre abertura da vaga",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "8a24996e004748c7a9bc3753d7125b9a77d793e19b63ee4a0250176b91ec74da"
@@ -2535,42 +2527,42 @@
                   "name": "Publicar vaga",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "477b89fe0584e3a0817f1d918b245f9e0a7fd75c70c0a064637b01c67e27c116"
+                  "evidenceSha256": "38d2de4720beddf307dcf707ab7d47ebe69dc1475dffb60b55c9f79eafbff7d2"
                 },
                 {
                   "path": "activities/1/0/1",
                   "name": "Comunicar reprovação ao gestor",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "68a8148c8d1b78b0cdf57d32d29947378f53ae34ff9b0dae386b0d12f5f9d899"
+                  "evidenceSha256": "cee6a1cde845108f2d0d0f36fe0e74eea2e21c2632bf71ed1bd874ebc1953ccc"
                 },
                 {
                   "path": "activities/1/1",
                   "name": "Comunicar reprovação ao gestor",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "68a8148c8d1b78b0cdf57d32d29947378f53ae34ff9b0dae386b0d12f5f9d899"
+                  "evidenceSha256": "cee6a1cde845108f2d0d0f36fe0e74eea2e21c2632bf71ed1bd874ebc1953ccc"
                 },
                 {
                   "path": "rules/0",
-                  "name": "O RH só encaminha a solicitação à diretoria se estiver de acordo.",
-                  "source": "user",
-                  "confirmed": true,
-                  "evidenceSha256": "55713114016c77f705146792d07c33e026e6f6e2422092371ed7451a2814eff4"
-                },
-                {
-                  "path": "rules/1",
-                  "name": "O RH publica a vaga somente se a diretoria aprovar.",
-                  "source": "user",
-                  "confirmed": true,
-                  "evidenceSha256": "38d2de4720beddf307dcf707ab7d47ebe69dc1475dffb60b55c9f79eafbff7d2"
-                },
-                {
-                  "path": "rules/2",
-                  "name": "Se o RH ou a diretoria reprovarem, o gestor é comunicado.",
+                  "name": "Se o RH reprovar a solicitação, o gestor é comunicado.",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "cee6a1cde845108f2d0d0f36fe0e74eea2e21c2632bf71ed1bd874ebc1953ccc"
+                },
+                {
+                  "path": "rules/1",
+                  "name": "Se a diretoria reprovar a solicitação, o gestor é comunicado.",
+                  "source": "user",
+                  "confirmed": true,
+                  "evidenceSha256": "cee6a1cde845108f2d0d0f36fe0e74eea2e21c2632bf71ed1bd874ebc1953ccc"
+                },
+                {
+                  "path": "rules/2",
+                  "name": "A vaga só é publicada pelo RH após aprovação da diretoria.",
+                  "source": "user",
+                  "confirmed": true,
+                  "evidenceSha256": "38d2de4720beddf307dcf707ab7d47ebe69dc1475dffb60b55c9f79eafbff7d2"
                 }
               ]
             }
@@ -2599,11 +2591,11 @@
           "repeatedQuestions": 0,
           "askedFirst": false,
           "calls": 1,
-          "latencyMs": 5665,
-          "inputTokens": 6092,
-          "cachedInputTokens": 5582,
-          "outputTokens": 732,
-          "costUsd": 0.0121844,
+          "latencyMs": 7188,
+          "inputTokens": 6089,
+          "cachedInputTokens": 4355,
+          "outputTokens": 737,
+          "costUsd": 0.0169,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_solicitacao_de_viagem_a_servico",
@@ -2768,9 +2760,9 @@
                 "roleId": "role_setor_de_viagens"
               },
               {
-                "id": "task_avisar_servidor",
+                "id": "task_avisar_servidor_da_reprovacao",
                 "type": "userTask",
-                "name": "Avisar servidor",
+                "name": "Avisar servidor da reprovação",
                 "roleId": "role_servidor"
               },
               {
@@ -2793,7 +2785,7 @@
               },
               {
                 "id": "flow_0003",
-                "source": "task_avisar_servidor",
+                "source": "task_avisar_servidor_da_reprovacao",
                 "target": "end_process_finished"
               },
               {
@@ -2814,7 +2806,7 @@
               {
                 "id": "flow_0005",
                 "source": "gateway_aprovar_viagem_a_servico",
-                "target": "task_avisar_servidor",
+                "target": "task_avisar_servidor_da_reprovacao",
                 "label": "Rejeitado",
                 "condition": {
                   "op": "eq",
@@ -2842,7 +2834,7 @@
                 "id": "pq_1",
                 "question": "Como o runtime deve atribuir o papel “Servidor”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_avisar_servidor"
+                "relatedNodeId": "task_avisar_servidor_da_reprovacao"
               },
               {
                 "id": "pq_2",
@@ -2950,7 +2942,7 @@
                 },
                 {
                   "path": "activities/1/1",
-                  "name": "Avisar servidor",
+                  "name": "Avisar servidor da reprovação",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "a5e4933f6f1b2e63ff0a6fc9ce23bc9b0fb4ef40a787ab5d27d93d652c8ea441"
@@ -2982,7 +2974,7 @@
           },
           "forbiddenHits": [],
           "unexpectedTasks": [
-            "Avisar servidor",
+            "Avisar servidor da reprovação",
             "Solicitar viagem a serviço"
           ]
         },
@@ -2995,16 +2987,16 @@
           "repeatedQuestions": 0,
           "askedFirst": false,
           "calls": 1,
-          "latencyMs": 5517,
-          "inputTokens": 6093,
-          "cachedInputTokens": 5583,
-          "outputTokens": 702,
-          "costUsd": 0.0118716,
+          "latencyMs": 6780,
+          "inputTokens": 6098,
+          "cachedInputTokens": 4355,
+          "outputTokens": 641,
+          "costUsd": 0.015948,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_solicitacao_de_acesso_a_sistema",
             "name": "Solicitação de acesso a sistema",
-            "description": "Permitir que o colaborador solicite acesso a um sistema, com aprovação do gestor e concessão pela equipe de suporte, ou comunicação da negativa ao colaborador.",
+            "description": "Permitir que o colaborador solicite acesso a um sistema, com aprovação do gestor e concessão do acesso pela equipe de suporte, ou comunicação da negativa ao colaborador.",
             "locale": "pt-BR",
             "targetProfile": "generic-bpmn2",
             "status": "needs-input",
@@ -3039,14 +3031,14 @@
                 }
               },
               {
-                "key": "var_aprovar_ou_reprovar_o_acesso_decision",
+                "key": "var_aprovar_solicitacao_de_acesso_decision",
                 "type": "string",
                 "required": true,
                 "sensitive": false,
                 "scope": "process",
                 "source": {
                   "kind": "form",
-                  "formId": "form_aprovar_ou_reprovar_o_acesso",
+                  "formId": "form_aprovar_solicitacao_de_acesso",
                   "fieldKey": "field_decisao"
                 },
                 "enumValues": [
@@ -3055,14 +3047,14 @@
                 ]
               },
               {
-                "key": "var_aprovar_ou_reprovar_o_acesso_rejection_reaso",
+                "key": "var_aprovar_solicitacao_de_acesso_rejection_reas",
                 "type": "string",
                 "required": false,
                 "sensitive": false,
                 "scope": "process",
                 "source": {
                   "kind": "form",
-                  "formId": "form_aprovar_ou_reprovar_o_acesso",
+                  "formId": "form_aprovar_solicitacao_de_acesso",
                   "fieldKey": "field_motivo_da_rejeicao"
                 }
               }
@@ -3083,8 +3075,8 @@
                 ]
               },
               {
-                "id": "form_aprovar_ou_reprovar_o_acesso",
-                "name": "Aprovar ou reprovar o acesso",
+                "id": "form_aprovar_solicitacao_de_acesso",
+                "name": "Aprovar solicitação de acesso",
                 "usage": "task",
                 "fields": [
                   {
@@ -3092,7 +3084,7 @@
                     "label": "Decisão",
                     "type": "select",
                     "required": true,
-                    "bindTo": "var_aprovar_ou_reprovar_o_acesso_decision",
+                    "bindTo": "var_aprovar_solicitacao_de_acesso_decision",
                     "options": [
                       {
                         "label": "Aprovar",
@@ -3109,11 +3101,11 @@
                     "label": "Motivo da rejeição",
                     "type": "textarea",
                     "required": false,
-                    "bindTo": "var_aprovar_ou_reprovar_o_acesso_rejection_reaso",
+                    "bindTo": "var_aprovar_solicitacao_de_acesso_rejection_reas",
                     "visibleWhen": {
                       "op": "eq",
                       "left": {
-                        "var": "var_aprovar_ou_reprovar_o_acesso_decision"
+                        "var": "var_aprovar_solicitacao_de_acesso_decision"
                       },
                       "right": {
                         "literal": "rejected"
@@ -3122,7 +3114,7 @@
                     "requiredWhen": {
                       "op": "eq",
                       "left": {
-                        "var": "var_aprovar_ou_reprovar_o_acesso_decision"
+                        "var": "var_aprovar_solicitacao_de_acesso_decision"
                       },
                       "right": {
                         "literal": "rejected"
@@ -3145,61 +3137,55 @@
                 "name": "Processo encerrado"
               },
               {
-                "id": "task_aprovar_ou_reprovar_o_acesso",
+                "id": "task_aprovar_solicitacao_de_acesso",
                 "type": "userTask",
-                "name": "Aprovar ou reprovar o acesso",
+                "name": "Aprovar solicitação de acesso",
                 "roleId": "role_gestor",
-                "formId": "form_aprovar_ou_reprovar_o_acesso"
+                "formId": "form_aprovar_solicitacao_de_acesso"
               },
               {
-                "id": "gateway_aprovar_ou_reprovar_o_acesso",
+                "id": "gateway_aprovar_solicitacao_de_acesso",
                 "type": "exclusiveGateway",
-                "name": "Aprovar ou reprovar o acesso"
+                "name": "Aprovar solicitação de acesso"
               },
               {
-                "id": "task_conceder_o_acesso",
+                "id": "task_conceder_acesso",
                 "type": "userTask",
-                "name": "Conceder o acesso",
+                "name": "Conceder acesso",
                 "roleId": "role_equipe_de_suporte"
               },
               {
-                "id": "task_receber_a_negativa",
+                "id": "task_receber_negativa",
                 "type": "userTask",
-                "name": "Receber a negativa",
-                "roleId": "role_colaborador"
-              },
-              {
-                "id": "task_pedir_acesso_a_um_sistema",
-                "type": "userTask",
-                "name": "Pedir acesso a um sistema",
+                "name": "Receber negativa",
                 "roleId": "role_colaborador"
               }
             ],
             "flows": [
               {
                 "id": "flow_0001",
-                "source": "task_aprovar_ou_reprovar_o_acesso",
-                "target": "gateway_aprovar_ou_reprovar_o_acesso"
+                "source": "task_aprovar_solicitacao_de_acesso",
+                "target": "gateway_aprovar_solicitacao_de_acesso"
               },
               {
                 "id": "flow_0002",
-                "source": "task_conceder_o_acesso",
+                "source": "task_conceder_acesso",
                 "target": "end_process_finished"
               },
               {
                 "id": "flow_0003",
-                "source": "task_receber_a_negativa",
+                "source": "task_receber_negativa",
                 "target": "end_process_finished"
               },
               {
                 "id": "flow_0004",
-                "source": "gateway_aprovar_ou_reprovar_o_acesso",
-                "target": "task_conceder_o_acesso",
+                "source": "gateway_aprovar_solicitacao_de_acesso",
+                "target": "task_conceder_acesso",
                 "label": "Aprovado",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_aprovar_ou_reprovar_o_acesso_decision"
+                    "var": "var_aprovar_solicitacao_de_acesso_decision"
                   },
                   "right": {
                     "literal": "approved"
@@ -3208,13 +3194,13 @@
               },
               {
                 "id": "flow_0005",
-                "source": "gateway_aprovar_ou_reprovar_o_acesso",
-                "target": "task_receber_a_negativa",
+                "source": "gateway_aprovar_solicitacao_de_acesso",
+                "target": "task_receber_negativa",
                 "label": "Rejeitado",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_aprovar_ou_reprovar_o_acesso_decision"
+                    "var": "var_aprovar_solicitacao_de_acesso_decision"
                   },
                   "right": {
                     "literal": "rejected"
@@ -3223,13 +3209,8 @@
               },
               {
                 "id": "flow_0006",
-                "source": "task_pedir_acesso_a_um_sistema",
-                "target": "task_aprovar_ou_reprovar_o_acesso"
-              },
-              {
-                "id": "flow_0007",
                 "source": "start_solicitacao_de_acesso_a_sistema",
-                "target": "task_pedir_acesso_a_um_sistema"
+                "target": "task_aprovar_solicitacao_de_acesso"
               }
             ],
             "pendingQuestions": [
@@ -3237,19 +3218,19 @@
                 "id": "pq_1",
                 "question": "Como o runtime deve atribuir o papel “Colaborador”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_receber_a_negativa"
+                "relatedNodeId": "task_receber_negativa"
               },
               {
                 "id": "pq_2",
                 "question": "Como o runtime deve atribuir o papel “Gestor”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_aprovar_ou_reprovar_o_acesso"
+                "relatedNodeId": "task_aprovar_solicitacao_de_acesso"
               },
               {
                 "id": "pq_3",
                 "question": "Como o runtime deve atribuir o papel “Equipe de suporte”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_conceder_o_acesso"
+                "relatedNodeId": "task_conceder_acesso"
               }
             ],
             "assumptions": [
@@ -3317,28 +3298,21 @@
                 },
                 {
                   "path": "activities/0",
-                  "name": "Pedir acesso a um sistema",
-                  "source": "user",
-                  "confirmed": true,
-                  "evidenceSha256": "31a76ef20e880af67120522de444c1b6d63cdc844b289a09610cbefade6deba9"
-                },
-                {
-                  "path": "activities/1",
-                  "name": "Aprovar ou reprovar o acesso",
+                  "name": "Aprovar solicitação de acesso",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "fb1c32770c5c53d8f137092be38a18fb17d4d938ea944ecac8cfbf422d543678"
                 },
                 {
-                  "path": "activities/1/0",
-                  "name": "Conceder o acesso",
+                  "path": "activities/0/0",
+                  "name": "Conceder acesso",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "542bc96a3192bfddf1dce732bd0eb5f7ea7f68519025b904acc549e872671d9c"
                 },
                 {
-                  "path": "activities/1/1",
-                  "name": "Receber a negativa",
+                  "path": "activities/0/1",
+                  "name": "Receber negativa",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "8b485fe405d00a1299ade12ed22c29f3844a89f59b7a7e65905a298c7588e591"
@@ -3370,7 +3344,7 @@
           },
           "forbiddenHits": [],
           "unexpectedTasks": [
-            "Receber a negativa"
+            "Receber negativa"
           ]
         },
         {
@@ -3382,16 +3356,16 @@
           "repeatedQuestions": 0,
           "askedFirst": false,
           "calls": 1,
-          "latencyMs": 4879,
+          "latencyMs": 7423,
           "inputTokens": 6060,
-          "cachedInputTokens": 5549,
-          "outputTokens": 508,
-          "costUsd": 0.0099078,
+          "cachedInputTokens": 4355,
+          "outputTokens": 418,
+          "costUsd": 0.013545000000000001,
           "spec": {
             "schemaVersion": "1.0.0",
-            "id": "process_sugestao_do_cidadao",
-            "name": "Sugestão do cidadão",
-            "description": "Receber sugestões de cidadãos, registrá-las na ouvidoria e responder ao cidadão.",
+            "id": "process_tratamento_de_sugestao_do_cidadao",
+            "name": "Tratamento de sugestão do cidadão",
+            "description": "Permitir que o cidadão envie uma sugestão, que a ouvidoria a registre e depois responda ao cidadão.",
             "locale": "pt-BR",
             "targetProfile": "generic-bpmn2",
             "status": "needs-input",
@@ -3414,46 +3388,34 @@
             ],
             "variables": [
               {
-                "key": "var_form_sugestao_do_cidadao_request_assunto",
+                "key": "var_form_tratamento_de_sugestao_do_cidadao_reque",
                 "type": "string",
                 "required": true,
                 "sensitive": false,
                 "scope": "process",
                 "source": {
                   "kind": "form",
-                  "formId": "form_sugestao_do_cidadao_request",
+                  "formId": "form_tratamento_de_sugestao_do_cidadao_request",
                   "fieldKey": "field_assunto"
                 }
               },
               {
-                "key": "var_form_sugestao_do_cidadao_request_descricao",
+                "key": "var_form_tratamento_de_sugestao_do_cidadao_reque_2",
                 "type": "string",
                 "required": true,
                 "sensitive": false,
                 "scope": "process",
                 "source": {
                   "kind": "form",
-                  "formId": "form_sugestao_do_cidadao_request",
+                  "formId": "form_tratamento_de_sugestao_do_cidadao_request",
                   "fieldKey": "field_descricao"
-                }
-              },
-              {
-                "key": "var_form_responder_ao_cidadao_resposta_ao_cidada",
-                "type": "string",
-                "required": true,
-                "sensitive": false,
-                "scope": "process",
-                "source": {
-                  "kind": "form",
-                  "formId": "form_responder_ao_cidadao",
-                  "fieldKey": "field_resposta_ao_cidadao"
                 }
               }
             ],
             "forms": [
               {
-                "id": "form_sugestao_do_cidadao_request",
-                "name": "Sugestão do cidadão — solicitação",
+                "id": "form_tratamento_de_sugestao_do_cidadao_request",
+                "name": "Tratamento de sugestão do cidadão — solicitação",
                 "usage": "start",
                 "fields": [
                   {
@@ -3461,38 +3423,24 @@
                     "label": "Assunto",
                     "type": "text",
                     "required": true,
-                    "bindTo": "var_form_sugestao_do_cidadao_request_assunto"
+                    "bindTo": "var_form_tratamento_de_sugestao_do_cidadao_reque"
                   },
                   {
                     "key": "field_descricao",
                     "label": "Descrição",
                     "type": "textarea",
                     "required": true,
-                    "bindTo": "var_form_sugestao_do_cidadao_request_descricao"
-                  }
-                ]
-              },
-              {
-                "id": "form_responder_ao_cidadao",
-                "name": "Responder ao cidadão",
-                "usage": "task",
-                "fields": [
-                  {
-                    "key": "field_resposta_ao_cidadao",
-                    "label": "Resposta ao cidadão",
-                    "type": "textarea",
-                    "required": true,
-                    "bindTo": "var_form_responder_ao_cidadao_resposta_ao_cidada"
+                    "bindTo": "var_form_tratamento_de_sugestao_do_cidadao_reque_2"
                   }
                 ]
               }
             ],
             "nodes": [
               {
-                "id": "start_sugestao_do_cidadao",
+                "id": "start_tratamento_de_sugestao_do_cidadao",
                 "type": "startEvent",
-                "name": "Sugestão do cidadão",
-                "formId": "form_sugestao_do_cidadao_request"
+                "name": "Tratamento de sugestão do cidadão",
+                "formId": "form_tratamento_de_sugestao_do_cidadao_request"
               },
               {
                 "id": "end_process_finished",
@@ -3503,8 +3451,7 @@
                 "id": "task_responder_ao_cidadao",
                 "type": "userTask",
                 "name": "Responder ao cidadão",
-                "roleId": "role_responsavel_pendente",
-                "formId": "form_responder_ao_cidadao"
+                "roleId": "role_responsavel_pendente"
               },
               {
                 "id": "task_registrar_sugestao",
@@ -3526,7 +3473,7 @@
               },
               {
                 "id": "flow_0003",
-                "source": "start_sugestao_do_cidadao",
+                "source": "start_tratamento_de_sugestao_do_cidadao",
                 "target": "task_registrar_sugestao"
               }
             ],
@@ -3637,20 +3584,6 @@
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "b985783e4239b0844aa6170d3f2a89a8ae43864ec0c4ade5020da7ddc413dff0"
-                },
-                {
-                  "path": "activities/1/fields/resposta_ao_cidadao",
-                  "name": "Resposta ao cidadão",
-                  "source": "user",
-                  "confirmed": true,
-                  "evidenceSha256": "79ea74a07bae4781b4c59291ade054a8825867f65e2eeb97e0bd513d251c2322"
-                },
-                {
-                  "path": "rules/0",
-                  "name": "A ouvidoria registra a sugestão antes de responder ao cidadão.",
-                  "source": "user",
-                  "confirmed": true,
-                  "evidenceSha256": "20e1b5b6c6c89153a0a933a6b5c10bbc94931df816045c073100f19bb18b7ac0"
                 }
               ]
             }
@@ -3671,20 +3604,20 @@
           "title": "Compra vaga (deve perguntar antes)",
           "outcome": "validated",
           "clarificationRounds": 1,
-          "questionsAsked": 3,
+          "questionsAsked": 4,
           "repeatedQuestions": 0,
           "askedFirst": true,
           "calls": 2,
-          "latencyMs": 9963,
-          "inputTokens": 12715,
-          "cachedInputTokens": 9865,
-          "outputTokens": 977,
-          "costUsd": 0.026882999999999997,
+          "latencyMs": 13429,
+          "inputTokens": 12965,
+          "cachedInputTokens": 8710,
+          "outputTokens": 1058,
+          "costUsd": 0.033277,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_processo_de_compras",
             "name": "Processo de compras",
-            "description": "Permitir que um funcionário solicite a compra de um item, com aprovação do gestor e execução da compra pelo setor de compras.",
+            "description": "Permitir que um funcionário solicite a compra de um item, com aprovação do gestor e providência pelo setor de compras ou retorno da justificativa ao funcionário em caso de reprovação.",
             "locale": "pt-BR",
             "targetProfile": "generic-bpmn2",
             "status": "needs-input",
@@ -3966,7 +3899,7 @@
                   "name": "Funcionário",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "c893c4cdd3ba319eff7638b74fa3a48ab4b4e6b9ada9c1baf7937978c4da9674"
+                  "evidenceSha256": "8d040ededbe0410a8241216c650432997c054282d644986998384ddeda786e45"
                 },
                 {
                   "path": "roles/funcionario/assignment",
@@ -3979,7 +3912,7 @@
                   "name": "Gestor",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "d8c018a7bc34f73eec9774039ec4d7c8d5421c8825b86b3d76bb09154d394b83"
+                  "evidenceSha256": "8873482877b3b28bc39510739fb4e2b4bf05cc98787498e62da4ae79d099a049"
                 },
                 {
                   "path": "roles/gestor/assignment",
@@ -3992,7 +3925,7 @@
                   "name": "Setor de compras",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "e2c9762b23aeeb29e4a10555740eb4cb08493aa427c5e8290a0717d0734015eb"
+                  "evidenceSha256": "cd04e203371be50e7e9599bb43509d665dae05ef234fdb0b05ea312d9b9f0f38"
                 },
                 {
                   "path": "roles/setor_de_compras/assignment",
@@ -4005,28 +3938,28 @@
                   "name": "Item",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "b64ccd7afda43df64833b4dfd981818184dcc89c3b96c34558189072196923ce"
+                  "evidenceSha256": "62ffe6d43802d045ae58b52de403920e9cdada96228eaa75879a0945d697720d"
                 },
                 {
                   "path": "startFields/quantidade",
                   "name": "Quantidade",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "b64ccd7afda43df64833b4dfd981818184dcc89c3b96c34558189072196923ce"
+                  "evidenceSha256": "62ffe6d43802d045ae58b52de403920e9cdada96228eaa75879a0945d697720d"
                 },
                 {
                   "path": "activities/0",
                   "name": "Solicitar a compra",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "c893c4cdd3ba319eff7638b74fa3a48ab4b4e6b9ada9c1baf7937978c4da9674"
+                  "evidenceSha256": "8d040ededbe0410a8241216c650432997c054282d644986998384ddeda786e45"
                 },
                 {
                   "path": "activities/1",
                   "name": "Aprovar compra",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "d8c018a7bc34f73eec9774039ec4d7c8d5421c8825b86b3d76bb09154d394b83"
+                  "evidenceSha256": "8873482877b3b28bc39510739fb4e2b4bf05cc98787498e62da4ae79d099a049"
                 },
                 {
                   "path": "activities/1/0",
@@ -4047,14 +3980,21 @@
                   "name": "Se o gestor aprovar, o setor de compras providencia a compra.",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "c67c4f7fdb207f71dec0dd6cdfc869410063aaf3fd0fe56548387a91d516500a"
+                  "evidenceSha256": "5000aeb2cda861254d98a4c81065ad99ec7dcb51433048f6f833089abec2286d"
                 },
                 {
                   "path": "rules/1",
                   "name": "Se o gestor reprovar, o funcionário recebe a justificativa e o processo termina.",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "53aba5e0555834c0c2eb4f1287b65aaea5de2f67c4ed756c5728abc0c547cd03"
+                  "evidenceSha256": "044ea6a7b4f675bdd22adae8a04b128dd4d9cb19becf15fb0f5db58e15786897"
+                },
+                {
+                  "path": "rules/2",
+                  "name": "Não há outras regras.",
+                  "source": "user",
+                  "confirmed": true,
+                  "evidenceSha256": "c48cf822515414e68ee06d630b34741e3cafdd581d7066e3eedcf91e7f786ed7"
                 }
               ]
             }
@@ -4078,21 +4018,21 @@
           "id": "S11-manutencao",
           "title": "Chamado de manutenção com triagem",
           "outcome": "validated",
-          "clarificationRounds": 1,
-          "questionsAsked": 1,
+          "clarificationRounds": 0,
+          "questionsAsked": 0,
           "repeatedQuestions": 0,
-          "askedFirst": true,
-          "calls": 2,
-          "latencyMs": 17907,
-          "inputTokens": 12499,
-          "cachedInputTokens": 11475,
-          "outputTokens": 2508,
-          "costUsd": 0.03514099999999999,
+          "askedFirst": false,
+          "calls": 1,
+          "latencyMs": 8450,
+          "inputTokens": 6120,
+          "cachedInputTokens": 4355,
+          "outputTokens": 937,
+          "costUsd": 0.01903,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_chamado_de_manutencao",
             "name": "Chamado de manutenção",
-            "description": "Registrar um chamado de manutenção, classificá-lo na triagem, atendê-lo conforme a urgência e obter a confirmação da solução pelo usuário.",
+            "description": "Registrar chamados de manutenção, classificá-los na triagem, atendê-los conforme urgência e obter a confirmação da solução pelo usuário.",
             "locale": "pt-BR",
             "targetProfile": "generic-bpmn2",
             "status": "needs-input",
@@ -4110,6 +4050,11 @@
               {
                 "id": "role_equipe_de_manutencao",
                 "label": "Equipe de manutenção",
+                "resolution": "unresolved"
+              },
+              {
+                "id": "role_responsavel_pendente",
+                "label": "Responsável pendente",
                 "resolution": "unresolved"
               }
             ],
@@ -4139,15 +4084,15 @@
                 }
               },
               {
-                "key": "var_form_classificar_chamado_classificacao_do_ch",
+                "key": "var_form_classificar_o_chamado_urgencia_do_chama",
                 "type": "string",
                 "required": true,
                 "sensitive": false,
                 "scope": "process",
                 "source": {
                   "kind": "form",
-                  "formId": "form_classificar_chamado",
-                  "fieldKey": "field_classificacao_do_chamado"
+                  "formId": "form_classificar_o_chamado",
+                  "fieldKey": "field_urgencia_do_chamado"
                 },
                 "enumValues": [
                   "urgente",
@@ -4178,16 +4123,16 @@
                 ]
               },
               {
-                "id": "form_classificar_chamado",
-                "name": "Classificar chamado",
+                "id": "form_classificar_o_chamado",
+                "name": "Classificar o chamado",
                 "usage": "task",
                 "fields": [
                   {
-                    "key": "field_classificacao_do_chamado",
-                    "label": "Classificação do chamado",
+                    "key": "field_urgencia_do_chamado",
+                    "label": "Urgência do chamado",
                     "type": "select",
                     "required": true,
-                    "bindTo": "var_form_classificar_chamado_classificacao_do_ch",
+                    "bindTo": "var_form_classificar_o_chamado_urgencia_do_chama",
                     "options": [
                       {
                         "label": "Urgente",
@@ -4215,9 +4160,9 @@
                 "name": "Processo encerrado"
               },
               {
-                "id": "task_confirmar_solucao",
+                "id": "task_confirmar_a_solucao",
                 "type": "userTask",
-                "name": "Confirmar solução",
+                "name": "Confirmar a solução",
                 "roleId": "role_usuario"
               },
               {
@@ -4232,29 +4177,35 @@
                 "roleId": "role_equipe_de_manutencao"
               },
               {
-                "id": "task_atender_chamado_da_fila_depois",
+                "id": "task_atender_chamado_depois",
                 "type": "userTask",
-                "name": "Atender chamado da fila depois",
+                "name": "Atender chamado depois",
                 "roleId": "role_equipe_de_manutencao"
               },
               {
-                "id": "task_classificar_chamado",
+                "id": "task_colocar_chamado_na_fila",
                 "type": "userTask",
-                "name": "Classificar chamado",
+                "name": "Colocar chamado na fila",
+                "roleId": "role_responsavel_pendente"
+              },
+              {
+                "id": "task_classificar_o_chamado",
+                "type": "userTask",
+                "name": "Classificar o chamado",
                 "roleId": "role_triagem",
-                "formId": "form_classificar_chamado"
+                "formId": "form_classificar_o_chamado"
               }
             ],
             "flows": [
               {
                 "id": "flow_0001",
-                "source": "task_confirmar_solucao",
+                "source": "task_confirmar_a_solucao",
                 "target": "end_process_finished"
               },
               {
                 "id": "flow_0002",
                 "source": "task_atender_chamado_imediatamente",
-                "target": "task_confirmar_solucao"
+                "target": "task_confirmar_a_solucao"
               },
               {
                 "id": "flow_0003",
@@ -4264,7 +4215,7 @@
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_form_classificar_chamado_classificacao_do_ch"
+                    "var": "var_form_classificar_o_chamado_urgencia_do_chama"
                   },
                   "right": {
                     "literal": "urgente"
@@ -4273,18 +4224,23 @@
               },
               {
                 "id": "flow_0004",
-                "source": "task_atender_chamado_da_fila_depois",
-                "target": "task_confirmar_solucao"
+                "source": "task_atender_chamado_depois",
+                "target": "task_confirmar_a_solucao"
               },
               {
                 "id": "flow_0005",
+                "source": "task_colocar_chamado_na_fila",
+                "target": "task_atender_chamado_depois"
+              },
+              {
+                "id": "flow_0006",
                 "source": "gateway_chamado_e_urgente",
-                "target": "task_atender_chamado_da_fila_depois",
+                "target": "task_colocar_chamado_na_fila",
                 "label": "Não urgente",
                 "condition": {
                   "op": "eq",
                   "left": {
-                    "var": "var_form_classificar_chamado_classificacao_do_ch"
+                    "var": "var_form_classificar_o_chamado_urgencia_do_chama"
                   },
                   "right": {
                     "literal": "nao_urgente"
@@ -4292,14 +4248,14 @@
                 }
               },
               {
-                "id": "flow_0006",
-                "source": "task_classificar_chamado",
+                "id": "flow_0007",
+                "source": "task_classificar_o_chamado",
                 "target": "gateway_chamado_e_urgente"
               },
               {
-                "id": "flow_0007",
+                "id": "flow_0008",
                 "source": "start_chamado_de_manutencao",
-                "target": "task_classificar_chamado"
+                "target": "task_classificar_o_chamado"
               }
             ],
             "pendingQuestions": [
@@ -4307,22 +4263,41 @@
                 "id": "pq_1",
                 "question": "Como o runtime deve atribuir o papel “Usuário”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_confirmar_solucao"
+                "relatedNodeId": "task_confirmar_a_solucao"
               },
               {
                 "id": "pq_2",
                 "question": "Como o runtime deve atribuir o papel “Triagem”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
-                "relatedNodeId": "task_classificar_chamado"
+                "relatedNodeId": "task_classificar_o_chamado"
               },
               {
                 "id": "pq_3",
                 "question": "Como o runtime deve atribuir o papel “Equipe de manutenção”? A identidade do responsável pode ser configurada depois da prévia.",
                 "blocking": true,
                 "relatedNodeId": "task_atender_chamado_imediatamente"
+              },
+              {
+                "id": "pq_4",
+                "question": "Qual papel executa a atividade “o chamado entra na fila”?",
+                "blocking": true,
+                "relatedNodeId": "task_classificar_o_chamado"
+              },
+              {
+                "id": "pq_5",
+                "question": "Qual papel deve executar uma das atividades descritas?",
+                "blocking": true,
+                "relatedNodeId": "task_colocar_chamado_na_fila"
               }
             ],
-            "assumptions": [],
+            "assumptions": [
+              {
+                "id": "suggestion_o_responsavel_triagem_sugerido_para_a_ativid",
+                "text": "O responsável “Triagem” sugerido para a atividade não foi confirmado.",
+                "confirmed": false,
+                "origin": "inference"
+              }
+            ],
             "policies": {
               "manualApprovalRequired": true,
               "allowExecution": false
@@ -4372,6 +4347,18 @@
                   "confirmed": false
                 },
                 {
+                  "path": "roles/responsavel_pendente",
+                  "name": "Responsável pendente",
+                  "source": "inference",
+                  "confirmed": false
+                },
+                {
+                  "path": "roles/responsavel_pendente/assignment",
+                  "name": "Responsável pendente",
+                  "source": "inference",
+                  "confirmed": false
+                },
+                {
                   "path": "startFields/local",
                   "name": "Local",
                   "source": "user",
@@ -4387,14 +4374,14 @@
                 },
                 {
                   "path": "activities/0",
-                  "name": "Classificar chamado",
+                  "name": "Classificar o chamado",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "64ebd27123ebfdc4f42b377dc17a0dbbf163358ccc0a6ead34ea24a662381a8a"
                 },
                 {
-                  "path": "activities/0/fields/classificacao_do_chamado",
-                  "name": "Classificação do chamado",
+                  "path": "activities/0/fields/urgencia_do_chamado",
+                  "name": "Urgência do chamado",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "e2853e1dab92ca471bbc1db6fd4ba7100bb5be2c3e10b1c91052d6e3e4ec3933"
@@ -4415,14 +4402,21 @@
                 },
                 {
                   "path": "activities/1/1",
-                  "name": "Atender chamado da fila depois",
+                  "name": "Colocar chamado na fila",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "bb1dc865f6b37665a3578db3b9dc3e32292d18f95129ad00b8b309d8dbb3439b"
+                  "evidenceSha256": "4b4bb09eb609052c04a41c30e1b345b7a68033f5c84cc78c778edbf13a085b80"
+                },
+                {
+                  "path": "activities/1/2",
+                  "name": "Atender chamado depois",
+                  "source": "user",
+                  "confirmed": true,
+                  "evidenceSha256": "796b050fdea57e4313f25f379a3a6141b490f4fc5167e4c382e194c32325c6ba"
                 },
                 {
                   "path": "activities/2",
-                  "name": "Confirmar solução",
+                  "name": "Confirmar a solução",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "83e8baa4fc950dcdf1ff03004baf491af8b351124458b2c79536e2125518403c"
@@ -4436,10 +4430,10 @@
                 },
                 {
                   "path": "rules/1",
-                  "name": "Chamados não urgentes entram na fila e são atendidos depois pela equipe de manutenção.",
+                  "name": "Chamados não urgentes entram na fila e são atendidos depois.",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "29d7fec3c751b7ef4ff65e45507c3282d8c1c160fe1a6d7e3610dd804dc0c363"
+                  "evidenceSha256": "9cfe45b440ae9c4d10594b9888c2a1c3926d2a0b7067f940d542a7dea5a8341f"
                 }
               ]
             }
@@ -4453,22 +4447,24 @@
             "ratio": 1
           },
           "forbiddenHits": [],
-          "unexpectedTasks": []
+          "unexpectedTasks": [
+            "Colocar chamado na fila"
+          ]
         },
         {
           "id": "S12-treinamento",
           "title": "Inscrição em treinamento com vagas",
           "outcome": "validated",
-          "clarificationRounds": 0,
-          "questionsAsked": 0,
+          "clarificationRounds": 1,
+          "questionsAsked": 1,
           "repeatedQuestions": 0,
-          "askedFirst": false,
-          "calls": 1,
-          "latencyMs": 7023,
-          "inputTokens": 6093,
-          "cachedInputTokens": 5580,
-          "outputTokens": 939,
-          "costUsd": 0.014279,
+          "askedFirst": true,
+          "calls": 2,
+          "latencyMs": 18408,
+          "inputTokens": 12437,
+          "cachedInputTokens": 8710,
+          "outputTokens": 1946,
+          "costUsd": 0.039736999999999995,
           "spec": {
             "schemaVersion": "1.0.0",
             "id": "process_inscricao_em_treinamento",
@@ -4509,7 +4505,7 @@
               },
               {
                 "key": "var_form_verificar_vagas_ha_vaga",
-                "type": "boolean",
+                "type": "string",
                 "required": true,
                 "sensitive": false,
                 "scope": "process",
@@ -4517,7 +4513,11 @@
                   "kind": "form",
                   "formId": "form_verificar_vagas",
                   "fieldKey": "field_ha_vaga"
-                }
+                },
+                "enumValues": [
+                  "sim",
+                  "nao"
+                ]
               }
             ],
             "forms": [
@@ -4543,9 +4543,19 @@
                   {
                     "key": "field_ha_vaga",
                     "label": "Há vaga",
-                    "type": "boolean",
+                    "type": "select",
                     "required": true,
-                    "bindTo": "var_form_verificar_vagas_ha_vaga"
+                    "bindTo": "var_form_verificar_vagas_ha_vaga",
+                    "options": [
+                      {
+                        "label": "Sim",
+                        "value": "sim"
+                      },
+                      {
+                        "label": "Não",
+                        "value": "nao"
+                      }
+                    ]
                   }
                 ]
               }
@@ -4583,8 +4593,14 @@
                 "id": "task_verificar_vagas",
                 "type": "userTask",
                 "name": "Verificar vagas",
-                "roleId": "role_escola_de_governo",
+                "roleId": "role_responsavel_pendente",
                 "formId": "form_verificar_vagas"
+              },
+              {
+                "id": "task_inscrever_se_em_treinamento",
+                "type": "userTask",
+                "name": "Inscrever-se em treinamento",
+                "roleId": "role_servidor"
               }
             ],
             "flows": [
@@ -4604,7 +4620,7 @@
                     "var": "var_form_verificar_vagas_ha_vaga"
                   },
                   "right": {
-                    "literal": true
+                    "literal": "sim"
                   }
                 }
               },
@@ -4624,7 +4640,7 @@
                     "var": "var_form_verificar_vagas_ha_vaga"
                   },
                   "right": {
-                    "literal": false
+                    "literal": "nao"
                   }
                 }
               },
@@ -4635,27 +4651,31 @@
               },
               {
                 "id": "flow_0006",
-                "source": "start_inscricao_em_treinamento",
+                "source": "task_inscrever_se_em_treinamento",
                 "target": "task_verificar_vagas"
+              },
+              {
+                "id": "flow_0007",
+                "source": "start_inscricao_em_treinamento",
+                "target": "task_inscrever_se_em_treinamento"
               }
             ],
             "pendingQuestions": [
               {
                 "id": "pq_1",
                 "question": "Como o runtime deve atribuir o papel “Servidor”? A identidade do responsável pode ser configurada depois da prévia.",
-                "blocking": true
+                "blocking": true,
+                "relatedNodeId": "task_inscrever_se_em_treinamento"
               },
               {
                 "id": "pq_2",
                 "question": "Como o runtime deve atribuir o papel “Escola de governo”? A identidade do responsável pode ser configurada depois da prévia.",
-                "blocking": true,
-                "relatedNodeId": "task_verificar_vagas"
+                "blocking": true
               },
               {
                 "id": "pq_3",
-                "question": "Qual papel executa a atividade “a inscrição é confirmada ao servidor”?",
-                "blocking": true,
-                "relatedNodeId": "task_verificar_vagas"
+                "question": "Qual papel executa a atividade “verifica se há vagas”?",
+                "blocking": true
               },
               {
                 "id": "pq_4",
@@ -4665,9 +4685,8 @@
               },
               {
                 "id": "pq_5",
-                "question": "Qual papel executa a atividade “o servidor entra em lista de espera”?",
-                "blocking": true,
-                "relatedNodeId": "task_verificar_vagas"
+                "question": "Qual papel executa a atividade “a inscrição é confirmada ao servidor”?",
+                "blocking": true
               }
             ],
             "assumptions": [
@@ -4734,34 +4753,41 @@
                 },
                 {
                   "path": "activities/0",
-                  "name": "Verificar vagas",
+                  "name": "Inscrever-se em treinamento",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "5815243776e3e7567c6ac595fffebb957e2f0aea8288da0a6f4fc4e6092e8839"
+                  "evidenceSha256": "c61ba7fb6ec7258d7211a12bfc7700d39382e18e35751784a23c4a4e83b53826"
                 },
                 {
-                  "path": "activities/0/fields/ha_vaga",
-                  "name": "Há vaga",
+                  "path": "activities/1",
+                  "name": "Verificar vagas",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "733a975f76d63eac056b121ef899e1cfc7f9d78a073e9744cc352b48e0ffa791"
                 },
                 {
-                  "path": "activities/1",
+                  "path": "activities/1/fields/ha_vaga",
+                  "name": "Há vaga",
+                  "source": "user",
+                  "confirmed": true,
+                  "evidenceSha256": "ebab006a11bfa727a75b22ca7a8e52e414faf4c1f68c7865ad0a924ed6a72aba"
+                },
+                {
+                  "path": "activities/2",
                   "name": "Há vaga?",
                   "source": "user",
                   "confirmed": true,
-                  "evidenceSha256": "d9755b11883f7740bfe17c2676ba60a0020199806af1a467c1b3d9f2db65fc2a"
+                  "evidenceSha256": "ebab006a11bfa727a75b22ca7a8e52e414faf4c1f68c7865ad0a924ed6a72aba"
                 },
                 {
-                  "path": "activities/1/0",
+                  "path": "activities/2/0",
                   "name": "Confirmar inscrição ao servidor",
                   "source": "user",
                   "confirmed": true,
                   "evidenceSha256": "6154c034079683f3ee4fa2c341208411749cb929fa27fcb6fa28b5014332934a"
                 },
                 {
-                  "path": "activities/1/1",
+                  "path": "activities/2/1",
                   "name": "Incluir servidor em lista de espera",
                   "source": "user",
                   "confirmed": true,
@@ -4794,7 +4820,8 @@
           },
           "forbiddenHits": [],
           "unexpectedTasks": [
-            "Incluir servidor em lista de espera"
+            "Incluir servidor em lista de espera",
+            "Inscrever-se em treinamento"
           ]
         }
       ]

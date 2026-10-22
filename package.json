@@ -23,7 +23,8 @@
     "benchmark:groq": "node --env-file-if-exists=.env --import tsx scripts/benchmark-groq.ts",
     "eval": "node --env-file-if-exists=.env --import tsx scripts/eval/run-eval.ts",
     "eval:claude": "node --env-file-if-exists=.env --import tsx scripts/eval/run-eval.ts --provider claude-cli --model sonnet --approve-external",
-    "eval:scoreboard": "node --import tsx scripts/eval/run-eval.ts --rebuild"
+    "eval:scoreboard": "node --import tsx scripts/eval/run-eval.ts --rebuild",
+    "eval:replay": "node --import tsx scripts/eval/run-eval.ts --replay reports/eval/cassettes/claude-cli_sonnet.json --gate"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",

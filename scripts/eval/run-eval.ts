@@ -5,17 +5,24 @@
  *   node --env-file-if-exists=.env --import tsx scripts/eval/run-eval.ts --provider claude-cli --model sonnet --approve-external
  *   node --import tsx scripts/eval/run-eval.ts --provider ollama --model qwen2.5:3b-instruct
  *   node --import tsx scripts/eval/run-eval.ts --rebuild   (only regenerates the scoreboard from saved runs)
+ *   node --import tsx scripts/eval/run-eval.ts --replay reports/eval/cassettes/claude-cli_sonnet.json --gate
+ *
+ * Live runs record a cassette (every model response plus the hash of the prompt that produced it).
+ * Replay re-runs the whole corpus against the cassette: deterministic, free and offline, so CI catches
+ * regressions in compiler, validator, gates and pipeline. A changed prompt makes the cassette stale and
+ * fails the gate until a new live run re-records it — prompt changes never pass silently.
  *
  * External providers require --approve-external and receive only synthetic text (dataClassification=synthetic).
  */
+import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildApp } from '../../src/app.js';
-import { readEnvironment } from '../../src/config/env.js';
+import { readEnvironment, type Environment } from '../../src/config/env.js';
 import { configuredProvider } from '../../src/modules/ai/provider.factory.js';
 import { InMemoryConversationRepository } from '../../src/modules/projects/conversation.repository.js';
-import type { ModelProvider, StructuredRequest, StructuredResponse } from '../../src/modules/providers/model-provider.js';
+import { ProviderFailure, type ModelProvider, type ProviderUsage, type StructuredRequest, type StructuredResponse } from '../../src/modules/providers/model-provider.js';
 import { scenarios, type EvalScenario } from './scenarios.js';
 
 type CallRecord = { latencyMs: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; costUsd?: number; failed?: string };
@@ -36,8 +43,14 @@ const flag = (name: string) => argv.includes(`--${name}`);
 const evalDirectory = resolve('reports/eval');
 const runsDirectory = resolve(evalDirectory, 'runs');
 
+export type CassetteEntry = { promptSha256: string; value: unknown; model: string; usage: ProviderUsage; latencyMs: number };
+export type Cassette = { recordedAt: string; provider: string; model: string; scenarios: Record<string, CassetteEntry[]> };
+export const promptSha256 = (request: StructuredRequest) => createHash('sha256').update(`${request.system}\n\u0000${request.prompt}\n\u0000${JSON.stringify(request.outputSchema)}`).digest('hex');
+
 class RecordingProvider implements ModelProvider {
   readonly calls: CallRecord[] = [];
+  readonly tape: Record<string, CassetteEntry[]> = {};
+  scenarioId = '';
   constructor(private readonly inner: ModelProvider, private readonly maxCalls: number) {}
   get id() { return this.inner.id; }
   async generateStructured(request: StructuredRequest): Promise<StructuredResponse> {
@@ -46,11 +59,29 @@ class RecordingProvider implements ModelProvider {
     try {
       const response = await this.inner.generateStructured(request);
       this.calls.push({ latencyMs: response.latencyMs, inputTokens: response.usage.inputTokens ?? 0, cachedInputTokens: response.usage.cachedInputTokens ?? 0, outputTokens: response.usage.outputTokens ?? 0, costUsd: response.usage.costUsd });
+      (this.tape[this.scenarioId] ??= []).push({ promptSha256: promptSha256(request), value: response.value, model: response.model, usage: response.usage, latencyMs: response.latencyMs });
       return response;
     } catch (error) {
       this.calls.push({ latencyMs: Date.now() - started, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, failed: (error as any)?.code || 'ERROR' });
       throw error;
     }
+  }
+}
+
+/** Serves recorded responses in order per scenario; counts calls whose prompt no longer matches the recording. */
+export class ReplayProvider implements ModelProvider {
+  readonly id = 'replay';
+  scenarioId = '';
+  stalePrompts = 0;
+  private readonly cursor = new Map<string, number>();
+  constructor(private readonly cassette: Cassette) {}
+  async generateStructured(request: StructuredRequest): Promise<StructuredResponse> {
+    const position = this.cursor.get(this.scenarioId) ?? 0;
+    const entry = this.cassette.scenarios[this.scenarioId]?.[position];
+    if (!entry) throw new ProviderFailure('PROVIDER_INVALID_RESPONSE', `Cassete sem resposta gravada para ${this.scenarioId} (chamada ${position + 1}); o pipeline passou a fazer outra chamada — regrave com uma avaliação real`, undefined, { category: 'cassette_exhausted' });
+    this.cursor.set(this.scenarioId, position + 1);
+    if (entry.promptSha256 !== promptSha256(request)) this.stalePrompts += 1;
+    return { value: structuredClone(entry.value), usage: entry.usage, latencyMs: entry.latencyMs, model: entry.model };
   }
 }
 
@@ -83,7 +114,9 @@ function answerFor(scenario: EvalScenario, question: string): string {
   return scenario.answers?.find(candidate => candidate.when.test(question))?.answer ?? scenario.fallback ?? 'Não há regra adicional além do que já foi descrito.';
 }
 
-async function runScenario(app: Awaited<ReturnType<typeof buildApp>>, recorder: RecordingProvider, scenario: EvalScenario): Promise<ScenarioResult> {
+async function runScenario(app: Awaited<ReturnType<typeof buildApp>>, recorder: RecordingProvider, scenario: EvalScenario, replay?: ReplayProvider): Promise<ScenarioResult> {
+  recorder.scenarioId = scenario.id;
+  if (replay) replay.scenarioId = scenario.id;
   const callStart = recorder.calls.length;
   const asked: string[] = [];
   let repeatedQuestions = 0;
@@ -193,39 +226,87 @@ async function rebuildScoreboard() {
   return scoreboard;
 }
 
+export type GateThresholds = { minPassed: number; minValidRate: number; maxInvented: number; maxRepeatedQuestions: number };
+
+/** Gate failures for a run summary; an empty list means the gate passes. */
+export function checkGate(summary: ReturnType<typeof summarize>, gate: GateThresholds, stalePrompts = 0): string[] {
+  const failures: string[] = [];
+  if (stalePrompts > 0) failures.push(`${stalePrompts} prompt(s) mudaram desde a gravação da cassete: rode uma avaliação real (npm run eval:claude) para regravar e medir o efeito`);
+  if (summary.passed < gate.minPassed) failures.push(`aprovados ${summary.passed}/${summary.scenarios} < mínimo ${gate.minPassed}`);
+  if (summary.validRate < gate.minValidRate) failures.push(`válidos ${percent(summary.validRate)} < mínimo ${percent(gate.minValidRate)}`);
+  if (summary.inventedElements > gate.maxInvented) failures.push(`${summary.inventedElements} invenção(ões) > máximo ${gate.maxInvented}`);
+  if (summary.repeatedQuestions > gate.maxRepeatedQuestions) failures.push(`${summary.repeatedQuestions} pergunta(s) repetida(s) > máximo ${gate.maxRepeatedQuestions}`);
+  return failures;
+}
+
+/** Runs the selected corpus through the real API with the given provider. */
+export async function runCorpus(options: { provider: ModelProvider; environment: Environment; selected: EvalScenario[]; maxCalls: number; replay?: ReplayProvider; log?: (line: string) => void }) {
+  const recorder = new RecordingProvider(options.provider, options.maxCalls);
+  const app = await buildApp(options.environment, { conversationRepository: new InMemoryConversationRepository(), modelProvider: recorder });
+  const results: ScenarioResult[] = [];
+  try {
+    for (const scenario of options.selected) {
+      const result = await runScenario(app, recorder, scenario, options.replay);
+      results.push(result);
+      options.log?.(`${scenario.id} … ${result.pass ? 'OK' : 'FALHOU'} (${result.outcome}, ${(result.latencyMs / 1000).toFixed(1)} s${result.failureReasons.length ? `; ${result.failureReasons.join('; ')}` : ''})`);
+    }
+  } finally { await app.close(); }
+  return { results, summary: summarize(results), tape: recorder.tape };
+}
+
+/** Environment used by replay; must match how cassettes are recorded so prompts hash identically. */
+export function replayEnvironment(overrides: NodeJS.ProcessEnv = {}): Environment {
+  return readEnvironment({ LOG_LEVEL: 'silent', ...overrides });
+}
+
 async function main() {
   if (flag('rebuild')) { await rebuildScoreboard(); console.log('Placar regenerado em reports/eval/SCOREBOARD.md'); return; }
-  const providerName = option('provider');
-  const model = option('model');
-  if (!providerName || !model) throw new Error('Informe --provider <claude-cli|openai-compatible|ollama> e --model <modelo>');
-  const external = providerName !== 'ollama';
-  if (external && !flag('approve-external')) throw new Error('Provider externo exige --approve-external (somente texto sintético é enviado)');
   const only = option('only')?.split(',').map(id => id.trim()).filter(Boolean);
   const selected = only ? scenarios.filter(scenario => only.some(id => scenario.id.startsWith(id))) : scenarios;
   if (!selected.length) throw new Error('Nenhum cenário selecionado');
+  const gate = JSON.parse(await readFile(resolve('scripts/eval/gate.json'), 'utf8')) as GateThresholds;
+
+  const replayPath = option('replay');
+  if (replayPath) {
+    const replay = new ReplayProvider(JSON.parse(await readFile(resolve(replayPath), 'utf8')) as Cassette);
+    const { summary } = await runCorpus({ provider: replay, environment: replayEnvironment(), selected, maxCalls: selected.length * 4, replay, log: console.log });
+    console.log(`\nReplay: aprovados ${summary.passed}/${summary.scenarios} · válidos ${percent(summary.validRate)} · prompts alterados ${replay.stalePrompts}`);
+    if (flag('gate')) {
+      const failures = checkGate(summary, gate, replay.stalePrompts);
+      if (failures.length) { console.error(`\nGate de qualidade REPROVADO:\n- ${failures.join('\n- ')}`); process.exitCode = 1; }
+      else console.log('Gate de qualidade aprovado.');
+    }
+    return;
+  }
+
+  const providerName = option('provider');
+  const model = option('model');
+  if (!providerName || !model) throw new Error('Informe --provider <claude-cli|openai-compatible|ollama> e --model <modelo>, ou --replay <cassete>');
+  const external = providerName !== 'ollama';
+  if (external && !flag('approve-external')) throw new Error('Provider externo exige --approve-external (somente texto sintético é enviado)');
   const maxCalls = Number(option('max-calls') ?? selected.length * 4);
-  const environment = readEnvironment({ ...process.env, AI_PROVIDER: providerName, AI_MODEL: model, EXTERNAL_AI_APPROVED: external ? 'true' : 'false', AI_MAX_PROVIDER_CALLS: '0', LOG_LEVEL: 'silent' });
+  // Same baseline as replay, plus only what selects and bounds the live provider: prompts must hash identically.
+  const liveOverrides = Object.fromEntries(['AI_TIMEOUT_MS', 'CLAUDE_CLI_BINARY', 'CLAUDE_CLI_BARE', 'CLAUDE_CLI_MAX_BUDGET_USD', 'EXTERNAL_AI_BASE_URL', 'EXTERNAL_AI_API_KEY', 'EXTERNAL_AI_STRUCTURED_OUTPUT', 'OLLAMA_BASE_URL'].filter(name => process.env[name] !== undefined).map(name => [name, process.env[name]]));
+  const environment = replayEnvironment({ ...liveOverrides, AI_PROVIDER: providerName, AI_MODEL: model, EXTERNAL_AI_APPROVED: external ? 'true' : 'false', AI_MAX_PROVIDER_CALLS: '0' });
   const configured = configuredProvider(environment);
   if (!configured) throw new Error('Provider não configurado');
-  const recorder = new RecordingProvider(configured.provider, maxCalls);
-  const app = await buildApp(environment, { conversationRepository: new InMemoryConversationRepository(), modelProvider: recorder });
   const startedAt = new Date().toISOString();
-  const results: ScenarioResult[] = [];
-  try {
-    for (const scenario of selected) {
-      process.stdout.write(`${scenario.id} … `);
-      const result = await runScenario(app, recorder, scenario);
-      results.push(result);
-      console.log(`${result.pass ? 'OK' : 'FALHOU'} (${result.outcome}, ${(result.latencyMs / 1000).toFixed(1)} s${result.failureReasons.length ? `; ${result.failureReasons.join('; ')}` : ''})`);
-    }
-  } finally { await app.close(); }
+  const { results, summary, tape } = await runCorpus({ provider: configured.provider, environment, selected, maxCalls, log: console.log });
   const label = option('label');
-  const run = { provider: configured.provider.id, model, ...(label ? { label } : {}), startedAt, finishedAt: new Date().toISOString(), scenarioIds: selected.map(scenario => scenario.id), summary: summarize(results), results };
+  const run = { provider: configured.provider.id, model, ...(label ? { label } : {}), startedAt, finishedAt: new Date().toISOString(), scenarioIds: selected.map(scenario => scenario.id), summary, results };
   await mkdir(runsDirectory, { recursive: true });
   const file = resolve(runsDirectory, `${startedAt.replace(/[:.]/g, '-')}_${run.provider}_${label ? `${label}_` : ''}${model.replace(/[^a-zA-Z0-9.-]/g, '_')}.json`);
   await writeFile(file, `${JSON.stringify(run, null, 2)}\n`);
+  if (selected.length === scenarios.length && !flag('no-record')) {
+    const cassetteDirectory = resolve(evalDirectory, 'cassettes');
+    await mkdir(cassetteDirectory, { recursive: true });
+    const cassette: Cassette = { recordedAt: startedAt, provider: run.provider, model, scenarios: tape };
+    await writeFile(resolve(cassetteDirectory, `${run.provider}_${model.replace(/[^a-zA-Z0-9.-]/g, '_')}.json`), `${JSON.stringify(cassette, null, 2)}\n`);
+  }
   await rebuildScoreboard();
-  console.log(`\nAprovados ${run.summary.passed}/${run.summary.scenarios} · válidos ${percent(run.summary.validRate)} · cobertura ${percent(run.summary.meanCoverage)} · custo ${usd(run.summary.totalCostUsd)}\nPlacar: reports/eval/SCOREBOARD.md`);
+  console.log(`\nAprovados ${summary.passed}/${summary.scenarios} · válidos ${percent(summary.validRate)} · cobertura ${percent(summary.meanCoverage)} · custo ${usd(summary.totalCostUsd)}\nPlacar: reports/eval/SCOREBOARD.md`);
+  const failures = checkGate(summary, gate);
+  if (failures.length) console.warn(`Abaixo do gate de qualidade: ${failures.join('; ')}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

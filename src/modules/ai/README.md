@@ -2,6 +2,26 @@
 
 Orquestração conversacional, seleção de conhecimento versionado, propostas, correções limitadas e refinamentos por operações tipadas. Não executa actions nem publica processos.
 
+## Pipeline de um turno
+
+`orchestrator.ts` só compõe; cada etapa fica em `pipeline/`:
+
+```
+turn-context  → monta histórico, fatos, conhecimento, schema e prompt (estável primeiro, volátil por último)
+interpret     → chamada ao modelo + normalização + 1 correção estrutural
+recoverRepeatedQuestion → pergunta já respondida volta ao modelo, nunca ao usuário
+readiness     → gate determinístico antes da 1ª proposta (readiness.ts)
+compile       → compilador; omissão do modelo recebe 1 correção dirigida
+validate      → Validation Engine; 1 correção se nenhuma correção semântica rodou
+finalize      → artefatos BPMN/Form ou pergunta orientada pelos diagnósticos
+```
+
+Todas as chamadas passam por `ModelCalls`, que acumula latência, tokens, cache e custo. A política de correções fica em `RepairBudget` (`pipeline/types.ts`), no máximo uma estrutural e uma semântica por turno. O GraphIR (`AI_GRAPH_IR_MODE=controlled`) é um caminho experimental e opt-in; o BusinessIntent é o caminho suportado.
+
+## Gate de qualidade
+
+`npm run eval:claude` roda o corpus sintético contra o modelo real e grava uma cassete em `reports/eval/cassettes/`. O `npm test` (`tests/eval-gate.test.ts`) e o `npm run eval:replay` reexecutam o corpus contra a cassete, de forma determinística e sem rede, e cobram os limites de `scripts/eval/gate.json`. Um prompt alterado torna a cassete desatualizada e reprova o gate até uma nova gravação real.
+
 Geração usa uma saída estruturada interna `BusinessIntent`, com atores, atividades, decisões, campos, regras, sugestões, evidências e configuração pendente, sem IDs BPMN ou sequence flows. O backend verifica citações literais de pelo menos duas palavras informativas contra a mensagem do usuário ou respostas confirmadas; conhecimento e inferências nunca confirmam fatos do processo. Sugestões não são compiladas. Uma decisão descrita que não apareça como aprovação/decisão no plano bloqueia a prévia. A biblioteca genérica de padrões compõe o grafo BPMN, variáveis e formulários; ProcessSpec v1 segue sendo validado pelo Validation Engine canônico. Papéis conhecidos sem identidade ou grupo configurado podem compor uma prévia `needs-input`, com pergunta vinculada ao nó. BPMN omite `candidateGroups` nesse caso e a publicação permanece bloqueada. Regras condicionais explícitas, como motivo em caso de reprovação, permanecem no ProcessSpec e não dependem da validação do form-js. O contrato limita atores, campos e itens por ramo; o orquestrador também limita o plano inteiro a 60 atividades e oito níveis de decisão.
 
 Refinamentos usam operações de domínio permitidas, preservam o restante do ProcessSpec e aceitam `baseRevision`. `insertApprovalBefore` exige uma atividade-alvo e um destino explícito para reprovação. Quando a segunda aprovação exige justificativa e o destino notifica o usuário, o compilador preserva a notificação anterior e cria uma projeção declarativa ligada à nova justificativa.
