@@ -12,7 +12,7 @@
 | ADR-008 | PostgreSQL para persistência/revisões; desnecessário para endpoints de geração determinística | Adotada para conversas e revisões |
 | ADR-009 | Contrato entre repos via REST + OpenAPI e SSE quando houver geração longa | Adotada; SSE implementado em 1.3.0 (`Prefer: respond-async`) |
 | ADR-010 | Sem publicação, runtime, conectores reais ou dados reais na POC | Adotada |
-| ADR-011 | Identidade OIDC/RBAC/tenant e auditoria antes de qualquer exposição corporativa | Obrigatória antes de piloto real |
+| ADR-011 | Identidade OIDC/RBAC/tenant e auditoria antes de qualquer exposição corporativa | Backend implementado em 2026-10-22 (JWKS genérico, tenant por claim, papel de escrita, auditoria, limite por pessoa, mascaramento de dados). Pendente: escolha do IdP e login PKCE no frontend |
 | ADR-012 | Extração de BusinessIntent com proveniência e compilação por padrões determinísticos; papéis sem binding podem gerar prévia `needs-input`, nunca publicação | Adotada; extensão aditiva de ProcessSpec v1 com `unresolved` e índice de proveniência por hash, sem evidência textual bruta |
 | ADR-013 | Refinamento por operações tipadas sobre a revisão base (já existente) + diff de negócio e restauração como nova revisão; GraphPatch genérico adiado | Adotada em 2026-10-22; ver nota abaixo |
 | ADR-014 | Ledger de requisitos persistido com veredito do solicitante; exemplos aceitos como padrões few-shot opt-in, por tenant | Adotada em 2026-10-22; few-shot desligado por padrão até ser medido no placar |

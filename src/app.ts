@@ -1,6 +1,10 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
+import type { JWTVerifyGetKey } from 'jose';
+import { AuthFailure, createOidcAuthenticator } from './modules/security/auth.js';
+import { requestContext, type RequestPrincipal } from './modules/security/request-context.js';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { readEnvironment, type Environment } from './config/env.js';
@@ -16,13 +20,50 @@ import { recoveryGuidance } from './modules/ai/recovery-guidance.js';
 import { ConversationNotFound, OperationConflict, PostgresConversationRepository, RevisionConflict, StaleQuestionSet, type ConversationRepository } from './modules/projects/conversation.repository.js';
 import type { ModelProvider } from './modules/providers/model-provider.js';
 
-export type AppDependencies = { conversationRepository?: ConversationRepository; modelProvider?: ModelProvider; apiContract?: Record<string, any> };
+export type AppDependencies = { conversationRepository?: ConversationRepository; modelProvider?: ModelProvider; apiContract?: Record<string, any>; authKeys?: JWTVerifyGetKey };
+declare module 'fastify' { interface FastifyRequest { principal?: RequestPrincipal } }
 export async function buildApp(config: Environment = readEnvironment(), dependencies: AppDependencies = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: { level: config.logLevel }, bodyLimit: 1024 * 1024 });
   const conversationRepository = dependencies.conversationRepository || (config.databaseUrl ? PostgresConversationRepository.fromConnectionString(config.databaseUrl) : undefined);
   const conversations = new ConversationService(config, conversationRepository, { provider: dependencies.modelProvider });
   const turnEvents = new TurnEventBus();
   await app.register(cors, { origin: config.corsOrigins, methods: ['GET', 'POST', 'PUT'] });
+  await app.register(rateLimit, { global: false, hook: 'preHandler' });
+  const turnLimit = { max: config.turnRateLimitPerMinute ?? 30, timeWindow: 60_000,
+    keyGenerator: (request: FastifyRequest) => `${request.principal?.tenantId ?? ''}:${request.principal?.subject ?? request.ip}`,
+    errorResponseBuilder: (_request: FastifyRequest, context: { max: number; ttl: number }) => ({ statusCode: 429, code: 'TURN_RATE_LIMITED', message: `Limite de ${context.max} gerações por minuto atingido`, retryAfterMs: context.ttl, recovery: recoveryGuidance('TURN_RATE_LIMITED', context.ttl) }) };
+
+  // Identity: OIDC bearer token when configured; otherwise the local development tenant. The tenant always
+  // comes from the server side (token claim or configuration), never from the browser.
+  const authenticate = config.authMode === 'oidc' && config.oidc ? createOidcAuthenticator(config.oidc, dependencies.authKeys) : undefined;
+  app.addHook('onRequest', async (request, reply) => {
+    if (!request.url.startsWith('/api/v1/') || request.method === 'OPTIONS') return;
+    if (!authenticate) { request.principal = { tenantId: config.localTenantId, subject: 'local-dev', roles: [] }; return; }
+    try { request.principal = await authenticate(request.headers.authorization); }
+    catch (error) {
+      const code = error instanceof AuthFailure ? error.code : 'AUTH_INVALID';
+      return reply.code(401).send({ code, message: error instanceof AuthFailure ? error.message : 'Token inválido', recovery: recoveryGuidance(code) });
+    }
+    if (config.oidc?.writeRole && (request.method === 'POST' || request.method === 'PUT') && !request.principal.roles.includes(config.oidc.writeRole)) {
+      return reply.code(403).send({ code: 'FORBIDDEN', message: 'Seu papel não permite alterar processos', recovery: recoveryGuidance('FORBIDDEN') });
+    }
+  });
+  // Every API handler runs inside the caller's request context, which survives awaits and background turns.
+  app.addHook('onRoute', route => {
+    if (!route.url.startsWith('/api/v1/')) return;
+    const handler = route.handler;
+    route.handler = function (this: FastifyInstance, request, reply) {
+      return request.principal ? requestContext.run(request.principal, () => handler.call(this, request, reply)) : handler.call(this, request, reply);
+    } as typeof handler;
+  });
+  // Audit trail of state-changing calls: who, what, when and the outcome — never the request content.
+  app.addHook('onResponse', async (request, reply) => {
+    if (!conversationRepository || !request.principal || (request.method !== 'POST' && request.method !== 'PUT') || !request.url.startsWith('/api/v1/')) return;
+    const params = (request.params ?? {}) as Record<string, string>;
+    const sessionId = /^[0-9a-f-]{36}$/i.test(params.sessionId ?? '') ? params.sessionId : undefined;
+    const details = Object.fromEntries(Object.entries({ revision: params.revision, requirementId: params.requirementId }).filter(([, value]) => value !== undefined));
+    await conversationRepository.appendAudit({ tenantId: request.principal.tenantId, subject: request.principal.subject, action: `${request.method} ${request.routeOptions.url ?? request.url}`, ...(sessionId ? { sessionId } : {}), statusCode: reply.statusCode, details }).catch(() => { /* auditing never breaks a response */ });
+  });
   app.addHook('onClose', async () => { if (conversationRepository instanceof PostgresConversationRepository) await conversationRepository.close(); });
   app.get('/health', async () => ({ status: 'ok', service: 'process-ai-backend', version: '0.1.0' }));
   app.get('/api/v1/capabilities', async () => ({
@@ -53,13 +94,13 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
     try { return await conversations.session(request.params.sessionId); }
     catch (error) { return sendConversationError(reply, error); }
   });
-  app.post<{ Params: { sessionId: string }; Body: { text: string; baseRevision: number; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/messages', async (request, reply) => {
+  app.post<{ Params: { sessionId: string }; Body: { text: string; baseRevision: number; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/messages', { config: { rateLimit: turnLimit } }, async (request, reply) => {
     return runTurn(turnEvents, request, reply, hooks => conversations.submitMessage(request.params.sessionId, request.body?.text, request.body?.baseRevision, request.body?.dataClassification, request.body?.operationId, hooks));
   });
-  app.post<{ Params: { sessionId: string }; Body: { answers: string[]; baseRevision: number; questionSetId?: string; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/answers', async (request, reply) => {
+  app.post<{ Params: { sessionId: string }; Body: { answers: string[]; baseRevision: number; questionSetId?: string; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/answers', { config: { rateLimit: turnLimit } }, async (request, reply) => {
     return runTurn(turnEvents, request, reply, hooks => conversations.answerQuestions(request.params.sessionId, request.body?.answers, request.body?.baseRevision, request.body?.dataClassification, request.body?.questionSetId, request.body?.operationId, hooks));
   });
-  app.post<{ Params: { sessionId: string }; Body: { text: string; baseRevision: number; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/refinements', async (request, reply) => {
+  app.post<{ Params: { sessionId: string }; Body: { text: string; baseRevision: number; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/refinements', { config: { rateLimit: turnLimit } }, async (request, reply) => {
     try {
       const draft = await conversations.currentDraft(request.params.sessionId);
       if (!draft.processSpec) return reply.code(409).send({ code: 'DRAFT_NOT_FOUND', message: 'Aceite ou gere uma revisão inicial antes de refiná-la' });
@@ -168,7 +209,8 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
   });
   app.setErrorHandler((error, request, reply) => {
     request.log.error({ err: error }, 'Falha na requisição');
-    const requestError = error as Error & { statusCode?: number };
+    const requestError = error as Error & { statusCode?: number; code?: string };
+    if (requestError.code === 'TURN_RATE_LIMITED') return reply.code(429).send(requestError);
     const code = requestError.statusCode && requestError.statusCode < 500 ? requestError.statusCode : 500;
     return reply.code(code).send({ code: code === 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST', message: code === 500 ? 'Erro interno' : requestError.message });
   });

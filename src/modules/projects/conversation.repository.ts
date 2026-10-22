@@ -14,6 +14,7 @@ export type RequirementOrigin = 'user' | 'confirmed-answer' | 'inference' | 'unk
 export type RequirementVerdict = 'proposed' | 'confirmed' | 'rejected';
 export type StoredRequirement = { id: string; sessionId: string; kind: RequirementKind; label: string; origin: RequirementOrigin; state: RequirementVerdict; firstRevision: number; lastRevision: number; createdAt: string; updatedAt: string };
 export type AcceptedExample = { sessionId: string; revision: number; requestText: string; summary: string };
+export type AuditEvent = { tenantId: string; subject: string; action: string; sessionId?: string; statusCode: number; details: Record<string, unknown>; createdAt?: string };
 export type RunStatus = 'queued' | 'generating' | 'needs-input' | 'validated' | 'validation-failed' | 'failed';
 export type GenerationRun = { id: string; sessionId: string; status: RunStatus; operationId?: string; requestHash?: string; providerStartedAt?: string; sourceMessageId?: string; result?: unknown; errorCode?: string; provider?: string; model?: string; metrics?: unknown; createdAt: string; updatedAt: string };
 export type StoredRevision = { id: string; sessionId: string; revision: number; baseRevision: number; status: 'proposed' | 'accepted'; processSpec: Record<string, unknown>; artifacts?: unknown; summary: string; metadata: Record<string, unknown>; createdAt: string };
@@ -46,6 +47,8 @@ export interface ConversationRepository {
   setRequirementState(tenantId: string, sessionId: string, requirementId: string, state: RequirementVerdict): Promise<StoredRequirement>;
   saveAcceptedExample(tenantId: string, sessionId: string, revision: number, requestText: string, summary: string): Promise<void>;
   listAcceptedExamples(tenantId: string, limit: number): Promise<AcceptedExample[]>;
+  appendAudit(event: AuditEvent): Promise<void>;
+  listAudit(tenantId: string, limit: number): Promise<AuditEvent[]>;
   getOperation(tenantId: string, sessionId: string, operationId: string, requestHash: string): Promise<GenerationRun | undefined>;
   markProviderStarted(tenantId: string, runId: string): Promise<void>;
   createProposal(tenantId: string, sessionId: string, baseRevision: number, processSpec: Record<string, unknown>, artifacts: unknown, summary: string, metadata: Record<string, unknown>): Promise<StoredRevision>;
@@ -158,6 +161,13 @@ export class PostgresConversationRepository implements ConversationRepository {
   }
   async saveAcceptedExample(tenantId: string, sessionId: string, revision: number, requestText: string, summary: string): Promise<void> {
     await this.query('INSERT INTO process_ai_accepted_examples(id,tenant_id,session_id,revision,request_text,summary) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (tenant_id,session_id,revision) DO NOTHING', [randomUUID(), tenantId, sessionId, revision, requestText, summary]);
+  }
+  async appendAudit(event: AuditEvent): Promise<void> {
+    await this.query('INSERT INTO process_ai_audit_events(id,tenant_id,subject,action,session_id,status_code,details) VALUES($1,$2,$3,$4,$5,$6,$7)', [randomUUID(), event.tenantId, event.subject, event.action, event.sessionId ?? null, event.statusCode, event.details]);
+  }
+  async listAudit(tenantId: string, limit: number): Promise<AuditEvent[]> {
+    const result = await this.query('SELECT * FROM process_ai_audit_events WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2', [tenantId, limit]);
+    return result.rows.map(row => ({ tenantId: row.tenant_id, subject: row.subject, action: row.action, ...(row.session_id ? { sessionId: row.session_id } : {}), statusCode: row.status_code, details: row.details, createdAt: new Date(row.created_at).toISOString() }));
   }
   async listAcceptedExamples(tenantId: string, limit: number): Promise<AcceptedExample[]> {
     const result = await this.query('SELECT session_id,revision,request_text,summary FROM process_ai_accepted_examples WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2', [tenantId, limit]);
@@ -337,6 +347,9 @@ export class InMemoryConversationRepository implements ConversationRepository {
   async saveAcceptedExample(tenant: string, sessionId: string, revision: number, requestText: string, summary: string) {
     if (!this.examples.some(item => item.tenant === tenant && item.sessionId === sessionId && item.revision === revision)) this.examples.unshift({ tenant, sessionId, revision, requestText, summary });
   }
+  private audit: AuditEvent[] = [];
+  async appendAudit(event: AuditEvent) { this.audit.unshift({ ...event, createdAt: new Date().toISOString() }); }
+  async listAudit(tenant: string, limit: number) { return this.audit.filter(item => item.tenantId === tenant).slice(0, limit); }
   async listAcceptedExamples(tenant: string, limit: number) { return this.examples.filter(item => item.tenant === tenant).slice(0, limit).map(({ tenant: _tenant, ...item }) => item); }
   async listRuns(tenant: string, sessionId: string) { if (!this.owns(tenant, sessionId)) throw new ConversationNotFound(); return [...this.runs.values()].filter(run => this.runTenants.get(run.id) === tenant && run.sessionId === sessionId); }
   async getOperation(tenant: string, sessionId: string, operationId: string, requestHash: string) {

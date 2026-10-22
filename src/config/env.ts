@@ -38,6 +38,11 @@ export interface Environment {
   aiRepairModel?: string;
   /** Flywheel: same-tenant accepted examples similar to the request enter the prompt as patterns (opt-in). */
   aiFewShot?: 'on' | 'off';
+  /** Security for a pilot: OIDC bearer tokens (off = local development tenant), PII masking, per-user turn limit. */
+  authMode?: 'off' | 'oidc';
+  oidc?: { issuer: string; audience: string; jwksUrl?: string; tenantClaim: string; rolesClaim: string; writeRole?: string };
+  piiMasking?: 'on' | 'off';
+  turnRateLimitPerMinute?: number;
 }
 function boundedInteger(raw: string | undefined, fallback: number, minimum: number, maximum: number, name: string): number {
   const value = Number(raw ?? fallback);
@@ -57,6 +62,11 @@ export function readEnvironment(env: NodeJS.ProcessEnv = process.env): Environme
   if (!['off', 'shadow', 'controlled'].includes(aiGraphIrMode)) throw new Error('AI_GRAPH_IR_MODE inválido');
   const anthropicEffort = env.ANTHROPIC_EFFORT || undefined;
   if (anthropicEffort && !['low', 'medium', 'high', 'xhigh', 'max'].includes(anthropicEffort)) throw new Error('ANTHROPIC_EFFORT inválido');
+  const authMode = env.AUTH_MODE || 'off';
+  if (!['off', 'oidc'].includes(authMode)) throw new Error('AUTH_MODE inválido');
+  if (authMode === 'oidc' && (!env.OIDC_ISSUER || !env.OIDC_AUDIENCE)) throw new Error('AUTH_MODE=oidc exige OIDC_ISSUER e OIDC_AUDIENCE');
+  const piiMasking = env.PII_MASKING || 'on';
+  if (!['on', 'off'].includes(piiMasking)) throw new Error('PII_MASKING inválido');
   const aiFewShot = env.AI_FEW_SHOT || 'off';
   if (!['on', 'off'].includes(aiFewShot)) throw new Error('AI_FEW_SHOT inválido');
   const aiReadinessGate = env.AI_READINESS_GATE || 'on';
@@ -99,6 +109,10 @@ export function readEnvironment(env: NodeJS.ProcessEnv = process.env): Environme
     anthropicMaxRetries: boundedInteger(env.ANTHROPIC_MAX_RETRIES, 2, 0, 5, 'ANTHROPIC_MAX_RETRIES'),
     aiRepairModel: env.AI_REPAIR_MODEL || undefined,
     aiFewShot: aiFewShot as Environment['aiFewShot'],
+    authMode: authMode as Environment['authMode'],
+    ...(authMode === 'oidc' ? { oidc: { issuer: env.OIDC_ISSUER!, audience: env.OIDC_AUDIENCE!, jwksUrl: env.OIDC_JWKS_URL || undefined, tenantClaim: env.OIDC_TENANT_CLAIM || 'tenant', rolesClaim: env.OIDC_ROLES_CLAIM || 'roles', writeRole: env.OIDC_WRITE_ROLE || undefined } } : {}),
+    piiMasking: piiMasking as Environment['piiMasking'],
+    turnRateLimitPerMinute: boundedInteger(env.TURN_RATE_LIMIT_PER_MINUTE, 30, 1, 1000, 'TURN_RATE_LIMIT_PER_MINUTE'),
     claudeCliBinary: env.CLAUDE_CLI_BINARY || undefined,
     claudeCliBare: env.CLAUDE_CLI_BARE === 'true',
     claudeCliMaxBudgetUsd: claudeCliMaxBudgetUsd || undefined,

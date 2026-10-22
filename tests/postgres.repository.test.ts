@@ -133,7 +133,12 @@ test('PostgreSQL persiste sessões e revisões com isolamento tenant e controle 
     await repository.saveAcceptedExample(tenant, created.sessionId, 1, 'pedido sintético', 'resumo');
     assert.equal((await repository.listAcceptedExamples(tenant, 10)).length, 1, 'exemplo idempotente por revisão');
     assert.deepEqual(await repository.listAcceptedExamples(`${tenant}-other`, 10), [], 'exemplos isolados por tenant');
+    await repository.appendAudit({ tenantId: tenant, subject: 'ana', action: 'POST /api/v1/projects', sessionId: created.sessionId, statusCode: 201, details: { revision: '1' } });
+    const audit = await repository.listAudit(tenant, 10);
+    assert.deepEqual(audit.map(event => [event.subject, event.action, event.statusCode, event.sessionId]), [['ana', 'POST /api/v1/projects', 201, created.sessionId]]);
+    assert.deepEqual(await repository.listAudit(`${tenant}-other`, 10), [], 'auditoria isolada por tenant');
   } finally {
+    await pool.query('DELETE FROM process_ai_audit_events WHERE tenant_id=$1', [tenant]);
     await pool.query('DELETE FROM process_ai_generation_runs WHERE tenant_id=$1', [tenant]);
     await pool.query('DELETE FROM process_ai_messages WHERE tenant_id=$1', [tenant]);
     await pool.query('DELETE FROM process_ai_requirements WHERE tenant_id=$1', [tenant]);

@@ -2,9 +2,10 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Process AI Backend API",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "description": "API versionada para ProcessSpec, geração, validação e modelagem conversacional. Não executa conectores nem publica processos."
   },
+  "security": [{ "bearerAuth": [] }, {}],
   "servers": [
     {
       "url": "http://127.0.0.1:3333"
@@ -1388,6 +1389,9 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT", "description": "1.5.0: com AUTH_MODE=oidc, todas as rotas /api/v1 exigem token do emissor configurado; o tenant vem da claim configurada (OIDC_TENANT_CLAIM) e POST/PUT podem exigir OIDC_WRITE_ROLE. Respostas: 401 (AUTH_REQUIRED, AUTH_INVALID, AUTH_TENANT_MISSING), 403 (FORBIDDEN) e 429 (TURN_RATE_LIMITED nas rotas de geração), sempre com recovery. Com AUTH_MODE=off (desenvolvimento local) nenhum token é exigido." }
+    },
     "parameters": {
       "PreferAsync": {
         "name": "Prefer",

@@ -8,6 +8,8 @@ import { recoveryGuidance, recoveryMessage } from './recovery-guidance.js';
 import { projectUnderstanding } from './understanding.js';
 import { sessionTelemetry } from './telemetry.js';
 import { diffSpecs } from './revision-diff.js';
+import { requestContext } from '../security/request-context.js';
+import { maskPersonalData } from '../security/pii.js';
 import { selectSimilarExamples, summarizeForExample } from './examples.js';
 import { extractNumericThresholdFacts, identityForQuestion, latestSemanticFactEvents, reconcileExplicitNumericCorrection, semanticFactId, type SemanticFact } from './semantic-grounding.js';
 import { createHash } from 'node:crypto';
@@ -38,6 +40,10 @@ export class ConversationService {
       } catch (error) { if (error instanceof OrchestrationFailure) this.providerConfigurationError = error; else throw error; }
     }
   }
+  /** Tenant of the current request (OIDC claim) or the local development tenant when authentication is off. */
+  /** PII_MASKING (default on): personal identifiers never reach persistence or a model. */
+  private minimize(text: string): string { return typeof text === 'string' && (this.environment.piiMasking ?? 'on') === 'on' ? maskPersonalData(text).text : text; }
+  private get tenantId(): string { return requestContext.current()?.tenantId ?? this.environment.localTenantId; }
   get databaseConfigured(): boolean { return !!this.repository; }
   get aiConfigured(): boolean { return !!this.orchestrator; }
   get usesExternalProvider(): boolean { return ['openai-compatible', 'claude-cli', 'anthropic'].includes(this.orchestrator?.providerId ?? ''); }
@@ -64,14 +70,15 @@ export class ConversationService {
   async createProject(name: string, targetProfile: ProjectTarget) {
     this.ensureRepository();
     if (typeof name !== 'string' || !name.trim() || name.length > 128) throw new ConversationServiceFailure('PROJECT_NAME_INVALID', 'Nome do projeto deve ter de 1 a 128 caracteres', 400);
-    return { ...await this.repo().createProject(this.environment.localTenantId, name.trim(), targetProfile), status: 'draft', currentRevision: 0 };
+    return { ...await this.repo().createProject(this.tenantId, name.trim(), targetProfile), status: 'draft', currentRevision: 0 };
   }
   async submitMessage(sessionId: string, text: string, baseRevision: number, dataClassification?: 'synthetic' | 'public', operationId?: string, hooks?: TurnHooks) {
     this.guardExternalData(dataClassification);
-    return this.processTurn(sessionId, text, baseRevision, 'user', undefined, operationId, undefined, undefined, dataClassification, hooks);
+    return this.processTurn(sessionId, this.minimize(text), baseRevision, 'user', undefined, operationId, undefined, undefined, dataClassification, hooks);
   }
   async answerQuestions(sessionId: string, answers: string[], baseRevision: number, dataClassification?: 'synthetic' | 'public', questionSetId?: string, operationId?: string, hooks?: TurnHooks) {
     this.guardExternalData(dataClassification);
+    if (Array.isArray(answers)) answers = answers.map(answer => typeof answer === 'string' ? this.minimize(answer) : answer);
     this.ensureRepository();
     const requestHash = hashOperation({ kind: 'answers', baseRevision, answers: Array.isArray(answers) ? answers.map(answer => typeof answer === 'string' ? answer.trim() : answer) : answers, questionSetId: questionSetId || null });
     const replay = await this.replayOperation(sessionId, operationId, requestHash);
@@ -92,11 +99,11 @@ export class ConversationService {
       });
     return this.processTurn(sessionId, text, baseRevision, 'confirmed-answer', facts, operationId, questionSetId, requestHash, dataClassification, hooks);
   }
-  async session(sessionId: string) { this.ensureRepository(); await this.repo().reconcileInterruptedRuns(this.environment.localTenantId, sessionId); const session = await this.sessionOrThrow(sessionId); return { ...session, questionSetId: stableQuestionSetId(session.pendingQuestions), pendingQuestions: publicQuestions(session.pendingQuestions) }; }
+  async session(sessionId: string) { this.ensureRepository(); await this.repo().reconcileInterruptedRuns(this.tenantId, sessionId); const session = await this.sessionOrThrow(sessionId); return { ...session, questionSetId: stableQuestionSetId(session.pendingQuestions), pendingQuestions: publicQuestions(session.pendingQuestions) }; }
   /** "O que entendi / o que falta": confirmed facts, open questions and a business projection of the newest revision. */
   async understanding(sessionId: string) {
     this.ensureRepository();
-    const tenantId = this.environment.localTenantId;
+    const tenantId = this.tenantId;
     const session = await this.sessionOrThrow(sessionId);
     const [facts, revisions, requirements] = await Promise.all([this.repo().listConfirmedFacts(tenantId, sessionId), this.repo().listRevisions(tenantId, sessionId), this.repo().listRequirements(tenantId, sessionId)]);
     const latest = revisions.reduce<StoredRevision | undefined>((newest, item) => !newest || item.revision > newest.revision ? item : newest, undefined);
@@ -110,22 +117,22 @@ export class ConversationService {
   }
   async history(sessionId: string) {
     this.ensureRepository(); await this.sessionOrThrow(sessionId);
-    const [messages, facts] = await Promise.all([this.repo().listMessages(this.environment.localTenantId, sessionId, 100), this.repo().listConfirmedFacts(this.environment.localTenantId, sessionId)]);
+    const [messages, facts] = await Promise.all([this.repo().listMessages(this.tenantId, sessionId, 100), this.repo().listConfirmedFacts(this.tenantId, sessionId)]);
     return reconstructMessageHistory(messages, facts);
   }
   async currentDraft(sessionId: string) {
     const session = await this.session(sessionId);
-    const revisions = await this.repo().listRevisions(this.environment.localTenantId, sessionId);
+    const revisions = await this.repo().listRevisions(this.tenantId, sessionId);
     const current = revisions.find(item => item.status === 'accepted' && item.revision === session.currentRevision);
     return { session, revision: current || null, processSpec: current?.processSpec || null, artifacts: current?.artifacts || null };
   }
   async revisions(sessionId: string) {
-    const items = await this.repo().listRevisions(this.environment.localTenantId, sessionId);
+    const items = await this.repo().listRevisions(this.tenantId, sessionId);
     return items.map(({ id, sessionId: itemSessionId, revision, baseRevision, status, summary, metadata, createdAt }) => ({ id, sessionId: itemSessionId, revision, baseRevision, status, summary, metadata, createdAt }));
   }
   async revision(sessionId: string, revision: number): Promise<StoredRevision> {
     this.ensureRepository();
-    const items = await this.repo().listRevisions(this.environment.localTenantId, sessionId);
+    const items = await this.repo().listRevisions(this.tenantId, sessionId);
     const item = items.find(candidate => candidate.revision === revision);
     if (!item) throw new ConversationServiceFailure('REVISION_NOT_FOUND', 'Revisão não encontrada', 404);
     return item;
@@ -133,14 +140,14 @@ export class ConversationService {
   async acceptRevision(sessionId: string, revision: number, baseRevision: number) {
     this.ensureRepository();
     await this.sessionOrThrow(sessionId);
-    const accepted = await this.repo().acceptRevision(this.environment.localTenantId, sessionId, revision, baseRevision);
+    const accepted = await this.repo().acceptRevision(this.tenantId, sessionId, revision, baseRevision);
     await this.recordAcceptedExample(sessionId, accepted);
     return accepted;
   }
   /** Flywheel: an accepted proposal becomes a same-tenant example (request → accepted result); never fails the accept. */
   private async recordAcceptedExample(sessionId: string, accepted: StoredRevision) {
     try {
-      const tenantId = this.environment.localTenantId;
+      const tenantId = this.tenantId;
       const messages = await this.repo().listMessages(tenantId, sessionId, 100);
       const requestText = messages.filter(message => message.role === 'user').map(message => message.content).join('\n').slice(0, 2000);
       if (!requestText.trim()) return;
@@ -152,13 +159,13 @@ export class ConversationService {
     this.ensureRepository();
     await this.sessionOrThrow(sessionId);
     if (state !== 'proposed' && state !== 'confirmed' && state !== 'rejected') throw new ConversationServiceFailure('REQUIREMENT_STATE_INVALID', 'state deve ser proposed, confirmed ou rejected', 400);
-    const item = await this.repo().setRequirementState(this.environment.localTenantId, sessionId, requirementId, state);
+    const item = await this.repo().setRequirementState(this.tenantId, sessionId, requirementId, state);
     return { id: item.id, kind: item.kind, label: item.label, origin: item.origin, state: item.state };
   }
   /** Ledger sync is a projection of the newest revision; it never blocks or fails a turn. */
   private async syncLedger(sessionId: string) {
     try {
-      const tenantId = this.environment.localTenantId;
+      const tenantId = this.tenantId;
       const revisions = await this.repo().listRevisions(tenantId, sessionId);
       const latest = revisions.reduce<StoredRevision | undefined>((newest, item) => !newest || item.revision > newest.revision ? item : newest, undefined);
       if (!latest) return;
@@ -174,7 +181,7 @@ export class ConversationService {
   }
   /** What the pipeline needs from the ledger and from accepted examples for the next turn. */
   private async turnMemory(sessionId: string, requestText: string) {
-    const tenantId = this.environment.localTenantId;
+    const tenantId = this.tenantId;
     const requirements = await this.repo().listRequirements(tenantId, sessionId).catch(() => []);
     const requirementVerdicts = {
       confirmed: requirements.filter(item => item.state === 'confirmed').map(item => ({ kind: item.kind, label: item.label })),
@@ -209,18 +216,18 @@ export class ConversationService {
     if (artifacts.diagnostics.some(diagnostic => diagnostic.severity === 'error')) throw new ConversationServiceFailure('ARTIFACT_GENERATION_FAILED', JSON.stringify(artifacts.diagnostics), 422);
     const processSpec = value as Record<string, unknown>;
     const artifactBundle = { bpmnXml: artifacts.bpmnXml, forms: artifacts.forms, manifest: artifacts.manifest, diagnostics: artifacts.diagnostics };
-    const proposal = await this.repo().createProposal(this.environment.localTenantId, sessionId, baseRevision, processSpec, artifactBundle, summary, { source: 'manual', ...extraMetadata, generatorVersion: (artifacts.manifest as any).generatorVersion });
+    const proposal = await this.repo().createProposal(this.tenantId, sessionId, baseRevision, processSpec, artifactBundle, summary, { source: 'manual', ...extraMetadata, generatorVersion: (artifacts.manifest as any).generatorVersion });
     await this.syncLedger(sessionId);
     return { revision: proposal.revision, baseRevision, status: proposal.status, validation, artifacts: artifactBundle };
   }
   async telemetry(sessionId: string) {
     this.ensureRepository();
     await this.sessionOrThrow(sessionId);
-    return { sessionId, ...sessionTelemetry(await this.repo().listRuns(this.environment.localTenantId, sessionId)) };
+    return { sessionId, ...sessionTelemetry(await this.repo().listRuns(this.tenantId, sessionId)) };
   }
   async run(runId: string): Promise<GenerationRun> {
     this.ensureRepository();
-    const result = await this.repo().getRun(this.environment.localTenantId, runId);
+    const result = await this.repo().getRun(this.tenantId, runId);
     if (!result) throw new ConversationServiceFailure('GENERATION_RUN_NOT_FOUND', 'Geração não encontrada', 404);
     return result;
   }
@@ -239,7 +246,7 @@ export class ConversationService {
       const reason = this.providerConfigurationError;
       throw new ConversationServiceFailure(reason?.code || 'AI_NOT_CONFIGURED', reason?.message || 'Configure AI_PROVIDER e AI_MODEL no backend antes de iniciar uma conversa', 503);
     }
-    const tenantId = this.environment.localTenantId;
+    const tenantId = this.tenantId;
     const turn = await this.repo().beginTurn(tenantId, sessionId, { operationId, requestHash, baseRevision, role: 'user', content: text.trim(), facts, expectedQuestionSetId }, this.orchestratorProvider(), this.orchestratorModel());
     const submittedMessage = turn.message; const run = turn.run;
     if (turn.replay) return { ...(run.result as Record<string, unknown> || {}), generationRunId: run.id, status: run.status, replayed: true };
@@ -271,7 +278,7 @@ export class ConversationService {
   }
 
   private async persistOutcome(sessionId: string, run: GenerationRun, baseRevision: number, outcome: GenerationOutcome) {
-    const tenantId = this.environment.localTenantId;
+    const tenantId = this.tenantId;
     if (outcome.kind === 'need_clarification') {
       const summary = outcome.summary || 'Preciso esclarecer alguns pontos antes de propor um fluxo correto.';
       const questionSetId = stableQuestionSetId(outcome.questions);
@@ -299,7 +306,7 @@ export class ConversationService {
     const storedThresholdFacts = effectiveFacts.flatMap(fact => fact.state === 'confirmed' && fact.semanticFact?.attribute === 'numeric-threshold' && fact.semanticFact.state === 'confirmed' ? [fact.semanticFact] : []);
     let previous: SemanticFact[] = storedThresholdFacts;
     if (!previous.length) {
-      const tenantId = this.environment.localTenantId;
+      const tenantId = this.tenantId;
       const messages = await this.repo().listMessages(tenantId, sessionId, 100);
       previous = extractNumericThresholdFacts(messages.filter(item => item.role === 'user' && item.id !== message.id).map(item => ({ sourceId: item.id, text: item.content })));
     }
@@ -316,18 +323,18 @@ export class ConversationService {
       supersedesFactId: fact.relations.find(item => item.type === 'supersedes')?.factId,
       semanticFact: fact,
     }));
-    if (records.length) await this.repo().appendConfirmedFacts(this.environment.localTenantId, sessionId, records);
+    if (records.length) await this.repo().appendConfirmedFacts(this.tenantId, sessionId, records);
   }
 
   private async sessionOrThrow(sessionId: string) {
-    const session = await this.repo().getSession(this.environment.localTenantId, sessionId);
+    const session = await this.repo().getSession(this.tenantId, sessionId);
     if (!session) throw new ConversationServiceFailure('SESSION_NOT_FOUND', 'Sessão não encontrada', 404);
     return session;
   }
   private async replayOperation(sessionId: string, operationId: string | undefined, requestHash: string) {
     if (operationId === undefined) return undefined;
     if (typeof operationId !== 'string' || operationId.length < 8 || operationId.length > 128) throw new ConversationServiceFailure('OPERATION_ID_INVALID', 'operationId deve conter de 8 a 128 caracteres', 400);
-    const run = await this.repo().getOperation(this.environment.localTenantId, sessionId, operationId, requestHash);
+    const run = await this.repo().getOperation(this.tenantId, sessionId, operationId, requestHash);
     if (!run) return undefined;
     return { ...(run.result as Record<string, unknown> || {}), generationRunId: run.id, status: run.status, replayed: true };
   }
