@@ -20,7 +20,10 @@
     "generate:examples": "node --import tsx src/modules/generation/artifact-generator.ts",
     "evaluate:ollama": "node --env-file-if-exists=.env --import tsx scripts/evaluate-local-ollama.ts",
     "evaluate:business-intent": "node --env-file-if-exists=.env --import tsx scripts/evaluate-business-intent-ollama.ts",
-    "benchmark:groq": "node --env-file-if-exists=.env --import tsx scripts/benchmark-groq.ts"
+    "benchmark:groq": "node --env-file-if-exists=.env --import tsx scripts/benchmark-groq.ts",
+    "eval": "node --env-file-if-exists=.env --import tsx scripts/eval/run-eval.ts",
+    "eval:claude": "node --env-file-if-exists=.env --import tsx scripts/eval/run-eval.ts --provider claude-cli --model sonnet --approve-external",
+    "eval:scoreboard": "node --import tsx scripts/eval/run-eval.ts --rebuild"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",

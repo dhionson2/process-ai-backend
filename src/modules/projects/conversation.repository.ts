@@ -34,6 +34,7 @@ export interface ConversationRepository {
   createRun(tenantId: string, sessionId: string, provider: string, model: string): Promise<GenerationRun>;
   updateRun(tenantId: string, runId: string, patch: Partial<GenerationRun>): Promise<void>;
   getRun(tenantId: string, runId: string): Promise<GenerationRun | undefined>;
+  listRuns(tenantId: string, sessionId: string): Promise<GenerationRun[]>;
   getOperation(tenantId: string, sessionId: string, operationId: string, requestHash: string): Promise<GenerationRun | undefined>;
   markProviderStarted(tenantId: string, runId: string): Promise<void>;
   createProposal(tenantId: string, sessionId: string, baseRevision: number, processSpec: Record<string, unknown>, artifacts: unknown, summary: string, metadata: Record<string, unknown>): Promise<StoredRevision>;
@@ -120,6 +121,10 @@ export class PostgresConversationRepository implements ConversationRepository {
   async getRun(tenantId: string, runId: string): Promise<GenerationRun | undefined> {
     const result = await this.query('SELECT * FROM process_ai_generation_runs WHERE tenant_id=$1 AND id=$2', [tenantId, runId]);
     return result.rows[0] ? runRow(result.rows[0]) : undefined;
+  }
+  async listRuns(tenantId: string, sessionId: string): Promise<GenerationRun[]> {
+    const result = await this.query('SELECT * FROM process_ai_generation_runs WHERE tenant_id=$1 AND session_id=$2 ORDER BY created_at, id', [tenantId, sessionId]);
+    return result.rows.map(runRow);
   }
   async getOperation(tenantId: string, sessionId: string, operationId: string, requestHash: string): Promise<GenerationRun | undefined> {
     const result = await this.query('SELECT * FROM process_ai_generation_runs WHERE tenant_id=$1 AND session_id=$2 AND operation_id=$3', [tenantId, sessionId, operationId]);
@@ -272,6 +277,7 @@ export class InMemoryConversationRepository implements ConversationRepository {
   }
   async updateRun(tenant: string, runId: string, patch: Partial<GenerationRun>) { const run = this.runTenants.get(runId) === tenant ? this.runs.get(runId) : undefined; if (!run) throw new ConversationNotFound(); this.runs.set(runId, { ...run, ...patch, updatedAt: new Date().toISOString() }); }
   async getRun(tenant: string, runId: string) { return this.runTenants.get(runId) === tenant ? this.runs.get(runId) : undefined; }
+  async listRuns(tenant: string, sessionId: string) { if (!this.owns(tenant, sessionId)) throw new ConversationNotFound(); return [...this.runs.values()].filter(run => this.runTenants.get(run.id) === tenant && run.sessionId === sessionId); }
   async getOperation(tenant: string, sessionId: string, operationId: string, requestHash: string) {
     const run = [...this.runs.values()].find(item => this.runTenants.get(item.id) === tenant && item.sessionId === sessionId && item.operationId === operationId);
     if (!run) return undefined;

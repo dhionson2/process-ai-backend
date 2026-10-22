@@ -11,6 +11,7 @@ import { readFoundationJson as readSchema } from './shared/files.js';
 import { generateArtifacts } from './modules/generation/artifact-generator.js';
 import { validateFormSubmission, validatePublicationReadiness } from './modules/validation/validation.service.js';
 import { ConversationService, ConversationServiceFailure } from './modules/ai/conversation.service.js';
+import { recoveryGuidance } from './modules/ai/recovery-guidance.js';
 import { ConversationNotFound, OperationConflict, PostgresConversationRepository, RevisionConflict, StaleQuestionSet, type ConversationRepository } from './modules/projects/conversation.repository.js';
 import type { ModelProvider } from './modules/providers/model-provider.js';
 
@@ -73,6 +74,10 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
     try { return await conversations.currentDraft(request.params.sessionId); }
     catch (error) { return sendConversationError(reply, error); }
   });
+  app.get<{ Params: { sessionId: string } }>('/api/v1/design-sessions/:sessionId/understanding', async (request, reply) => {
+    try { return await conversations.understanding(request.params.sessionId); }
+    catch (error) { return sendConversationError(reply, error); }
+  });
   app.put<{ Params: { sessionId: string }; Body: { baseRevision: number; processSpec: unknown } }>('/api/v1/design-sessions/:sessionId/draft', async (request, reply) => {
     try { return await conversations.proposeManualRevision(request.params.sessionId, request.body?.baseRevision, request.body?.processSpec); }
     catch (error) { return sendConversationError(reply, error); }
@@ -88,6 +93,20 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
   app.post<{ Params: { sessionId: string; revision: string }; Body: { baseRevision: number } }>('/api/v1/design-sessions/:sessionId/revisions/:revision/accept', async (request, reply) => {
     try { const revision = Number(request.params.revision); if (!Number.isInteger(revision) || revision < 1) return reply.code(400).send({ code: 'REVISION_INVALID', message: 'Número de revisão inválido' }); return await conversations.acceptRevision(request.params.sessionId, revision, request.body?.baseRevision); }
     catch (error) { return sendConversationError(reply, error); }
+  });
+  app.get<{ Params: { sessionId: string } }>('/api/v1/design-sessions/:sessionId/telemetry', async (request, reply) => {
+    try { return await conversations.telemetry(request.params.sessionId); }
+    catch (error) { return sendConversationError(reply, error); }
+  });
+  // Offline evaluation results produced by `npm run eval`; synthetic corpus only, specs omitted from the payload.
+  app.get('/api/v1/evaluation/scoreboard', async (_request, reply) => {
+    try {
+      const scoreboard = JSON.parse(await readFile(resolve(config.evaluationScoreboardPath ?? 'reports/eval/scoreboard.json'), 'utf8'));
+      for (const run of scoreboard.runs ?? []) for (const result of run.results ?? []) delete result.spec;
+      return scoreboard;
+    } catch {
+      return reply.code(404).send({ code: 'SCOREBOARD_NOT_FOUND', message: 'Nenhuma avaliação registrada; execute npm run eval' });
+    }
   });
   app.get<{ Params: { runId: string } }>('/api/v1/generation-runs/:runId', async (request, reply) => {
     try { return await conversations.run(request.params.runId); }
@@ -124,6 +143,6 @@ function sendConversationError(reply: { code: (status: number) => { send: (paylo
   if (error instanceof OperationConflict) return reply.code(409).send({ code: 'OPERATION_ID_CONFLICT', message: error.message });
   if (error instanceof StaleQuestionSet) return reply.code(409).send({ code: 'QUESTION_SET_STALE', message: error.message });
   if (error instanceof ConversationNotFound) return reply.code(404).send({ code: 'SESSION_NOT_FOUND', message: error.message });
-  if (error instanceof ConversationServiceFailure) return reply.code(error.statusCode).send({ code: error.code, message: error.message, ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}), ...(error.generationRunId ? { generationRunId: error.generationRunId } : {}), ...(error.providerDiagnostic ? { providerDiagnostic: { category: error.providerDiagnostic.category, ...(error.providerDiagnostic.httpStatus !== undefined ? { httpStatus: error.providerDiagnostic.httpStatus } : {}), ...(error.providerDiagnostic.providerCode ? { providerCode: error.providerDiagnostic.providerCode } : {}), ...(error.providerDiagnostic.providerType ? { providerType: error.providerDiagnostic.providerType } : {}), ...(error.providerDiagnostic.providerParam ? { providerParam: error.providerDiagnostic.providerParam } : {}), ...(error.providerDiagnostic.requestId ? { requestId: error.providerDiagnostic.requestId } : {}), ...(error.providerDiagnostic.summary ? { summary: error.providerDiagnostic.summary } : {}) } } : {}) });
+  if (error instanceof ConversationServiceFailure) return reply.code(error.statusCode).send({ code: error.code, message: error.message, recovery: recoveryGuidance(error.code, error.retryAfterMs), ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}), ...(error.generationRunId ? { generationRunId: error.generationRunId } : {}), ...(error.providerDiagnostic ? { providerDiagnostic: { category: error.providerDiagnostic.category, ...(error.providerDiagnostic.httpStatus !== undefined ? { httpStatus: error.providerDiagnostic.httpStatus } : {}), ...(error.providerDiagnostic.providerCode ? { providerCode: error.providerDiagnostic.providerCode } : {}), ...(error.providerDiagnostic.providerType ? { providerType: error.providerDiagnostic.providerType } : {}), ...(error.providerDiagnostic.providerParam ? { providerParam: error.providerDiagnostic.providerParam } : {}), ...(error.providerDiagnostic.requestId ? { requestId: error.providerDiagnostic.requestId } : {}), ...(error.providerDiagnostic.summary ? { summary: error.providerDiagnostic.summary } : {}) } } : {}) });
   return reply.code(503).send({ code: 'PERSISTENCE_UNAVAILABLE', message: 'Não foi possível acessar a persistência configurada' });
 }

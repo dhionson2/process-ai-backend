@@ -1,6 +1,7 @@
 import { ProviderCallBudgetLedger } from './call-budget-ledger.js';
 
-export type ProviderUsage = { inputTokens?: number; outputTokens?: number };
+/** `cachedInputTokens` and `costUsd` are reported only by providers that expose them. */
+export type ProviderUsage = { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; costUsd?: number };
 export type StructuredRequest = {
   model: string;
   system: string;

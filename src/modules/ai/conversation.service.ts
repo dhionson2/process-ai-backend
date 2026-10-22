@@ -4,6 +4,9 @@ import type { ProviderDiagnostic } from '../providers/model-provider.js';
 import { ConversationNotFound, OperationConflict, RevisionConflict, StaleQuestionSet, type ConfirmedFact, type ConversationRepository, type GenerationRun, type ProjectTarget, type StoredRevision } from '../projects/conversation.repository.js';
 import { AiOrchestrator, OrchestrationFailure, type ConversationTurn, type GenerationOutcome } from './orchestrator.js';
 import { reconstructMessageHistory } from './message-provenance.js';
+import { recoveryGuidance, recoveryMessage } from './recovery-guidance.js';
+import { projectUnderstanding } from './understanding.js';
+import { sessionTelemetry } from './telemetry.js';
 import { extractNumericThresholdFacts, identityForQuestion, latestSemanticFactEvents, reconcileExplicitNumericCorrection, semanticFactId, type SemanticFact } from './semantic-grounding.js';
 import { createHash } from 'node:crypto';
 import { configuredProvider } from './provider.factory.js';
@@ -32,7 +35,7 @@ export class ConversationService {
   }
   get databaseConfigured(): boolean { return !!this.repository; }
   get aiConfigured(): boolean { return !!this.orchestrator; }
-  get usesExternalProvider(): boolean { return this.orchestrator?.providerId === 'openai-compatible'; }
+  get usesExternalProvider(): boolean { return this.orchestrator?.providerId === 'openai-compatible' || this.orchestrator?.providerId === 'claude-cli'; }
   get providerStatus() {
     const endpoint = this.environment.externalAiBaseUrl ? new URL(this.environment.externalAiBaseUrl) : undefined;
     return {
@@ -85,6 +88,20 @@ export class ConversationService {
     return this.processTurn(sessionId, text, baseRevision, 'confirmed-answer', facts, operationId, questionSetId, requestHash, dataClassification);
   }
   async session(sessionId: string) { this.ensureRepository(); await this.repo().reconcileInterruptedRuns(this.environment.localTenantId, sessionId); const session = await this.sessionOrThrow(sessionId); return { ...session, questionSetId: stableQuestionSetId(session.pendingQuestions), pendingQuestions: publicQuestions(session.pendingQuestions) }; }
+  /** "O que entendi / o que falta": confirmed facts, open questions and a business projection of the newest revision. */
+  async understanding(sessionId: string) {
+    this.ensureRepository();
+    const tenantId = this.environment.localTenantId;
+    const session = await this.sessionOrThrow(sessionId);
+    const [facts, revisions] = await Promise.all([this.repo().listConfirmedFacts(tenantId, sessionId), this.repo().listRevisions(tenantId, sessionId)]);
+    const latest = revisions.reduce<StoredRevision | undefined>((newest, item) => !newest || item.revision > newest.revision ? item : newest, undefined);
+    return {
+      sessionId, currentRevision: session.currentRevision,
+      confirmedFacts: latestSemanticFactEvents(facts).map(fact => ({ question: fact.question, answer: fact.answer, state: fact.state || 'confirmed', confirmedAt: fact.confirmedAt })),
+      pendingQuestions: (session.pendingQuestions as Array<{ question: string; blocking?: boolean }>).map(question => ({ question: question.question, blocking: question.blocking !== false })),
+      proposal: latest ? projectUnderstanding(latest.processSpec, latest.revision, latest.status) : null,
+    };
+  }
   async history(sessionId: string) {
     this.ensureRepository(); await this.sessionOrThrow(sessionId);
     const [messages, facts] = await Promise.all([this.repo().listMessages(this.environment.localTenantId, sessionId, 100), this.repo().listConfirmedFacts(this.environment.localTenantId, sessionId)]);
@@ -124,6 +141,11 @@ export class ConversationService {
     const artifactBundle = { bpmnXml: artifacts.bpmnXml, forms: artifacts.forms, manifest: artifacts.manifest, diagnostics: artifacts.diagnostics };
     const proposal = await this.repo().createProposal(this.environment.localTenantId, sessionId, baseRevision, processSpec, artifactBundle, 'Alterações manuais validadas no backend', { source: 'manual', generatorVersion: (artifacts.manifest as any).generatorVersion });
     return { revision: proposal.revision, baseRevision, status: proposal.status, validation, artifacts: artifactBundle };
+  }
+  async telemetry(sessionId: string) {
+    this.ensureRepository();
+    await this.sessionOrThrow(sessionId);
+    return { sessionId, ...sessionTelemetry(await this.repo().listRuns(this.environment.localTenantId, sessionId)) };
   }
   async run(runId: string): Promise<GenerationRun> {
     this.ensureRepository();
@@ -165,7 +187,7 @@ export class ConversationService {
         if (this.environment.logLevel !== 'silent' && process.env.NODE_ENV !== 'production' && error instanceof OrchestrationFailure && error.graphIrSchemaDiagnostics) {
           console.warn(JSON.stringify({ event: 'graph-ir-schema-invalid', runId: run.id, diagnosticSet: error.graphIrSchemaDiagnostics }));
         }
-        await this.repo().completeTurn(tenantId, sessionId, run.id, { status: 'failed', assistantMessage: providerCallStarted ? `Não foi possível concluir a geração (${mapped.code}). Você pode tentar novamente; a revisão atual foi mantida.` : undefined, runPatch: { status: 'failed', errorCode: mapped.code, result: { error: { code: mapped.code, message: mapped.message } }, metrics: { runId: run.id, provider: run.provider, model: run.model, latencyMs: Date.now() - Date.parse(run.createdAt), errorCode: mapped.code, providerCallStarted, providerDiagnostic: error instanceof OrchestrationFailure ? error.providerDiagnostic : undefined, pipeline: error instanceof OrchestrationFailure ? error.diagnostics : undefined } } });
+        await this.repo().completeTurn(tenantId, sessionId, run.id, { status: 'failed', assistantMessage: providerCallStarted ? recoveryMessage(recoveryGuidance(mapped.code, mapped.retryAfterMs)) : undefined, runPatch: { status: 'failed', errorCode: mapped.code, result: { error: { code: mapped.code, message: mapped.message } }, metrics: { runId: run.id, provider: run.provider, model: run.model, latencyMs: Date.now() - Date.parse(run.createdAt), errorCode: mapped.code, providerCallStarted, providerDiagnostic: error instanceof OrchestrationFailure ? error.providerDiagnostic : undefined, pipeline: error instanceof OrchestrationFailure ? error.diagnostics : undefined } } });
         throw new ConversationServiceFailure(mapped.code, mapped.message, mapped.statusCode, mapped.retryAfterMs, run.id, mapped.providerDiagnostic);
       }
       return await this.persistOutcome(sessionId, run, baseRevision, outcome);
@@ -185,8 +207,9 @@ export class ConversationService {
       return { generationRunId: run.id, status: 'needs-input', ...result };
     }
     if (!outcome.validation.valid || !outcome.artifacts) {
-      const result = { kind: outcome.kind, changeSummary: outcome.changeSummary, validation: outcome.validation, repairAttempts: outcome.repairAttempts };
-      await this.repo().completeTurn(tenantId, sessionId, run.id, { status: 'validation-failed', assistantMessage: `A proposta não passou na validação determinística: ${outcome.validation.diagnostics.map(d => d.code).join(', ')}`, runPatch: { status: 'validation-failed', result, metrics: metrics(outcome) } });
+      const recovery = recoveryGuidance('PROCESSSPEC_INVALID');
+      const result = { kind: outcome.kind, changeSummary: outcome.changeSummary, validation: outcome.validation, repairAttempts: outcome.repairAttempts, recovery };
+      await this.repo().completeTurn(tenantId, sessionId, run.id, { status: 'validation-failed', assistantMessage: `${recoveryMessage(recovery)} (diagnósticos: ${outcome.validation.diagnostics.map(d => d.code).join(', ')})`, runPatch: { status: 'validation-failed', result, metrics: metrics(outcome) } });
       return { generationRunId: run.id, status: 'validation-failed', ...result };
     }
     const artifactBundle = { bpmnXml: outcome.artifacts.bpmnXml, forms: outcome.artifacts.forms, manifest: outcome.artifacts.manifest, diagnostics: outcome.artifacts.diagnostics };

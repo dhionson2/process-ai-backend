@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Process AI Backend API",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "API versionada para ProcessSpec, geração, validação e modelagem conversacional. Não executa conectores nem publica processos."
   },
   "servers": [
@@ -848,6 +848,45 @@
               }
             }
           }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/understanding": {
+      "get": {
+        "summary": "O que o sistema entendeu e o que ainda falta",
+        "description": "Projeção somente leitura: fatos confirmados, perguntas pendentes e visão de negócio da revisão mais recente (participantes, etapas, decisões, campos, origem de cada item e pendências). Não altera a sessão.",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Entendimento atual da sessão",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SessionUnderstanding" } } }
+          },
+          "404": { "description": "Sessão inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/telemetry": {
+      "get": {
+        "summary": "Custo, tokens, latência e etapas por turno da sessão",
+        "description": "Construído somente a partir das métricas persistidas dos generation runs; não contém prompts nem respostas do modelo. costUsd é null quando o provedor não informa custo.",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Telemetria da sessão", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SessionTelemetry" } } } },
+          "404": { "description": "Sessão inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/v1/evaluation/scoreboard": {
+      "get": {
+        "summary": "Placar da avaliação offline por provider/modelo",
+        "description": "Resultado de `npm run eval` sobre o corpus sintético versionado em scripts/eval/scenarios.ts. Somente leitura; os ProcessSpecs gerados são omitidos.",
+        "responses": {
+          "200": { "description": "Placar", "content": { "application/json": { "schema": { "type": "object", "required": ["generatedAt", "corpus", "runs"], "properties": { "generatedAt": { "type": "string" }, "corpus": { "type": "array", "items": { "type": "object" } }, "runs": { "type": "array", "items": { "type": "object", "additionalProperties": true } } } } } } },
+          "404": { "description": "Nenhuma avaliação registrada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
         }
       }
     },
@@ -2549,6 +2588,9 @@
               "repairAttempts": {
                 "type": "integer",
                 "maximum": 1
+              },
+              "recovery": {
+                "$ref": "#/components/schemas/RecoveryGuidance"
               }
             }
           }
@@ -2685,7 +2727,102 @@
             "items": {
               "$ref": "#/components/schemas/Diagnostic"
             }
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/RecoveryGuidance"
           }
+        }
+      },
+      "UnderstandingItem": {
+        "type": "object",
+        "required": ["label", "origin", "confirmed"],
+        "properties": {
+          "label": { "type": "string" },
+          "detail": { "type": "string" },
+          "origin": { "type": "string", "enum": ["user", "confirmed-answer", "inference", "unknown"] },
+          "confirmed": { "type": "boolean" }
+        }
+      },
+      "SessionUnderstanding": {
+        "type": "object",
+        "required": ["sessionId", "currentRevision", "confirmedFacts", "pendingQuestions", "proposal"],
+        "properties": {
+          "sessionId": { "type": "string", "format": "uuid" },
+          "currentRevision": { "type": "integer", "minimum": 0 },
+          "confirmedFacts": { "type": "array", "items": { "type": "object", "required": ["question", "answer", "state"], "properties": { "question": { "type": "string" }, "answer": { "type": "string" }, "state": { "type": "string" }, "confirmedAt": { "type": "string" } } } },
+          "pendingQuestions": { "type": "array", "items": { "type": "object", "required": ["question", "blocking"], "properties": { "question": { "type": "string" }, "blocking": { "type": "boolean" } } } },
+          "proposal": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "required": ["revision", "status", "processName", "actors", "activities", "decisions", "fields", "pending", "provenance"],
+                "properties": {
+                  "revision": { "type": "integer", "minimum": 1 },
+                  "status": { "type": "string" },
+                  "processName": { "type": "string" },
+                  "actors": { "type": "array", "items": { "$ref": "#/components/schemas/UnderstandingItem" } },
+                  "activities": { "type": "array", "items": { "$ref": "#/components/schemas/UnderstandingItem" } },
+                  "decisions": { "type": "array", "items": { "type": "object", "required": ["label", "outcomes"], "properties": { "label": { "type": "string" }, "outcomes": { "type": "array", "items": { "type": "string" } } } } },
+                  "fields": { "type": "array", "items": { "type": "object", "required": ["form", "label", "type", "required"], "properties": { "form": { "type": "string" }, "label": { "type": "string" }, "type": { "type": "string" }, "required": { "type": "boolean" } } } },
+                  "pending": { "type": "array", "items": { "type": "string" } },
+                  "provenance": { "type": "object", "required": ["user", "confirmedAnswer", "inference", "unconfirmed"], "properties": { "user": { "type": "integer" }, "confirmedAnswer": { "type": "integer" }, "inference": { "type": "integer" }, "unconfirmed": { "type": "integer" } } }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "SessionTelemetry": {
+        "type": "object",
+        "required": ["sessionId", "runs", "totals"],
+        "properties": {
+          "sessionId": { "type": "string", "format": "uuid" },
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "status", "createdAt", "latencyMs", "calls", "inputTokens", "cachedInputTokens", "outputTokens", "costUsd", "repairAttempts", "stages"],
+              "properties": {
+                "id": { "type": "string", "format": "uuid" },
+                "status": { "type": "string" },
+                "provider": { "type": "string" },
+                "model": { "type": "string" },
+                "createdAt": { "type": "string" },
+                "latencyMs": { "type": "integer", "minimum": 0 },
+                "calls": { "type": "integer", "minimum": 0 },
+                "inputTokens": { "type": "integer", "minimum": 0 },
+                "cachedInputTokens": { "type": "integer", "minimum": 0 },
+                "outputTokens": { "type": "integer", "minimum": 0 },
+                "costUsd": { "type": ["number", "null"] },
+                "repairAttempts": { "type": "integer", "minimum": 0 },
+                "stages": { "type": "array", "items": { "type": "object", "required": ["stage", "status"], "properties": { "stage": { "type": "string" }, "status": { "type": "string" } } } },
+                "errorCode": { "type": "string" }
+              }
+            }
+          },
+          "totals": {
+            "type": "object",
+            "required": ["runs", "validated", "calls", "latencyMs", "inputTokens", "cachedInputTokens", "outputTokens", "cacheHitRate", "costUsd"],
+            "properties": {
+              "runs": { "type": "integer" }, "validated": { "type": "integer" }, "calls": { "type": "integer" }, "latencyMs": { "type": "integer" },
+              "inputTokens": { "type": "integer" }, "cachedInputTokens": { "type": "integer" }, "outputTokens": { "type": "integer" },
+              "cacheHitRate": { "type": "number", "minimum": 0, "maximum": 1 }, "costUsd": { "type": ["number", "null"] }
+            }
+          }
+        }
+      },
+      "RecoveryGuidance": {
+        "type": "object",
+        "description": "Orientação de recuperação para a pessoa usuária. O campo code continua sendo o contrato para máquinas; nenhum gate é relaxado.",
+        "required": ["category", "title", "message", "actions", "preserved"],
+        "properties": {
+          "category": { "type": "string", "enum": ["missing-information", "interpretation-divergence", "model-output-invalid", "input-too-large", "provider-unavailable", "configuration", "conflict", "invalid-request", "unexpected"] },
+          "title": { "type": "string" },
+          "message": { "type": "string" },
+          "actions": { "type": "array", "items": { "type": "string", "enum": ["answer", "rephrase", "retry", "wait", "shorten", "reload", "contact-admin"] } },
+          "preserved": { "type": "boolean", "description": "Texto enviado e revisão atual foram preservados." },
+          "retryAfterMs": { "type": "integer", "minimum": 0 }
         }
       },
       "ProposalResult": {

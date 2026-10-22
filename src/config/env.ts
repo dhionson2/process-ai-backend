@@ -5,7 +5,7 @@ export interface Environment {
   logLevel: string;
   databaseUrl?: string;
   localTenantId: string;
-  aiProvider: 'disabled' | 'ollama' | 'openai-compatible';
+  aiProvider: 'disabled' | 'ollama' | 'openai-compatible' | 'claude-cli';
   aiModel?: string;
   ollamaBaseUrl: string;
   externalAiBaseUrl?: string;
@@ -22,6 +22,14 @@ export interface Environment {
   /** Opt-in semantic grounding/reconciliation; legacy remains the default for comparison. */
   aiSemanticGroundingMode?: 'legacy' | 'controlled';
   aiGraphIrMode?: 'off' | 'shadow' | 'controlled';
+  /** Deterministic readiness gate before a first proposal; `off` restores the previous generate-at-once behaviour. */
+  aiReadinessGate?: 'on' | 'off';
+  /** Scoreboard JSON served read-only to the UI (written by scripts/eval/run-eval.ts). */
+  evaluationScoreboardPath?: string;
+  /** Claude Code CLI provider (external): executable, `--bare` with ANTHROPIC_API_KEY, per-call USD ceiling. */
+  claudeCliBinary?: string;
+  claudeCliBare?: boolean;
+  claudeCliMaxBudgetUsd?: number;
 }
 function boundedInteger(raw: string | undefined, fallback: number, minimum: number, maximum: number, name: string): number {
   const value = Number(raw ?? fallback);
@@ -32,13 +40,17 @@ export function readEnvironment(env: NodeJS.ProcessEnv = process.env): Environme
   const port = Number(env.PORT ?? 3333);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT inválida');
   const aiProvider = env.AI_PROVIDER || 'disabled';
-  if (!['disabled', 'ollama', 'openai-compatible'].includes(aiProvider)) throw new Error('AI_PROVIDER inválido');
+  if (!['disabled', 'ollama', 'openai-compatible', 'claude-cli'].includes(aiProvider)) throw new Error('AI_PROVIDER inválido');
   const externalAiStructuredOutput = env.EXTERNAL_AI_STRUCTURED_OUTPUT || 'json-object';
   if (!['json-object', 'json-schema-strict'].includes(externalAiStructuredOutput)) throw new Error('EXTERNAL_AI_STRUCTURED_OUTPUT inválido');
   const aiSemanticGroundingMode = env.AI_SEMANTIC_GROUNDING_MODE || 'legacy';
   if (!['legacy', 'controlled'].includes(aiSemanticGroundingMode)) throw new Error('AI_SEMANTIC_GROUNDING_MODE inválido');
   const aiGraphIrMode = env.AI_GRAPH_IR_MODE || 'off';
   if (!['off', 'shadow', 'controlled'].includes(aiGraphIrMode)) throw new Error('AI_GRAPH_IR_MODE inválido');
+  const aiReadinessGate = env.AI_READINESS_GATE || 'on';
+  if (!['on', 'off'].includes(aiReadinessGate)) throw new Error('AI_READINESS_GATE inválido');
+  const claudeCliMaxBudgetUsd = Number(env.CLAUDE_CLI_MAX_BUDGET_USD ?? 0);
+  if (!Number.isFinite(claudeCliMaxBudgetUsd) || claudeCliMaxBudgetUsd < 0 || claudeCliMaxBudgetUsd > 10) throw new Error('CLAUDE_CLI_MAX_BUDGET_USD inválido');
   const ollamaBaseUrl = env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
   const externalAiBaseUrl = env.EXTERNAL_AI_BASE_URL;
   for (const candidate of [ollamaBaseUrl, externalAiBaseUrl].filter(Boolean) as string[]) {
@@ -68,5 +80,10 @@ export function readEnvironment(env: NodeJS.ProcessEnv = process.env): Environme
     aiMaxProviderTokens: boundedInteger(env.AI_MAX_PROVIDER_TOKENS, 0, 0, 1000000, 'AI_MAX_PROVIDER_TOKENS'),
     aiSemanticGroundingMode: aiSemanticGroundingMode as Environment['aiSemanticGroundingMode'],
     aiGraphIrMode: aiGraphIrMode as Environment['aiGraphIrMode'],
+    aiReadinessGate: aiReadinessGate as Environment['aiReadinessGate'],
+    evaluationScoreboardPath: env.EVALUATION_SCOREBOARD_PATH || 'reports/eval/scoreboard.json',
+    claudeCliBinary: env.CLAUDE_CLI_BINARY || undefined,
+    claudeCliBare: env.CLAUDE_CLI_BARE === 'true',
+    claudeCliMaxBudgetUsd: claudeCliMaxBudgetUsd || undefined,
   };
 }

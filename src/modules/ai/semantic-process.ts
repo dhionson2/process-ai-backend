@@ -151,8 +151,10 @@ export function semanticRefinementSchema(): Json {
   return { $schema: 'https://json-schema.org/draft/2020-12/schema', oneOf: [clarification, refinement] };
 }
 
+/** `model-omission`: the requester already stated it and the interpretation dropped it, so the model (not the user) is asked to fix it. */
+export type IntentGapOrigin = 'needs-user' | 'model-omission';
 export class IntentCompilationError extends Error {
-  constructor(readonly question: string, message = question) { super(message); this.name = 'IntentCompilationError'; }
+  constructor(readonly question: string, message = question, readonly origin: IntentGapOrigin = 'needs-user') { super(message); this.name = 'IntentCompilationError'; }
 }
 export class SemanticGroundingError extends Error {
   constructor(readonly status: 'divergent' | 'inconclusive', message: string) { super(message); this.name = 'SemanticGroundingError'; }
@@ -305,7 +307,7 @@ export async function compileBusinessIntent(value: BusinessIntentV1 | Json, opti
   const activities = await normalizeActivities(intent.activities || []);
   if (!activities.length) throw new IntentCompilationError('O modelo não identificou nenhuma atividade do processo que possa ser confirmada na descrição. Quais tarefas ou decisões devem fazer parte do fluxo?');
   if (hasExplicitDecision(activitySource) && !containsDecision(activities)) {
-    throw new IntentCompilationError('A descrição contém uma decisão explícita, mas o BusinessIntent não a representou como aprovação ou decisão com alternativas. Confirme como estruturar os ramos antes de gerar a prévia.');
+    { const question = 'A descrição contém uma decisão explícita, mas o BusinessIntent não a representou como aprovação ou decisão com alternativas. Confirme como estruturar os ramos antes de gerar a prévia.'; throw new IntentCompilationError(question, question, 'model-omission'); }
   }
   assertConditionalCoverage(activities, activitySource);
   const normalizedIntent = { kind: 'process_intent', name: intent.name, purpose: intent.purpose, actors: [...actors.values()], startFields, steps: activities };
@@ -355,7 +357,7 @@ export async function allowedOperationsSummary(): Promise<string> {
     `- ${connector.connectorId}/${operation.operationId}: capability=${operation.capability}, sideEffect=${operation.sideEffectLevel}`)).join('\n');
 }
 
-const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+export const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 function isRejectionReasonField(name: string): boolean {
   return /(?:motivo|reason|justific\w*|raz[aã]o).{0,40}(?:reprov|rejei)|(?:reprov|rejei).{0,40}(?:motivo|reason|justific\w*|raz[aã]o)/i.test(name);
 }
@@ -678,14 +680,14 @@ function assertConditionalCoverage(activities: Json[], source: string): void {
     if (!match || !/receb|inform|comunic|registr|encaminh|envi|notific|analis|verific|aprova/i.test(match[2])) continue;
     const side = /^aprov/i.test(match[1]) ? 'approved' : 'rejected';
     const represented = evidenceByBranch[side].some(quote => adequateQuote(source, quote) && (containsQuote(match[2], quote) || containsQuote(quote, match[2]))) || (side === 'rejected' && rejectionReasonRepresented && /motivo|justific|raz[aã]o/i.test(match[2]) && /obrigatori|mandatory/i.test(match[2]));
-    if (!represented) throw new IntentCompilationError(`A consequência explícita do ramo ${side === 'approved' ? 'aprovado' : 'reprovado'} não foi preservada: “${match[2].trim()}”. Represente essa atividade no ramo correspondente.`);
+    if (!represented) { const question = `A consequência explícita do ramo ${side === 'approved' ? 'aprovado' : 'reprovado'} não foi preservada: “${match[2].trim()}”. Represente essa atividade no ramo correspondente.`; throw new IntentCompilationError(question, question, 'model-omission'); }
   }
 }
 function hasExplicitDecision(text: string): boolean {
   const choices = text.match(/\b(aprov(?:a|am|ar|ado|ada|ados|adas)|reprov(?:a|am|ar|ado|ada|ados|adas)|rejeit(?:a|am|ar|ado|ada|ados|adas)|approve[sd]?|reject(?:s|ed)?|accept(?:s|ed)?|decline[sd]?)\b/gi) || [];
   return choices.length >= 2;
 }
-function initiatesRequest(name: string, sourceText: string): boolean {
+export function initiatesRequest(name: string, sourceText: string): boolean {
   const role = normalized(name);
   const clause = sourceText.split(/[.!?;]/).map(normalized).find(candidate => candidate.includes(role));
   if (!role || !clause) return false;

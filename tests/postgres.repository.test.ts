@@ -118,6 +118,8 @@ test('PostgreSQL persiste sessões e revisões com isolamento tenant e controle 
     assert.deepEqual(await repository.listConfirmedFacts(tenant, created.sessionId), [fact]);
     assert.equal((await repository.getRun(tenant, run.id))?.status, 'validated');
     assert.equal((await repository.listRevisions(tenant, created.sessionId)).length, 2);
+    assert.deepEqual((await repository.listRuns(tenant, created.sessionId)).map(item => [item.id, item.metrics]), [[run.id, { latencyMs: 11, usage: { inputTokens: 20, outputTokens: 10 } }]]);
+    assert.deepEqual(await repository.listRuns(`${tenant}-other`, created.sessionId), [], 'runs isolados por tenant');
   } finally {
     await pool.query('DELETE FROM process_ai_generation_runs WHERE tenant_id=$1', [tenant]);
     await pool.query('DELETE FROM process_ai_messages WHERE tenant_id=$1', [tenant]);

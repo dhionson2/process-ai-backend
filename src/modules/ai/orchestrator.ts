@@ -8,6 +8,7 @@ import { allowedOperationsSummary, applySemanticRefinement, assertSemanticPlanBo
 import type { ProjectTarget } from '../projects/conversation.repository.js';
 import type { ConfirmedFact } from '../projects/conversation.repository.js';
 import { interpretationSchema, normalizeInterpretation } from './interpretation-context.js';
+import { assessReadiness } from './readiness.js';
 import { technicalIntent } from '../knowledge/capability-context.js';
 import { createHash } from 'node:crypto';
 import { evaluateRequirementCoverage, extractRequirementLedger, proposeLiteralCoverageLinks, type CoverageElement, type RequirementLedgerV1, type RequirementType } from './requirement-coverage.js';
@@ -55,7 +56,7 @@ type Json = Record<string, any>;
 export class AiOrchestrator {
   private readonly concurrency: ProviderConcurrencyLimit;
   private readonly knowledge = new BpmKnowledgeEngine();
-  constructor(private readonly provider: ModelProvider, private readonly model: string, private readonly environment: Pick<Environment, 'aiTimeoutMs' | 'aiContextTokens' | 'aiMaxOutputTokens' | 'aiMaxInputChars' | 'aiMaxConcurrency' | 'externalAiStructuredOutput' | 'aiSemanticGroundingMode' | 'aiGraphIrMode'>) {
+  constructor(private readonly provider: ModelProvider, private readonly model: string, private readonly environment: Pick<Environment, 'aiReadinessGate' | 'aiTimeoutMs' | 'aiContextTokens' | 'aiMaxOutputTokens' | 'aiMaxInputChars' | 'aiMaxConcurrency' | 'externalAiStructuredOutput' | 'aiSemanticGroundingMode' | 'aiGraphIrMode'>) {
     this.concurrency = new ProviderConcurrencyLimit(environment.aiMaxConcurrency);
   }
   get providerId(): string { return this.provider.id; }
@@ -184,8 +185,7 @@ export class AiOrchestrator {
       try { completion = await this.concurrency.run(() => this.provider.generateStructured({ ...request, prompt: repairPrompt })); }
       catch (error) { throw mapProviderError(error); }
       accumulatedLatencyMs += completion.latencyMs;
-      accumulatedUsage.inputTokens = addUsage(accumulatedUsage.inputTokens, completion.usage.inputTokens);
-      accumulatedUsage.outputTokens = addUsage(accumulatedUsage.outputTokens, completion.usage.outputTokens);
+      accumulateUsage(accumulatedUsage, completion.usage);
       completion.value = normalizeInterpretation(completion.value);
       if (!validator(completion.value)) {
         const repairDiagnostics = safeSchemaDiagnostics(validator.errors);
@@ -208,8 +208,7 @@ export class AiOrchestrator {
       try { completion = await this.concurrency.run(() => this.provider.generateStructured({ ...request, prompt: recoveryPrompt })); }
       catch (error) { throw mapProviderError(error); }
       accumulatedLatencyMs += completion.latencyMs;
-      accumulatedUsage.inputTokens = addUsage(accumulatedUsage.inputTokens, completion.usage.inputTokens);
-      accumulatedUsage.outputTokens = addUsage(accumulatedUsage.outputTokens, completion.usage.outputTokens);
+      accumulateUsage(accumulatedUsage, completion.usage);
       recoveryAttempts = 1;
       completion.value = normalizeInterpretation(completion.value);
       if (!validator(completion.value)) {
@@ -223,6 +222,11 @@ export class AiOrchestrator {
     }
     if (first.kind === 'need_clarification') return clarificationOutcome(first, completion.model, accumulatedLatencyMs, accumulatedUsage, this.provider.id, knowledge.version, knowledge.moduleIds, first);
 
+    if (!refinementMode && first.kind === 'business_intent' && confirmedFacts.length === 0 && (this.environment.aiReadinessGate ?? 'on') === 'on') {
+      const readiness = assessReadiness(first, userSource);
+      trace.push({ stage: 'readiness', status: readiness.ready ? 'ready' : 'needs-input', details: { gaps: readiness.gaps.map(gap => gap.slot) } });
+      if (!readiness.ready) return clarificationOutcome({ kind: 'need_clarification', summary: readiness.understanding, questions: readiness.gaps.map(gap => ({ question: gap.question, blocking: true })) }, completion.model, accumulatedLatencyMs, accumulatedUsage, this.provider.id, knowledge.version, knowledge.moduleIds, first);
+    }
     let plan = first;
     let compiledBusinessIntent: Json | undefined;
     const compose = async (value: Json, model: string) => {
@@ -249,19 +253,46 @@ export class AiOrchestrator {
         throw new OrchestrationFailure('REFINEMENT_AMBIGUOUS', error instanceof Error ? error.message : 'Refinamento não aplicável sem ambiguidade');
       }
     };
-    let spec: Json;
+    // Assigned by the first compose or by the omission repair; every other path returns or throws.
+    let spec!: Json;
+    let omissionRepairAttempts = 0;
     try { spec = await compose(plan, completion.model); }
-    catch (error) {
-      if (error instanceof IntentCompilationError) return clarificationOutcome({ kind: 'need_clarification', summary: 'A intenção foi interpretada, mas falta uma informação para compilar o fluxo com segurança.', questions: [{ question: error.question, blocking: true }] }, completion.model, completion.latencyMs, completion.usage, this.provider.id, knowledge.version, knowledge.moduleIds, plan);
-      if (!refinementMode || !(error instanceof OrchestrationFailure) || error.code !== 'REFINEMENT_AMBIGUOUS') throw error;
-      return clarificationOutcome({ kind: 'need_clarification', summary: 'O refinamento não foi aplicado; falta esclarecer uma referência do processo.', questions: [{ question: refinementQuestion(error.message), blocking: true }] }, completion.model, completion.latencyMs, completion.usage, this.provider.id, knowledge.version, knowledge.moduleIds, plan);
+    catch (firstError) {
+      let error = firstError;
+      // The requester already stated what the interpretation dropped: one targeted correction goes to the
+      // model, and its answer passes through schema, compiler and validation again. One corrective call per turn.
+      if (error instanceof IntentCompilationError && error.origin === 'model-omission' && !refinementMode && recoveryAttempts + normalizationRepairAttempts === 0) {
+        const omissionPrompt = `${prompt}\n\nCorreção obrigatória: a interpretação anterior omitiu algo que o solicitante descreveu explicitamente. ${error.question}\nRetorne o BusinessIntent completo, preservando todos os demais fatos, sem inventar etapas, campos, papéis ou regras.\nResposta anterior:\n${JSON.stringify(plan)}`;
+        if (omissionPrompt.length + schemaChars <= this.environment.aiMaxInputChars) {
+          omissionRepairAttempts = 1;
+          trace.push({ stage: 'compilation', status: 'omission-repair', details: {} });
+          await args.onProviderCallStart?.();
+          let repairCompletion;
+          try { repairCompletion = await this.concurrency.run(() => this.provider.generateStructured({ ...request, prompt: omissionPrompt })); }
+          catch (providerError) { throw mapProviderError(providerError); }
+          accumulatedLatencyMs += repairCompletion.latencyMs;
+          accumulateUsage(accumulatedUsage, repairCompletion.usage);
+          const candidate = normalizeInterpretation(repairCompletion.value) as Json;
+          if (validator(candidate) && candidate.kind === 'business_intent') {
+            enforcePlanBounds(candidate);
+            try { spec = await compose(candidate, repairCompletion.model); plan = candidate; completion = repairCompletion; error = undefined; }
+            catch (secondError) { error = secondError; }
+          }
+        }
+      }
+      if (error === undefined) trace.push({ stage: 'compilation', status: 'omission-repaired', details: {} });
+      else {
+        if (error instanceof IntentCompilationError) return clarificationOutcome({ kind: 'need_clarification', summary: 'A intenção foi interpretada, mas falta uma informação para compilar o fluxo com segurança.', questions: [{ question: error.question, blocking: true }] }, completion.model, accumulatedLatencyMs, accumulatedUsage, this.provider.id, knowledge.version, knowledge.moduleIds, plan);
+        if (!refinementMode || !(error instanceof OrchestrationFailure) || error.code !== 'REFINEMENT_AMBIGUOUS') throw error;
+        return clarificationOutcome({ kind: 'need_clarification', summary: 'O refinamento não foi aplicado; falta esclarecer uma referência do processo.', questions: [{ question: refinementQuestion(error.message), blocking: true }] }, completion.model, completion.latencyMs, completion.usage, this.provider.id, knowledge.version, knowledge.moduleIds, plan);
+      }
     }
     let validation = await validateProcessSpec(spec);
     trace.push({ stage: 'validation', status: validation.valid ? 'valid' : 'invalid', details: { codes: validation.diagnostics.map(item => item.code), nodes: spec.nodes.length, forms: spec.forms.length } });
-    let repairAttempts = recoveryAttempts + normalizationRepairAttempts;
+    let repairAttempts = recoveryAttempts + normalizationRepairAttempts + omissionRepairAttempts;
     let latencyMs = accumulatedLatencyMs;
     const usage: ProviderUsage = { ...accumulatedUsage };
-    if (!validation.valid && recoveryAttempts === 0) {
+    if (!validation.valid && recoveryAttempts === 0 && omissionRepairAttempts === 0) {
       repairAttempts = 1;
       const diagnostics = validation.diagnostics.map(({ code, path, message }) => ({ code, path, message }));
       const repairDetails = `\n\n${refinementMode ? 'O refinamento aplicado' : 'O ProcessSpec composto do plano'} falhou na validação determinística. Corrija somente a alteração solicitada e os diagnósticos; preserve os dados não relacionados e não enfraqueça segurança. Retorne o mesmo tipo de resposta estruturada:\n${JSON.stringify(diagnostics)}\n\nResposta anterior:\n${JSON.stringify(plan)}`;
@@ -278,8 +309,7 @@ export class AiOrchestrator {
       try { completion = await this.concurrency.run(() => this.provider.generateStructured({ ...request, prompt: repairPrompt })); }
       catch (error) { throw mapProviderError(error); }
       latencyMs += completion.latencyMs;
-      usage.inputTokens = addUsage(usage.inputTokens, completion.usage.inputTokens);
-      usage.outputTokens = addUsage(usage.outputTokens, completion.usage.outputTokens);
+      accumulateUsage(usage, completion.usage);
       completion.value = normalizeInterpretation(completion.value);
       if (!validator(completion.value)) {
         const schemaDiagnostics = safeSchemaDiagnostics(validator.errors);
@@ -512,6 +542,13 @@ function refinementQuestion(reason: string): string {
   return 'Esclareça o ponto de inserção, o papel responsável e o comportamento esperado nas saídas da nova aprovação.';
 }
 function addUsage(a?: number, b?: number): number | undefined { return a === undefined && b === undefined ? undefined : (a || 0) + (b || 0); }
+/** Sums every usage counter a provider reports; counters absent from both sides stay absent. */
+function accumulateUsage(target: ProviderUsage, next: ProviderUsage): void {
+  for (const key of ['inputTokens', 'outputTokens', 'cachedInputTokens', 'costUsd'] as const) {
+    const sum = addUsage(target[key], next[key]);
+    if (sum !== undefined) target[key] = sum;
+  }
+}
 function roleLabelMatchesEvidence(label: string, evidence: string): boolean {
   const normalize = (value: string) => ` ${value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g, ' ').trim()} `;
   const role = normalize(label);
