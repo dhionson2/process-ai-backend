@@ -88,6 +88,7 @@ async function compose(ctx: TurnContext, plan: Json, model: string): Promise<{ s
       semanticGroundingMode: ctx.groundingMode,
     });
     ctx.auditCoverage(compiled.businessIntent as Json);
+    assertNoRejectedItems(ctx, compiled.spec);
     return { spec: compiled.spec, compiledIntent: compiled.businessIntent as Json };
   } catch (error) {
     if (!ctx.coverageAudited() && !ctx.refinementMode) ctx.auditCoverage(plan);
@@ -95,6 +96,24 @@ async function compose(ctx: TurnContext, plan: Json, model: string): Promise<{ s
     if (error instanceof IntentCompilationError) throw error;
     if (error instanceof SemanticGroundingError) throw new OrchestrationFailure(`SEMANTIC_GROUNDING_${error.status.toUpperCase()}`, error.message);
     throw new OrchestrationFailure('REFINEMENT_AMBIGUOUS', error instanceof Error ? error.message : 'Refinamento não aplicável sem ambiguidade');
+  }
+}
+
+const normalizedLabel = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+/**
+ * Deterministic check of the requester's rejections: a compiled spec that still contains a rejected item is a
+ * divergence from what the requester said, so it takes the model-omission path (one correction, then a question).
+ */
+function assertNoRejectedItems(ctx: TurnContext, spec: Json): void {
+  if (!ctx.rejectedItems.length) return;
+  const present = (kind: string) => kind === 'actor' ? (spec.roles ?? []).map((role: Json) => role.label)
+    : kind === 'decision' ? (spec.nodes ?? []).filter((node: Json) => node.type === 'exclusiveGateway').map((node: Json) => node.name)
+    : kind === 'field' ? (spec.forms ?? []).flatMap((form: Json) => (form.fields ?? []).map((field: Json) => field.label))
+    : (spec.nodes ?? []).filter((node: Json) => node.type === 'userTask' || node.type === 'serviceTask').map((node: Json) => node.name);
+  const violation = ctx.rejectedItems.find(item => present(item.kind).some((label: unknown) => normalizedLabel(label) === normalizedLabel(item.label)));
+  if (violation) {
+    const question = `O solicitante rejeitou “${violation.label}”, mas a proposta ainda o inclui. Remova esse item e preserve o restante.`;
+    throw new IntentCompilationError(question, question, 'model-omission');
   }
 }
 

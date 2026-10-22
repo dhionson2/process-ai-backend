@@ -7,6 +7,8 @@ import { reconstructMessageHistory } from './message-provenance.js';
 import { recoveryGuidance, recoveryMessage } from './recovery-guidance.js';
 import { projectUnderstanding } from './understanding.js';
 import { sessionTelemetry } from './telemetry.js';
+import { diffSpecs } from './revision-diff.js';
+import { selectSimilarExamples, summarizeForExample } from './examples.js';
 import { extractNumericThresholdFacts, identityForQuestion, latestSemanticFactEvents, reconcileExplicitNumericCorrection, semanticFactId, type SemanticFact } from './semantic-grounding.js';
 import { createHash } from 'node:crypto';
 import { configuredProvider } from './provider.factory.js';
@@ -96,9 +98,10 @@ export class ConversationService {
     this.ensureRepository();
     const tenantId = this.environment.localTenantId;
     const session = await this.sessionOrThrow(sessionId);
-    const [facts, revisions] = await Promise.all([this.repo().listConfirmedFacts(tenantId, sessionId), this.repo().listRevisions(tenantId, sessionId)]);
+    const [facts, revisions, requirements] = await Promise.all([this.repo().listConfirmedFacts(tenantId, sessionId), this.repo().listRevisions(tenantId, sessionId), this.repo().listRequirements(tenantId, sessionId)]);
     const latest = revisions.reduce<StoredRevision | undefined>((newest, item) => !newest || item.revision > newest.revision ? item : newest, undefined);
     return {
+      requirements: requirements.map(item => ({ id: item.id, kind: item.kind, label: item.label, origin: item.origin, state: item.state, inLatestRevision: latest ? item.lastRevision === latest.revision : false })),
       sessionId, currentRevision: session.currentRevision,
       confirmedFacts: latestSemanticFactEvents(facts).map(fact => ({ question: fact.question, answer: fact.answer, state: fact.state || 'confirmed', confirmedAt: fact.confirmedAt })),
       pendingQuestions: (session.pendingQuestions as Array<{ question: string; blocking?: boolean }>).map(question => ({ question: question.question, blocking: question.blocking !== false })),
@@ -130,9 +133,73 @@ export class ConversationService {
   async acceptRevision(sessionId: string, revision: number, baseRevision: number) {
     this.ensureRepository();
     await this.sessionOrThrow(sessionId);
-    return this.repo().acceptRevision(this.environment.localTenantId, sessionId, revision, baseRevision);
+    const accepted = await this.repo().acceptRevision(this.environment.localTenantId, sessionId, revision, baseRevision);
+    await this.recordAcceptedExample(sessionId, accepted);
+    return accepted;
   }
-  async proposeManualRevision(sessionId: string, baseRevision: number, value: unknown) {
+  /** Flywheel: an accepted proposal becomes a same-tenant example (request → accepted result); never fails the accept. */
+  private async recordAcceptedExample(sessionId: string, accepted: StoredRevision) {
+    try {
+      const tenantId = this.environment.localTenantId;
+      const messages = await this.repo().listMessages(tenantId, sessionId, 100);
+      const requestText = messages.filter(message => message.role === 'user').map(message => message.content).join('\n').slice(0, 2000);
+      if (!requestText.trim()) return;
+      await this.repo().saveAcceptedExample(tenantId, sessionId, accepted.revision, requestText, summarizeForExample(projectUnderstanding(accepted.processSpec, accepted.revision, accepted.status)));
+    } catch { /* the accept already succeeded */ }
+  }
+  /** The requester's verdict on a ledger item: confirmed items become facts, rejected ones constraints, on the next turn. */
+  async setRequirementState(sessionId: string, requirementId: string, state: unknown) {
+    this.ensureRepository();
+    await this.sessionOrThrow(sessionId);
+    if (state !== 'proposed' && state !== 'confirmed' && state !== 'rejected') throw new ConversationServiceFailure('REQUIREMENT_STATE_INVALID', 'state deve ser proposed, confirmed ou rejected', 400);
+    const item = await this.repo().setRequirementState(this.environment.localTenantId, sessionId, requirementId, state);
+    return { id: item.id, kind: item.kind, label: item.label, origin: item.origin, state: item.state };
+  }
+  /** Ledger sync is a projection of the newest revision; it never blocks or fails a turn. */
+  private async syncLedger(sessionId: string) {
+    try {
+      const tenantId = this.environment.localTenantId;
+      const revisions = await this.repo().listRevisions(tenantId, sessionId);
+      const latest = revisions.reduce<StoredRevision | undefined>((newest, item) => !newest || item.revision > newest.revision ? item : newest, undefined);
+      if (!latest) return;
+      const view = projectUnderstanding(latest.processSpec, latest.revision, latest.status);
+      const items = [
+        ...view.actors.map(item => ({ kind: 'actor' as const, label: item.label, origin: item.origin })),
+        ...view.activities.map(item => ({ kind: 'activity' as const, label: item.label, origin: item.origin })),
+        ...view.decisions.map(item => ({ kind: 'decision' as const, label: item.label, origin: 'unknown' as const })),
+        ...view.fields.map(item => ({ kind: 'field' as const, label: item.label, origin: 'unknown' as const })),
+      ];
+      await this.repo().syncRequirements(tenantId, sessionId, latest.revision, items);
+    } catch { /* projection only; the revision itself is already persisted */ }
+  }
+  /** What the pipeline needs from the ledger and from accepted examples for the next turn. */
+  private async turnMemory(sessionId: string, requestText: string) {
+    const tenantId = this.environment.localTenantId;
+    const requirements = await this.repo().listRequirements(tenantId, sessionId).catch(() => []);
+    const requirementVerdicts = {
+      confirmed: requirements.filter(item => item.state === 'confirmed').map(item => ({ kind: item.kind, label: item.label })),
+      rejected: requirements.filter(item => item.state === 'rejected').map(item => ({ kind: item.kind, label: item.label })),
+    };
+    const fewShotExamples = (this.environment.aiFewShot ?? 'off') === 'on'
+      ? selectSimilarExamples(requestText, (await this.repo().listAcceptedExamples(tenantId, 200).catch(() => [])).filter(example => example.sessionId !== sessionId))
+      : [];
+    return { requirementVerdicts, fewShotExamples };
+  }
+  /** Business diff between a revision and another one (default: the revision it was based on). */
+  async revisionDiff(sessionId: string, revision: number, against?: number) {
+    this.ensureRepository();
+    const target = await this.revision(sessionId, revision);
+    const baseNumber = against ?? target.baseRevision;
+    const base = baseNumber > 0 ? await this.revision(sessionId, baseNumber) : undefined;
+    return diffSpecs(base?.processSpec ?? {}, target.processSpec, baseNumber, revision);
+  }
+  /** Undo without losing history: proposes a new revision equal to an earlier one, still subject to acceptance. */
+  async restoreRevision(sessionId: string, revision: number, baseRevision: number) {
+    this.ensureRepository();
+    const source = await this.revision(sessionId, revision);
+    return this.proposeManualRevision(sessionId, baseRevision, structuredClone(source.processSpec), `Revisão ${revision} restaurada`, { source: 'restore', restoredFrom: revision });
+  }
+  async proposeManualRevision(sessionId: string, baseRevision: number, value: unknown, summary = 'Alterações manuais validadas no backend', extraMetadata: Record<string, unknown> = {}) {
     this.ensureRepository();
     const session = await this.sessionOrThrow(sessionId);
     if (!Number.isInteger(baseRevision) || baseRevision !== session.currentRevision) throw new ConversationServiceFailure('REVISION_CONFLICT', 'A revisão base não é mais a revisão atual', 409);
@@ -142,7 +209,8 @@ export class ConversationService {
     if (artifacts.diagnostics.some(diagnostic => diagnostic.severity === 'error')) throw new ConversationServiceFailure('ARTIFACT_GENERATION_FAILED', JSON.stringify(artifacts.diagnostics), 422);
     const processSpec = value as Record<string, unknown>;
     const artifactBundle = { bpmnXml: artifacts.bpmnXml, forms: artifacts.forms, manifest: artifacts.manifest, diagnostics: artifacts.diagnostics };
-    const proposal = await this.repo().createProposal(this.environment.localTenantId, sessionId, baseRevision, processSpec, artifactBundle, 'Alterações manuais validadas no backend', { source: 'manual', generatorVersion: (artifacts.manifest as any).generatorVersion });
+    const proposal = await this.repo().createProposal(this.environment.localTenantId, sessionId, baseRevision, processSpec, artifactBundle, summary, { source: 'manual', ...extraMetadata, generatorVersion: (artifacts.manifest as any).generatorVersion });
+    await this.syncLedger(sessionId);
     return { revision: proposal.revision, baseRevision, status: proposal.status, validation, artifacts: artifactBundle };
   }
   async telemetry(sessionId: string) {
@@ -185,7 +253,8 @@ export class ConversationService {
       const confirmedAnswerText = new Set(confirmedFacts.map(fact => fact.answer.trim()));
       const authoritativeUserMessages = storedMessages.filter(message => message.role === 'user' && !confirmedAnswerText.has(message.content.trim())).map(message => ({ id: message.id, text: message.content }));
       const original = authoritativeUserMessages[0];
-      try { outcome = await this.orchestrator.generate({ onStage: hooks?.onStage, text: text.trim(), sourceMessageId: submittedMessage.id, sourceMessageType, originalSource: original, authoritativeUserMessages, dataClassification, history, currentSpec, targetProfile: session.targetProfile, confirmedFacts: confirmedFacts.slice(-40), onProviderCallStart: async () => { await this.repo().markProviderStarted(tenantId, run.id); providerCallStarted = true; } }); }
+      const memory = await this.turnMemory(sessionId, text.trim());
+      try { outcome = await this.orchestrator.generate({ ...memory, onStage: hooks?.onStage, text: text.trim(), sourceMessageId: submittedMessage.id, sourceMessageType, originalSource: original, authoritativeUserMessages, dataClassification, history, currentSpec, targetProfile: session.targetProfile, confirmedFacts: confirmedFacts.slice(-40), onProviderCallStart: async () => { await this.repo().markProviderStarted(tenantId, run.id); providerCallStarted = true; } }); }
       catch (error) {
         const mapped = mapServiceError(error);
         if (this.environment.logLevel !== 'silent' && process.env.NODE_ENV !== 'production' && error instanceof OrchestrationFailure && error.graphIrSchemaDiagnostics) {
@@ -221,6 +290,7 @@ export class ConversationService {
     const result = { kind: outcome.kind, baseRevision, processSpec: outcome.spec, changeSummary: outcome.changeSummary, validation: outcome.validation, artifacts: artifactBundle, metadata };
     await this.repo().completeTurn(tenantId, sessionId, run.id, { status: 'review-required', proposal: { processSpec: outcome.spec, artifacts: artifactBundle, summary: outcome.changeSummary, metadata, baseRevision }, assistantMessage: `${outcome.changeSummary}\nProposta salva para revisão; aceite-a após revisão para torná-la atual.`, runPatch: { status: 'validated', result: { kind: outcome.kind, baseRevision, changeSummary: outcome.changeSummary, validation: outcome.validation, artifacts: artifactBundle, metadata }, metrics: metrics(outcome) } });
     const savedRun = await this.repo().getRun(tenantId, run.id); const publicResult = (savedRun?.result || {}) as any;
+    await this.syncLedger(sessionId);
     return { generationRunId: run.id, status: 'validated', ...publicResult };
   }
 

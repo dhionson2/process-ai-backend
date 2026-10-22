@@ -30,6 +30,13 @@ export async function assertConversationSchema(db: Queryable, requireMigrationRe
     return actual.dataType !== dataType || (requiredNotNull.has(name) && actual.nullable !== 'NO') ? [`${table}.${name} esperado ${dataType}${requiredNotNull.has(name) ? ' NOT NULL' : ''}, atual ${actual.dataType}${actual.nullable === 'YES' ? ' NULL' : ' NOT NULL'}`] : [];
   }));
   if (invalidColumns.length) throw new ConversationSchemaError(`Schema incompatível; definição de colunas divergente: ${invalidColumns.join(', ')}`);
+  if (minimumVersion >= 3) {
+    const v3 = await db.query<{ table_name: string; column_name: string }>(`SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name=ANY($2::text[])`, [schema, ['process_ai_requirements', 'process_ai_accepted_examples']]);
+    const present = new Set(v3.rows.map(row => `${row.table_name}.${row.column_name}`));
+    const expected = ['process_ai_requirements.state', 'process_ai_requirements.origin', 'process_ai_requirements.last_revision', 'process_ai_accepted_examples.request_text', 'process_ai_accepted_examples.summary'];
+    const missing = expected.filter(name => !present.has(name));
+    if (missing.length) throw new ConversationSchemaError(`Schema incompatível; migration V3 ausente (${missing.join(', ')}); execute npm run db:migrate`);
+  }
   if (minimumVersion >= 2) {
     const providerBoundary = await db.query<{ data_type: string; is_nullable: string }>(`SELECT data_type,is_nullable FROM information_schema.columns WHERE table_schema=$1 AND table_name='process_ai_generation_runs' AND column_name='provider_started_at'`, [schema]);
     if (providerBoundary.rows[0]?.data_type !== 'timestamp with time zone' || providerBoundary.rows[0]?.is_nullable !== 'YES') throw new ConversationSchemaError('Schema incompatível; process_ai_generation_runs.provider_started_at ausente ou inválida');
@@ -62,6 +69,6 @@ export async function assertConversationSchema(db: Queryable, requireMigrationRe
     const ledger = await db.query<{ exists: boolean }>(`SELECT to_regclass(format('%I.process_ai_schema_migrations',$1::text)) IS NOT NULL AS exists`, [schema]);
     if (!ledger.rows[0]?.exists) throw new ConversationSchemaError('Migrations ausentes; execute npm run db:migrate explicitamente');
     const applied = await db.query<{ version: number }>('SELECT version FROM process_ai_schema_migrations ORDER BY version DESC LIMIT 1');
-    if (Number(applied.rows[0]?.version) < 2) throw new ConversationSchemaError('Schema sem a migration V2 de fronteira do provider; execute npm run db:migrate');
+    if (Number(applied.rows[0]?.version) < 3) throw new ConversationSchemaError('Schema sem a migration V3 (ledger de requisitos e exemplos aceitos); execute npm run db:migrate');
   }
 }

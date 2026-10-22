@@ -118,7 +118,7 @@ test('rotas validate/generate/publication e OpenAPI refletem contrato v1', async
     assert.ok(openapi.json().paths['/api/v1/projects']);
     assert.ok(openapi.json().paths['/api/v1/design-sessions/{sessionId}/messages']);
     assert.ok(openapi.json().paths['/api/v1/design-sessions/{sessionId}/revisions/{revision}/accept']);
-    assert.equal(openapi.json().info.version, '1.3.0');
+    assert.equal(openapi.json().info.version, '1.4.0');
     assert.ok(openapi.json().components.schemas.PublicationReadiness);
     assert.ok(openapi.json().components.schemas.GeneratedArtifacts.properties.manifest.properties.delegatedRules);
     assert.equal(openapi.json().components.schemas.ProcessSpec.properties.schemaVersion.const, '1.0.0');

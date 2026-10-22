@@ -36,6 +36,8 @@ export type ContextEnvironment = Pick<Environment, 'aiReadinessGate' | 'aiTimeou
 export type TurnContext = {
   args: GenerationArguments;
   environment: ContextEnvironment;
+  /** Items the requester rejected in the panel; enforced after compilation. */
+  rejectedItems: Array<{ kind: string; label: string }>;
   trace: PipelineDiagnostic[];
   refinementMode: boolean;
   targetProfile: NonNullable<GenerationArguments['targetProfile']>;
@@ -88,6 +90,7 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
     ? `Identidade: ${fact.semanticSlot || semanticSlotForQuestion(fact.question)}\nEstado: ${fact.semanticFact.state}\nFato estruturado: ${fact.semanticFact.type}/${fact.semanticFact.entity}/${fact.semanticFact.attribute}/${fact.semanticFact.context}\nValor confirmado: ${fact.semanticFact.value}\nRequirementId: ${fact.semanticFact.requirementId || fact.requirementId || 'indisponível'}`
     : `Identidade: ${fact.semanticSlot || semanticSlotForQuestion(fact.question)}\nEstado: ${fact.state || 'confirmed'}\nPergunta: ${fact.question}\nResposta confirmada: ${fact.answer}`).join('\n');
   const targetProfile = args.targetProfile || 'generic-bpmn2';
+  const verdicts = args.requirementVerdicts ?? { confirmed: [], rejected: [] };
   const refinementMode = Boolean(args.currentSpec);
   const userSource = [args.text, ...recentHistory.filter(turn => turn.role === 'user').map(turn => turn.content), ...confirmedFacts.map(fact => fact.answer)].join('\n');
 
@@ -129,9 +132,13 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
   const knowledge = await knowledgeEngine.selectInterpretation(userSource, Math.min(3500, knowledgeBudget));
   // Stable material first (profile, knowledge), volatile material last: keeps the provider's prompt-cache prefix warm.
   const composePrompt = (selectedKnowledge: string) => {
-    let value = `Contexto do projeto: targetProfile=${targetProfile}. Preserve este perfil.\n\nConhecimento selecionado (versão ${knowledge.version}; módulos ${knowledge.moduleIds.join(', ')}). Ele contém exemplos explicativos, não fatos do processo atual. Nunca copie atividades, papéis, campos, prazos, regras ou perguntas dos exemplos para a intenção sem trecho literal na solicitação ou em resposta confirmada.\n${selectedKnowledge}\n\nHistórico recente:\n${history || '(início da conversa)'}\n\nSolicitação atual:\n${args.text}`;
+    const examples = args.fewShotExamples?.length ? `\n\nProcessos aceitos anteriormente nesta organização (padrões de estruturação, não fatos do processo atual):\n${args.fewShotExamples.join('\n---\n')}` : '';
+    let value = `Contexto do projeto: targetProfile=${targetProfile}. Preserve este perfil.\n\nConhecimento selecionado (versão ${knowledge.version}; módulos ${knowledge.moduleIds.join(', ')}). Ele contém exemplos explicativos, não fatos do processo atual. Nunca copie atividades, papéis, campos, prazos, regras ou perguntas dos exemplos para a intenção sem trecho literal na solicitação ou em resposta confirmada.\n${selectedKnowledge}${examples}\n\nHistórico recente:\n${history || '(início da conversa)'}\n\nSolicitação atual:\n${args.text}`;
     value += `\n\nFatos confirmados pelo solicitante (autoridade para esta sessão; não repita perguntas já respondidas):\n${factText || '(nenhum)'}`;
     value += reconciliationPrompt;
+    // Ledger verdicts appear only when the requester gave them; otherwise the prompt is unchanged.
+    if (verdicts.confirmed.length) value += `\n\nItens confirmados pelo solicitante no painel (fatos desta sessão):\n${verdicts.confirmed.map(item => `- ${kindLabel[item.kind] ?? item.kind}: ${item.label}`).join('\n')}`;
+    if (verdicts.rejected.length) value += `\n\nItens rejeitados pelo solicitante (não incluir no processo):\n${verdicts.rejected.map(item => `- ${kindLabel[item.kind] ?? item.kind}: ${item.label}`).join('\n')}`;
     if (args.currentSpec) value += `\n\nProcessSpec atual a preservar e refinar:\n${currentSpecText}`;
     return value;
   };
@@ -146,7 +153,7 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
   if (groundingMode === 'controlled') trace.push({ stage: 'semantic-reconciliation', status: numericReconciliation.status, details: { priorThresholdCount: priorThresholdFacts.length, activeFactCount: numericReconciliation.facts.filter(fact => fact.state === 'confirmed').length, supersededFactCount: numericReconciliation.facts.filter(fact => fact.state === 'superseded').length } });
 
   return {
-    args, environment, trace, refinementMode, targetProfile, groundingMode, confirmedFacts, userSource, knowledge,
+    args, environment, rejectedItems: verdicts.rejected, trace, refinementMode, targetProfile, groundingMode, confirmedFacts, userSource, knowledge,
     outputSchema, schemaChars, validator, composePrompt, prompt, request, enforcePlanBounds, auditCoverage,
     coverageAudited: () => coverageAudited,
   };
@@ -154,6 +161,8 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
 
 /** Version identity of the system prompt; recorded in every run so prompt changes are traceable. */
 export const SYSTEM_INSTRUCTION_SHA256 = createHash('sha256').update(systemInstruction).digest('hex');
+
+const kindLabel: Record<string, string> = { actor: 'Participante', activity: 'Etapa', decision: 'Decisão', field: 'Campo' };
 
 function maskSupersededNumericThresholds(text: string): string {
   return text.replace(/\b(?:acima de|maior que|superiores? a|greater than|over)\s+(?:R\$\s*)?(?:[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:\.[0-9]+)?)/gi, '[limite numérico anterior supersedido]');

@@ -9,6 +9,11 @@ export type ProjectCreated = { projectId: string; sessionId: string };
 export type ConversationSession = { id: string; projectId: string; name: string; targetProfile: ProjectTarget; status: string; currentRevision: number; version: number; pendingQuestions: unknown[]; createdAt: string };
 export type StoredMessage = { id: string; role: ChatRole; content: string; createdAt: string };
 export type ConfirmedFact = { question: string; answer: string; confirmedAt: string; answeredAt?: string; questionId?: string; requirementId?: string; semanticSlot?: string; semanticFactId?: string; sourceId?: string; questionStatus?: 'answered'; state?: 'confirmed' | 'superseded' | 'contradictory' | 'removed'; supersedesFactId?: string; semanticFact?: SemanticFact };
+export type RequirementKind = 'actor' | 'activity' | 'decision' | 'field';
+export type RequirementOrigin = 'user' | 'confirmed-answer' | 'inference' | 'unknown';
+export type RequirementVerdict = 'proposed' | 'confirmed' | 'rejected';
+export type StoredRequirement = { id: string; sessionId: string; kind: RequirementKind; label: string; origin: RequirementOrigin; state: RequirementVerdict; firstRevision: number; lastRevision: number; createdAt: string; updatedAt: string };
+export type AcceptedExample = { sessionId: string; revision: number; requestText: string; summary: string };
 export type RunStatus = 'queued' | 'generating' | 'needs-input' | 'validated' | 'validation-failed' | 'failed';
 export type GenerationRun = { id: string; sessionId: string; status: RunStatus; operationId?: string; requestHash?: string; providerStartedAt?: string; sourceMessageId?: string; result?: unknown; errorCode?: string; provider?: string; model?: string; metrics?: unknown; createdAt: string; updatedAt: string };
 export type StoredRevision = { id: string; sessionId: string; revision: number; baseRevision: number; status: 'proposed' | 'accepted'; processSpec: Record<string, unknown>; artifacts?: unknown; summary: string; metadata: Record<string, unknown>; createdAt: string };
@@ -35,6 +40,12 @@ export interface ConversationRepository {
   updateRun(tenantId: string, runId: string, patch: Partial<GenerationRun>): Promise<void>;
   getRun(tenantId: string, runId: string): Promise<GenerationRun | undefined>;
   listRuns(tenantId: string, sessionId: string): Promise<GenerationRun[]>;
+  /** Upserts the business items of a revision; the requester's verdict (state) is never overwritten. */
+  syncRequirements(tenantId: string, sessionId: string, revision: number, items: Array<{ kind: RequirementKind; label: string; origin: RequirementOrigin }>): Promise<void>;
+  listRequirements(tenantId: string, sessionId: string): Promise<StoredRequirement[]>;
+  setRequirementState(tenantId: string, sessionId: string, requirementId: string, state: RequirementVerdict): Promise<StoredRequirement>;
+  saveAcceptedExample(tenantId: string, sessionId: string, revision: number, requestText: string, summary: string): Promise<void>;
+  listAcceptedExamples(tenantId: string, limit: number): Promise<AcceptedExample[]>;
   getOperation(tenantId: string, sessionId: string, operationId: string, requestHash: string): Promise<GenerationRun | undefined>;
   markProviderStarted(tenantId: string, runId: string): Promise<void>;
   createProposal(tenantId: string, sessionId: string, baseRevision: number, processSpec: Record<string, unknown>, artifacts: unknown, summary: string, metadata: Record<string, unknown>): Promise<StoredRevision>;
@@ -50,6 +61,7 @@ function sessionRow(row: any): ConversationSession {
 }
 function messageRow(row: any): StoredMessage { return { id: row.id, role: row.role, content: row.content, createdAt: new Date(row.created_at).toISOString() }; }
 function runRow(row: any): GenerationRun { return { id: row.id, sessionId: row.session_id, status: row.status, operationId: row.operation_id ?? undefined, requestHash: row.request_hash ?? undefined, providerStartedAt: row.provider_started_at ? new Date(row.provider_started_at).toISOString() : undefined, sourceMessageId: row.source_message_id ?? undefined, result: row.result ?? undefined, errorCode: row.error_code ?? undefined, provider: row.provider ?? undefined, model: row.model ?? undefined, metrics: row.metrics ?? undefined, createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString() }; }
+function requirementRow(row: any): StoredRequirement { return { id: row.id, sessionId: row.session_id, kind: row.kind, label: row.label, origin: row.origin, state: row.state, firstRevision: row.first_revision, lastRevision: row.last_revision, createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString() }; }
 function revisionRow(row: any): StoredRevision { return { id: row.id, sessionId: row.session_id, revision: row.revision, baseRevision: row.base_revision, status: row.status, processSpec: row.process_spec, artifacts: row.artifacts ?? undefined, summary: row.summary, metadata: row.metadata, createdAt: new Date(row.created_at).toISOString() }; }
 function questionSetId(value: unknown[]): string { const questions = value.map((item: any) => ({ questionId: item?.questionId || item?.id || null, requirementId: item?.requirementId || null, semanticSlot: item?.semanticSlot || null, question: item?.question || null })); return `qs_${createHash('sha256').update(JSON.stringify(questions)).digest('hex').slice(0, 24)}`; }
 
@@ -125,6 +137,31 @@ export class PostgresConversationRepository implements ConversationRepository {
   async listRuns(tenantId: string, sessionId: string): Promise<GenerationRun[]> {
     const result = await this.query('SELECT * FROM process_ai_generation_runs WHERE tenant_id=$1 AND session_id=$2 ORDER BY created_at, id', [tenantId, sessionId]);
     return result.rows.map(runRow);
+  }
+  async syncRequirements(tenantId: string, sessionId: string, revision: number, items: Array<{ kind: RequirementKind; label: string; origin: RequirementOrigin }>): Promise<void> {
+    for (const item of items) {
+      // A stated origin (user/confirmed answer) is never downgraded back to an inference.
+      await this.query(`INSERT INTO process_ai_requirements(id,tenant_id,session_id,kind,label,origin,first_revision,last_revision) VALUES($1,$2,$3,$4,$5,$6,$7,$7)
+        ON CONFLICT (tenant_id,session_id,kind,label) DO UPDATE SET last_revision=GREATEST(process_ai_requirements.last_revision,EXCLUDED.last_revision),
+        origin=CASE WHEN process_ai_requirements.origin IN ('user','confirmed-answer') THEN process_ai_requirements.origin ELSE EXCLUDED.origin END, updated_at=now()`,
+        [randomUUID(), tenantId, sessionId, item.kind, item.label, item.origin, revision]);
+    }
+  }
+  async listRequirements(tenantId: string, sessionId: string): Promise<StoredRequirement[]> {
+    const result = await this.query('SELECT * FROM process_ai_requirements WHERE tenant_id=$1 AND session_id=$2 ORDER BY first_revision, created_at, label', [tenantId, sessionId]);
+    return result.rows.map(requirementRow);
+  }
+  async setRequirementState(tenantId: string, sessionId: string, requirementId: string, state: RequirementVerdict): Promise<StoredRequirement> {
+    const result = await this.query('UPDATE process_ai_requirements SET state=$4, updated_at=now() WHERE tenant_id=$1 AND session_id=$2 AND id=$3 RETURNING *', [tenantId, sessionId, requirementId, state]);
+    if (!result.rows[0]) throw new ConversationNotFound();
+    return requirementRow(result.rows[0]);
+  }
+  async saveAcceptedExample(tenantId: string, sessionId: string, revision: number, requestText: string, summary: string): Promise<void> {
+    await this.query('INSERT INTO process_ai_accepted_examples(id,tenant_id,session_id,revision,request_text,summary) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (tenant_id,session_id,revision) DO NOTHING', [randomUUID(), tenantId, sessionId, revision, requestText, summary]);
+  }
+  async listAcceptedExamples(tenantId: string, limit: number): Promise<AcceptedExample[]> {
+    const result = await this.query('SELECT session_id,revision,request_text,summary FROM process_ai_accepted_examples WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2', [tenantId, limit]);
+    return result.rows.map(row => ({ sessionId: row.session_id, revision: row.revision, requestText: row.request_text, summary: row.summary }));
   }
   async getOperation(tenantId: string, sessionId: string, operationId: string, requestHash: string): Promise<GenerationRun | undefined> {
     const result = await this.query('SELECT * FROM process_ai_generation_runs WHERE tenant_id=$1 AND session_id=$2 AND operation_id=$3', [tenantId, sessionId, operationId]);
@@ -277,6 +314,30 @@ export class InMemoryConversationRepository implements ConversationRepository {
   }
   async updateRun(tenant: string, runId: string, patch: Partial<GenerationRun>) { const run = this.runTenants.get(runId) === tenant ? this.runs.get(runId) : undefined; if (!run) throw new ConversationNotFound(); this.runs.set(runId, { ...run, ...patch, updatedAt: new Date().toISOString() }); }
   async getRun(tenant: string, runId: string) { return this.runTenants.get(runId) === tenant ? this.runs.get(runId) : undefined; }
+  private requirements = new Map<string, StoredRequirement[]>();
+  private examples: Array<AcceptedExample & { tenant: string }> = [];
+  async syncRequirements(tenant: string, sessionId: string, revision: number, items: Array<{ kind: RequirementKind; label: string; origin: RequirementOrigin }>) {
+    if (!this.owns(tenant, sessionId)) throw new ConversationNotFound();
+    const list = this.requirements.get(sessionId) || [];
+    const now = new Date().toISOString();
+    for (const item of items) {
+      const existing = list.find(entry => entry.kind === item.kind && entry.label === item.label);
+      if (existing) { existing.lastRevision = Math.max(existing.lastRevision, revision); if (!['user', 'confirmed-answer'].includes(existing.origin)) existing.origin = item.origin; existing.updatedAt = now; }
+      else list.push({ id: randomUUID(), sessionId, kind: item.kind, label: item.label, origin: item.origin, state: 'proposed', firstRevision: revision, lastRevision: revision, createdAt: now, updatedAt: now });
+    }
+    this.requirements.set(sessionId, list);
+  }
+  async listRequirements(tenant: string, sessionId: string) { if (!this.owns(tenant, sessionId)) throw new ConversationNotFound(); return (this.requirements.get(sessionId) || []).map(item => ({ ...item })); }
+  async setRequirementState(tenant: string, sessionId: string, requirementId: string, state: RequirementVerdict) {
+    const item = this.owns(tenant, sessionId) ? (this.requirements.get(sessionId) || []).find(entry => entry.id === requirementId) : undefined;
+    if (!item) throw new ConversationNotFound();
+    item.state = state; item.updatedAt = new Date().toISOString();
+    return { ...item };
+  }
+  async saveAcceptedExample(tenant: string, sessionId: string, revision: number, requestText: string, summary: string) {
+    if (!this.examples.some(item => item.tenant === tenant && item.sessionId === sessionId && item.revision === revision)) this.examples.unshift({ tenant, sessionId, revision, requestText, summary });
+  }
+  async listAcceptedExamples(tenant: string, limit: number) { return this.examples.filter(item => item.tenant === tenant).slice(0, limit).map(({ tenant: _tenant, ...item }) => item); }
   async listRuns(tenant: string, sessionId: string) { if (!this.owns(tenant, sessionId)) throw new ConversationNotFound(); return [...this.runs.values()].filter(run => this.runTenants.get(run.id) === tenant && run.sessionId === sessionId); }
   async getOperation(tenant: string, sessionId: string, operationId: string, requestHash: string) {
     const run = [...this.runs.values()].find(item => this.runTenants.get(item.id) === tenant && item.sessionId === sessionId && item.operationId === operationId);

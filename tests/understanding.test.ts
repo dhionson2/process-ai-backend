@@ -32,7 +32,7 @@ test('GET /understanding devolve vazio antes da proposta e a projeção depois d
     const project = (await app.inject({ method: 'POST', url: '/api/v1/projects', payload: { name: 'Entendimento', targetProfile: 'generic-bpmn2' } })).json();
     const empty = await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${project.sessionId}/understanding` });
     assert.equal(empty.statusCode, 200);
-    assert.deepEqual({ ...empty.json(), sessionId: undefined }, { sessionId: undefined, currentRevision: 0, confirmedFacts: [], pendingQuestions: [], proposal: null });
+    assert.deepEqual({ ...empty.json(), sessionId: undefined }, { sessionId: undefined, currentRevision: 0, confirmedFacts: [], pendingQuestions: [], proposal: null, requirements: [] });
     const draft = await app.inject({ method: 'PUT', url: `/api/v1/design-sessions/${project.sessionId}/draft`, payload: { baseRevision: 0, processSpec: await generatedSpec() } });
     assert.equal(draft.statusCode, 200, draft.body);
     const filled = (await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${project.sessionId}/understanding` })).json();

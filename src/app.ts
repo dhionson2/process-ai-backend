@@ -108,6 +108,21 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
       return reply.code(404).send({ code: 'SCOREBOARD_NOT_FOUND', message: 'Nenhuma avaliação registrada; execute npm run eval' });
     }
   });
+  app.put<{ Params: { sessionId: string; requirementId: string }; Body: { state: string } }>('/api/v1/design-sessions/:sessionId/requirements/:requirementId', async (request, reply) => {
+    try { return await conversations.setRequirementState(request.params.sessionId, request.params.requirementId, request.body?.state); }
+    catch (error) { return sendConversationError(reply, error); }
+  });
+  app.get<{ Params: { sessionId: string; revision: string }; Querystring: { against?: string } }>('/api/v1/design-sessions/:sessionId/revisions/:revision/diff', async (request, reply) => {
+    try {
+      const against = request.query.against === undefined ? undefined : Number(request.query.against);
+      if (against !== undefined && (!Number.isInteger(against) || against < 0)) return reply.code(400).send({ code: 'REVISION_INVALID', message: 'against deve ser um número de revisão' });
+      return await conversations.revisionDiff(request.params.sessionId, Number(request.params.revision), against);
+    } catch (error) { return sendConversationError(reply, error); }
+  });
+  app.post<{ Params: { sessionId: string; revision: string }; Body: { baseRevision: number } }>('/api/v1/design-sessions/:sessionId/revisions/:revision/restore', async (request, reply) => {
+    try { return await conversations.restoreRevision(request.params.sessionId, Number(request.params.revision), request.body?.baseRevision); }
+    catch (error) { return sendConversationError(reply, error); }
+  });
   app.get<{ Params: { runId: string } }>('/api/v1/generation-runs/:runId/events', async (request, reply) => {
     let persisted: Awaited<ReturnType<typeof conversations.run>>;
     try { persisted = await conversations.run(request.params.runId); }

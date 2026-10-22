@@ -36,6 +36,8 @@ export interface Environment {
   anthropicMaxRetries?: number;
   /** Model cascade: corrective calls (structural, omission, validation, repeated question) use this model. */
   aiRepairModel?: string;
+  /** Flywheel: same-tenant accepted examples similar to the request enter the prompt as patterns (opt-in). */
+  aiFewShot?: 'on' | 'off';
 }
 function boundedInteger(raw: string | undefined, fallback: number, minimum: number, maximum: number, name: string): number {
   const value = Number(raw ?? fallback);
@@ -55,6 +57,8 @@ export function readEnvironment(env: NodeJS.ProcessEnv = process.env): Environme
   if (!['off', 'shadow', 'controlled'].includes(aiGraphIrMode)) throw new Error('AI_GRAPH_IR_MODE inválido');
   const anthropicEffort = env.ANTHROPIC_EFFORT || undefined;
   if (anthropicEffort && !['low', 'medium', 'high', 'xhigh', 'max'].includes(anthropicEffort)) throw new Error('ANTHROPIC_EFFORT inválido');
+  const aiFewShot = env.AI_FEW_SHOT || 'off';
+  if (!['on', 'off'].includes(aiFewShot)) throw new Error('AI_FEW_SHOT inválido');
   const aiReadinessGate = env.AI_READINESS_GATE || 'on';
   if (!['on', 'off'].includes(aiReadinessGate)) throw new Error('AI_READINESS_GATE inválido');
   const claudeCliMaxBudgetUsd = Number(env.CLAUDE_CLI_MAX_BUDGET_USD ?? 0);
@@ -94,6 +98,7 @@ export function readEnvironment(env: NodeJS.ProcessEnv = process.env): Environme
     anthropicFallbacks: env.ANTHROPIC_FALLBACKS !== 'off',
     anthropicMaxRetries: boundedInteger(env.ANTHROPIC_MAX_RETRIES, 2, 0, 5, 'ANTHROPIC_MAX_RETRIES'),
     aiRepairModel: env.AI_REPAIR_MODEL || undefined,
+    aiFewShot: aiFewShot as Environment['aiFewShot'],
     claudeCliBinary: env.CLAUDE_CLI_BINARY || undefined,
     claudeCliBare: env.CLAUDE_CLI_BARE === 'true',
     claudeCliMaxBudgetUsd: claudeCliMaxBudgetUsd || undefined,

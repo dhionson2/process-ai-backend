@@ -46,9 +46,9 @@ test('M01 banco vazio recebe a migration completa e registra versão somente ap�
   try {
     const pool = new Pool({ connectionString: db.connectionString });
     const results = await runMigrations(pool);
-    assert.equal(results.length, 2); assert.deepEqual(results.map(item => item.version), [1, 2]); assert.equal(results.every(item => item.applied), true);
+    assert.equal(results.length, 3); assert.deepEqual(results.map(item => item.version), [1, 2, 3]); assert.equal(results.every(item => item.applied), true);
     const ledger = await pool.query('SELECT version,name,checksum FROM process_ai_schema_migrations ORDER BY version');
-    assert.equal(ledger.rows.length, 2); assert.equal(ledger.rows[1].version, 2); assert.equal(ledger.rows.every(row => row.checksum.length === 64), true);
+    assert.equal(ledger.rows.length, 3); assert.equal(ledger.rows[2].version, 3); assert.equal(ledger.rows.every(row => row.checksum.length === 64), true);
     await pool.end();
   } finally { await db.dispose(); }
 });
@@ -108,8 +108,8 @@ test('M05 duas execuções concorrentes são serializadas pelo advisory lock', {
   try {
     const first = new Pool({ connectionString: db.connectionString, max: 1 }); const second = new Pool({ connectionString: db.connectionString, max: 1 });
     const results = await Promise.all([runMigrations(first), runMigrations(second)]);
-    assert.equal(results.flat().filter(item => item.applied).length, 2);
-    assert.equal((await first.query('SELECT count(*)::int AS n FROM process_ai_schema_migrations')).rows[0].n, 2);
+    assert.equal(results.flat().filter(item => item.applied).length, 3);
+    assert.equal((await first.query('SELECT count(*)::int AS n FROM process_ai_schema_migrations')).rows[0].n, 3);
     await first.end(); await second.end();
   } finally { await db.dispose(); }
 });

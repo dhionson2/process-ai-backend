@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Process AI Backend API",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "description": "API versionada para ProcessSpec, geração, validação e modelagem conversacional. Não executa conectores nem publica processos."
   },
   "servers": [
@@ -893,6 +893,51 @@
         "responses": {
           "200": { "description": "Placar", "content": { "application/json": { "schema": { "type": "object", "required": ["generatedAt", "corpus", "runs"], "properties": { "generatedAt": { "type": "string" }, "corpus": { "type": "array", "items": { "type": "object" } }, "runs": { "type": "array", "items": { "type": "object", "additionalProperties": true } } } } } } },
           "404": { "description": "Nenhuma avaliação registrada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/requirements/{requirementId}": {
+      "put": {
+        "summary": "Veredito do solicitante sobre um item do ledger",
+        "description": "confirmed: o item entra como fato no próximo turno; rejected: o item entra como restrição e uma proposta que ainda o contenha recebe uma correção dirigida ao modelo; proposed: remove o veredito.",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "requirementId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["state"], "properties": { "state": { "type": "string", "enum": ["proposed", "confirmed", "rejected"] } } } } } },
+        "responses": {
+          "200": { "description": "Item atualizado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LedgerItem" } } } },
+          "400": { "description": "Estado inválido", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } },
+          "404": { "description": "Sessão ou item inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/revisions/{revision}/diff": {
+      "get": {
+        "summary": "O que mudou entre duas revisões, em termos de negócio",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "revision", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } },
+          { "name": "against", "in": "query", "required": false, "description": "Revisão de comparação; padrão: a revisão base.", "schema": { "type": "integer", "minimum": 0 } }
+        ],
+        "responses": {
+          "200": { "description": "Diferenças", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionDiff" } } } },
+          "404": { "description": "Sessão ou revisão inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/revisions/{revision}/restore": {
+      "post": {
+        "summary": "Desfazer sem perder histórico: propõe uma nova revisão igual a uma anterior",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "revision", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["baseRevision"], "properties": { "baseRevision": { "type": "integer", "minimum": 0 } } } } } },
+        "responses": {
+          "200": { "description": "Nova revisão proposta (aceite continua explícito)", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "404": { "description": "Sessão ou revisão inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } },
+          "409": { "description": "Revisão base desatualizada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
         }
       }
     },
@@ -2773,8 +2818,9 @@
       },
       "SessionUnderstanding": {
         "type": "object",
-        "required": ["sessionId", "currentRevision", "confirmedFacts", "pendingQuestions", "proposal"],
+        "required": ["sessionId", "currentRevision", "confirmedFacts", "pendingQuestions", "proposal", "requirements"],
         "properties": {
+          "requirements": { "type": "array", "description": "Ledger persistido da sessão (1.4.0).", "items": { "$ref": "#/components/schemas/LedgerItem" } },
           "sessionId": { "type": "string", "format": "uuid" },
           "currentRevision": { "type": "integer", "minimum": 0 },
           "confirmedFacts": { "type": "array", "items": { "type": "object", "required": ["question", "answer", "state"], "properties": { "question": { "type": "string" }, "answer": { "type": "string" }, "state": { "type": "string" }, "confirmedAt": { "type": "string" } } } },
@@ -2846,6 +2892,28 @@
         "properties": {
           "generationRunId": { "type": "string", "format": "uuid" },
           "status": { "type": "string", "const": "generating" }
+        }
+      },
+      "LedgerItem": {
+        "type": "object",
+        "required": ["id", "kind", "label", "origin", "state"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "kind": { "type": "string", "enum": ["actor", "activity", "decision", "field"] },
+          "label": { "type": "string" },
+          "origin": { "type": "string", "enum": ["user", "confirmed-answer", "inference", "unknown"] },
+          "state": { "type": "string", "enum": ["proposed", "confirmed", "rejected"] },
+          "inLatestRevision": { "type": "boolean" }
+        }
+      },
+      "RevisionDiff": {
+        "type": "object",
+        "required": ["from", "to", "changes", "totals"],
+        "properties": {
+          "from": { "type": "integer", "minimum": 0 },
+          "to": { "type": "integer", "minimum": 1 },
+          "changes": { "type": "array", "items": { "type": "object", "required": ["kind", "area", "description"], "properties": { "kind": { "type": "string", "enum": ["added", "removed", "changed"] }, "area": { "type": "string", "enum": ["etapa", "decisão", "papel", "campo", "caminho"] }, "description": { "type": "string" } } } },
+          "totals": { "type": "object", "required": ["added", "removed", "changed"], "properties": { "added": { "type": "integer" }, "removed": { "type": "integer" }, "changed": { "type": "integer" } } }
         }
       },
       "RecoveryGuidance": {
