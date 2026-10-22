@@ -35,6 +35,11 @@ export class AiOrchestrator {
 
   async generate(args: GenerationArguments): Promise<GenerationOutcome> {
     const diagnostics: PipelineDiagnostic[] = [];
+    if (args.onStage) {
+      // Progress is observational: a failing listener never affects the turn.
+      const record = diagnostics.push.bind(diagnostics);
+      diagnostics.push = (...items: PipelineDiagnostic[]) => { for (const item of items) { try { args.onStage!(item); } catch { /* ignore */ } } return record(...items); };
+    }
     try {
       const result = await this.generateTracked(args, diagnostics);
       return { ...result, diagnostics };
@@ -53,7 +58,7 @@ export class AiOrchestrator {
     if (graphMode === 'controlled' && args.currentSpec) trace.push({ stage: 'graph-ir-refinement', status: 'legacy-path', details: { reason: 'Refinamentos preservam o ProcessSpec existente pelo mecanismo transitório; GraphPatch não está implementado.' } });
 
     const ctx = await buildTurnContext(args, this.environment, this.model, this.provider.id, this.knowledge, trace);
-    const stage = { ctx, calls: new ModelCalls(this.provider, this.concurrency, ctx.request, args.onProviderCallStart), budget: new RepairBudget() };
+    const stage = { ctx, calls: new ModelCalls(this.provider, this.concurrency, ctx.request, args.onProviderCallStart, trace), budget: new RepairBudget() };
     const interpreted = await recoverRepeatedQuestion(stage, await interpret(stage));
     if (interpreted.kind === 'need_clarification') return clarificationOutcome(interpreted, stage.calls.lastModel, stage.calls.latencyMs, { ...stage.calls.usage }, stage.calls.providerId, ctx.knowledge.version, ctx.knowledge.moduleIds, interpreted);
     const ready = readiness(stage, interpreted);

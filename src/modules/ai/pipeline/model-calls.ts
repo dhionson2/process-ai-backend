@@ -1,5 +1,5 @@
 import { ProviderConcurrencyLimit, ProviderFailure, type ModelProvider, type ProviderUsage, type StructuredRequest, type StructuredResponse } from '../../providers/model-provider.js';
-import { OrchestrationFailure } from './types.js';
+import { OrchestrationFailure, type PipelineDiagnostic } from './types.js';
 
 export function mapProviderError(error: unknown): OrchestrationFailure {
   if (error instanceof ProviderFailure) return new OrchestrationFailure(error.code, error.message, ['PROVIDER_TIMEOUT', 'PROVIDER_UNAVAILABLE', 'PROVIDER_RATE_LIMITED'].includes(error.code), error.retryAfterMs, error.diagnostic);
@@ -29,11 +29,14 @@ export class ModelCalls {
     private readonly concurrency: ProviderConcurrencyLimit,
     private readonly request: StructuredRequest,
     private readonly onProviderCallStart?: () => Promise<void> | void,
+    /** Receives `model-call: started` before each call, so progress shows the model is working. */
+    private readonly trace?: PipelineDiagnostic[],
   ) { this.lastModel = request.model; }
   get providerId(): string { return this.provider.id; }
 
   async call(prompt: string): Promise<StructuredResponse> {
     await this.onProviderCallStart?.();
+    this.trace?.push({ stage: 'model-call', status: 'started', details: { call: this.calls + 1 } });
     let completion: StructuredResponse;
     try { completion = await this.concurrency.run(() => this.provider.generateStructured(prompt === this.request.prompt ? this.request : { ...this.request, prompt })); }
     catch (error) { throw mapProviderError(error); }

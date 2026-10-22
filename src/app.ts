@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { readEnvironment, type Environment } from './config/env.js';
@@ -10,7 +10,8 @@ import { readFoundationJson } from './shared/files.js';
 import { readFoundationJson as readSchema } from './shared/files.js';
 import { generateArtifacts } from './modules/generation/artifact-generator.js';
 import { validateFormSubmission, validatePublicationReadiness } from './modules/validation/validation.service.js';
-import { ConversationService, ConversationServiceFailure } from './modules/ai/conversation.service.js';
+import { ConversationService, ConversationServiceFailure, type TurnHooks } from './modules/ai/conversation.service.js';
+import { TurnEventBus, type TurnEvent } from './modules/ai/turn-events.js';
 import { recoveryGuidance } from './modules/ai/recovery-guidance.js';
 import { ConversationNotFound, OperationConflict, PostgresConversationRepository, RevisionConflict, StaleQuestionSet, type ConversationRepository } from './modules/projects/conversation.repository.js';
 import type { ModelProvider } from './modules/providers/model-provider.js';
@@ -20,6 +21,7 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
   const app = Fastify({ logger: { level: config.logLevel }, bodyLimit: 1024 * 1024 });
   const conversationRepository = dependencies.conversationRepository || (config.databaseUrl ? PostgresConversationRepository.fromConnectionString(config.databaseUrl) : undefined);
   const conversations = new ConversationService(config, conversationRepository, { provider: dependencies.modelProvider });
+  const turnEvents = new TurnEventBus();
   await app.register(cors, { origin: config.corsOrigins, methods: ['GET', 'POST', 'PUT'] });
   app.addHook('onClose', async () => { if (conversationRepository instanceof PostgresConversationRepository) await conversationRepository.close(); });
   app.get('/health', async () => ({ status: 'ok', service: 'process-ai-backend', version: '0.1.0' }));
@@ -52,19 +54,17 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
     catch (error) { return sendConversationError(reply, error); }
   });
   app.post<{ Params: { sessionId: string }; Body: { text: string; baseRevision: number; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/messages', async (request, reply) => {
-    try { return await conversations.submitMessage(request.params.sessionId, request.body?.text, request.body?.baseRevision, request.body?.dataClassification, request.body?.operationId); }
-    catch (error) { return sendConversationError(reply, error); }
+    return runTurn(turnEvents, request, reply, hooks => conversations.submitMessage(request.params.sessionId, request.body?.text, request.body?.baseRevision, request.body?.dataClassification, request.body?.operationId, hooks));
   });
   app.post<{ Params: { sessionId: string }; Body: { answers: string[]; baseRevision: number; questionSetId?: string; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/answers', async (request, reply) => {
-    try { return await conversations.answerQuestions(request.params.sessionId, request.body?.answers, request.body?.baseRevision, request.body?.dataClassification, request.body?.questionSetId, request.body?.operationId); }
-    catch (error) { return sendConversationError(reply, error); }
+    return runTurn(turnEvents, request, reply, hooks => conversations.answerQuestions(request.params.sessionId, request.body?.answers, request.body?.baseRevision, request.body?.dataClassification, request.body?.questionSetId, request.body?.operationId, hooks));
   });
   app.post<{ Params: { sessionId: string }; Body: { text: string; baseRevision: number; operationId?: string; dataClassification?: 'synthetic' | 'public' } }>('/api/v1/design-sessions/:sessionId/refinements', async (request, reply) => {
     try {
       const draft = await conversations.currentDraft(request.params.sessionId);
       if (!draft.processSpec) return reply.code(409).send({ code: 'DRAFT_NOT_FOUND', message: 'Aceite ou gere uma revisão inicial antes de refiná-la' });
-      return await conversations.submitMessage(request.params.sessionId, request.body?.text, request.body?.baseRevision, request.body?.dataClassification, request.body?.operationId);
     } catch (error) { return sendConversationError(reply, error); }
+    return runTurn(turnEvents, request, reply, hooks => conversations.submitMessage(request.params.sessionId, request.body?.text, request.body?.baseRevision, request.body?.dataClassification, request.body?.operationId, hooks));
   });
   app.get<{ Params: { sessionId: string } }>('/api/v1/design-sessions/:sessionId/history', async (request, reply) => {
     try { return { messages: await conversations.history(request.params.sessionId) }; }
@@ -108,6 +108,28 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
       return reply.code(404).send({ code: 'SCOREBOARD_NOT_FOUND', message: 'Nenhuma avaliação registrada; execute npm run eval' });
     }
   });
+  app.get<{ Params: { runId: string } }>('/api/v1/generation-runs/:runId/events', async (request, reply) => {
+    let persisted: Awaited<ReturnType<typeof conversations.run>>;
+    try { persisted = await conversations.run(request.params.runId); }
+    catch (error) { return sendConversationError(reply, error); }
+    reply.hijack();
+    const headers = Object.fromEntries(Object.entries(reply.getHeaders()).filter(([, value]) => value !== undefined)) as Record<string, string>;
+    reply.raw.writeHead(200, { ...headers, 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
+    const write = (event: TurnEvent | { type: 'status'; status: string }) => reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    const finish = () => { clearInterval(heartbeat); unsubscribe(); if (!reply.raw.writableEnded) reply.raw.end(); };
+    const heartbeat = setInterval(() => reply.raw.write(': keep-alive\n\n'), 15000);
+    let unsubscribe = () => {};
+    request.raw.on('close', finish);
+    if (turnEvents.has(persisted.id)) {
+      unsubscribe = turnEvents.subscribe(persisted.id, event => { write(event); if (event.type !== 'stage') finish(); });
+      return;
+    }
+    // No live stream (synchronous turn, finished long ago or another instance): answer from the persisted run.
+    if (['validated', 'needs-input', 'validation-failed'].includes(persisted.status)) write({ type: 'result', result: { ...(persisted.result as Record<string, unknown> || {}), generationRunId: persisted.id, status: persisted.status } });
+    else if (persisted.status === 'failed') { const code = persisted.errorCode || 'GENERATION_FAILED'; write({ type: 'error', error: { code, message: 'A geração terminou com falha; a revisão atual foi preservada', generationRunId: persisted.id, recovery: recoveryGuidance(code) } }); }
+    else write({ type: 'status', status: persisted.status });
+    finish();
+  });
   app.get<{ Params: { runId: string } }>('/api/v1/generation-runs/:runId', async (request, reply) => {
     try { return await conversations.run(request.params.runId); }
     catch (error) { return sendConversationError(reply, error); }
@@ -138,11 +160,47 @@ export async function buildApp(config: Environment = readEnvironment(), dependen
   return app;
 }
 
+/**
+ * Synchronous by default (contract v1). With `Prefer: respond-async` the route answers 202 as soon as the
+ * generation run exists and the turn continues in the background, published on the event bus for
+ * GET /generation-runs/:id/events. Errors before the run exists (validation, conflicts) keep their status;
+ * an idempotent replay returns its stored result directly.
+ */
+async function runTurn(turnEvents: TurnEventBus, request: { headers: Record<string, string | string[] | undefined> }, reply: FastifyReply, start: (hooks?: TurnHooks) => Promise<unknown>) {
+  if (!/respond-async/i.test(String(request.headers.prefer ?? ''))) {
+    try { return await start(); } catch (error) { return sendConversationError(reply, error); }
+  }
+  let runId: string | undefined;
+  let created!: () => void;
+  const runCreated = new Promise<'created'>(resolve => { created = () => resolve('created'); });
+  const work = start({
+    onRunCreated: id => { runId = id; turnEvents.open(id); created(); },
+    onStage: diagnostic => { if (runId) turnEvents.publish(runId, { type: 'stage', stage: diagnostic.stage, status: diagnostic.status }); },
+  });
+  work.then(
+    result => { if (runId) turnEvents.publish(runId, { type: 'result', result }); },
+    error => {
+      if (!runId) return;
+      const { body } = conversationErrorBody(error);
+      turnEvents.publish(runId, { type: 'error', error: { ...body, code: String(body.code), message: String(body.message), generationRunId: runId } });
+    },
+  );
+  const first = await Promise.race([runCreated, work.then(() => 'settled' as const, () => 'settled' as const)]);
+  if (first === 'created') return reply.code(202).send({ generationRunId: runId, status: 'generating' });
+  try { return await work; } catch (error) { return sendConversationError(reply, error); }
+}
+
+/** Status and body of a conversation error; shared by JSON responses and SSE `error` events. */
+function conversationErrorBody(error: unknown): { status: number; body: Record<string, unknown> } {
+  const conflict = (code: string, message: string) => ({ status: 409, body: { code, message, recovery: recoveryGuidance(code) } });
+  if (error instanceof RevisionConflict) return conflict('REVISION_CONFLICT', error.message);
+  if (error instanceof OperationConflict) return conflict('OPERATION_ID_CONFLICT', error.message);
+  if (error instanceof StaleQuestionSet) return conflict('QUESTION_SET_STALE', error.message);
+  if (error instanceof ConversationNotFound) return { status: 404, body: { code: 'SESSION_NOT_FOUND', message: error.message } };
+  if (error instanceof ConversationServiceFailure) return { status: error.statusCode, body: { code: error.code, message: error.message, recovery: recoveryGuidance(error.code, error.retryAfterMs), ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}), ...(error.generationRunId ? { generationRunId: error.generationRunId } : {}), ...(error.providerDiagnostic ? { providerDiagnostic: { category: error.providerDiagnostic.category, ...(error.providerDiagnostic.httpStatus !== undefined ? { httpStatus: error.providerDiagnostic.httpStatus } : {}), ...(error.providerDiagnostic.providerCode ? { providerCode: error.providerDiagnostic.providerCode } : {}), ...(error.providerDiagnostic.providerType ? { providerType: error.providerDiagnostic.providerType } : {}), ...(error.providerDiagnostic.providerParam ? { providerParam: error.providerDiagnostic.providerParam } : {}), ...(error.providerDiagnostic.requestId ? { requestId: error.providerDiagnostic.requestId } : {}), ...(error.providerDiagnostic.summary ? { summary: error.providerDiagnostic.summary } : {}) } } : {}) } };
+  return { status: 503, body: { code: 'PERSISTENCE_UNAVAILABLE', message: 'Não foi possível acessar a persistência configurada' } };
+}
 function sendConversationError(reply: { code: (status: number) => { send: (payload: unknown) => unknown } }, error: unknown) {
-  if (error instanceof RevisionConflict) return reply.code(409).send({ code: 'REVISION_CONFLICT', message: error.message });
-  if (error instanceof OperationConflict) return reply.code(409).send({ code: 'OPERATION_ID_CONFLICT', message: error.message });
-  if (error instanceof StaleQuestionSet) return reply.code(409).send({ code: 'QUESTION_SET_STALE', message: error.message });
-  if (error instanceof ConversationNotFound) return reply.code(404).send({ code: 'SESSION_NOT_FOUND', message: error.message });
-  if (error instanceof ConversationServiceFailure) return reply.code(error.statusCode).send({ code: error.code, message: error.message, recovery: recoveryGuidance(error.code, error.retryAfterMs), ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}), ...(error.generationRunId ? { generationRunId: error.generationRunId } : {}), ...(error.providerDiagnostic ? { providerDiagnostic: { category: error.providerDiagnostic.category, ...(error.providerDiagnostic.httpStatus !== undefined ? { httpStatus: error.providerDiagnostic.httpStatus } : {}), ...(error.providerDiagnostic.providerCode ? { providerCode: error.providerDiagnostic.providerCode } : {}), ...(error.providerDiagnostic.providerType ? { providerType: error.providerDiagnostic.providerType } : {}), ...(error.providerDiagnostic.providerParam ? { providerParam: error.providerDiagnostic.providerParam } : {}), ...(error.providerDiagnostic.requestId ? { requestId: error.providerDiagnostic.requestId } : {}), ...(error.providerDiagnostic.summary ? { summary: error.providerDiagnostic.summary } : {}) } } : {}) });
-  return reply.code(503).send({ code: 'PERSISTENCE_UNAVAILABLE', message: 'Não foi possível acessar a persistência configurada' });
+  const { status, body } = conversationErrorBody(error);
+  return reply.code(status).send(body);
 }

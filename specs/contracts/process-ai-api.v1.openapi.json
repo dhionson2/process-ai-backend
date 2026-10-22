@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Process AI Backend API",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "description": "API versionada para ProcessSpec, geração, validação e modelagem conversacional. Não executa conectores nem publica processos."
   },
   "servers": [
@@ -395,7 +395,8 @@
               "type": "string",
               "format": "uuid"
             }
-          }
+          },
+          { "$ref": "#/components/parameters/PreferAsync" }
         ],
         "requestBody": {
           "required": true,
@@ -437,6 +438,7 @@
           }
         },
         "responses": {
+          "202": { "description": "Turno aceito para processamento assíncrono (somente com Prefer: respond-async). Acompanhe por GET /api/v1/generation-runs/{runId}/events.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenerationAccepted" } } } },
           "200": {
             "description": "Resultado do turno conversacional",
             "content": {
@@ -551,7 +553,8 @@
               "type": "string",
               "format": "uuid"
             }
-          }
+          },
+          { "$ref": "#/components/parameters/PreferAsync" }
         ],
         "requestBody": {
           "required": true,
@@ -597,6 +600,7 @@
           }
         },
         "responses": {
+          "202": { "description": "Turno aceito para processamento assíncrono (somente com Prefer: respond-async). Acompanhe por GET /api/v1/generation-runs/{runId}/events.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenerationAccepted" } } } },
           "200": {
             "description": "Resultado do turno conversacional",
             "content": {
@@ -704,7 +708,8 @@
               "type": "string",
               "format": "uuid"
             }
-          }
+          },
+          { "$ref": "#/components/parameters/PreferAsync" }
         ],
         "requestBody": {
           "required": true,
@@ -755,6 +760,7 @@
           }
         },
         "responses": {
+          "202": { "description": "Turno aceito para processamento assíncrono (somente com Prefer: respond-async). Acompanhe por GET /api/v1/generation-runs/{runId}/events.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenerationAccepted" } } } },
           "200": {
             "description": "Resultado do turno conversacional",
             "content": {
@@ -1285,6 +1291,19 @@
         }
       }
     },
+    "/api/v1/generation-runs/{runId}/events": {
+      "get": {
+        "summary": "Progresso de um turno em Server-Sent Events",
+        "description": "Eventos `stage` ({type, stage, status}) enquanto o pipeline avança, seguidos de um único `result` (mesmo corpo da resposta síncrona do turno) ou `error` (ApiError com recovery). Quem conecta depois recebe a sequência inteira enquanto o run estiver retido em memória; fora disso, o resultado vem do run persistido, ou um evento `status` quando o run ainda não terminou. Barramento de eventos em processo: uma única instância nesta POC.",
+        "parameters": [
+          { "name": "runId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Fluxo SSE", "content": { "text/event-stream": { "schema": { "type": "string" } } } },
+          "404": { "description": "Run inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
     "/api/v1/generation-runs/{runId}": {
       "get": {
         "parameters": [
@@ -1324,6 +1343,15 @@
     }
   },
   "components": {
+    "parameters": {
+      "PreferAsync": {
+        "name": "Prefer",
+        "in": "header",
+        "required": false,
+        "description": "Envie `respond-async` para receber 202 assim que o generation run existir; sem o cabeçalho o turno é síncrono, como no contrato 1.x anterior.",
+        "schema": { "type": "string", "examples": ["respond-async"] }
+      }
+    },
     "schemas": {
       "ProcessSpec": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2810,6 +2838,14 @@
               "cacheHitRate": { "type": "number", "minimum": 0, "maximum": 1 }, "costUsd": { "type": ["number", "null"] }
             }
           }
+        }
+      },
+      "GenerationAccepted": {
+        "type": "object",
+        "required": ["generationRunId", "status"],
+        "properties": {
+          "generationRunId": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "const": "generating" }
         }
       },
       "RecoveryGuidance": {

@@ -2,7 +2,7 @@ import type { Environment } from '../../config/env.js';
 import type { ModelProvider } from '../providers/model-provider.js';
 import type { ProviderDiagnostic } from '../providers/model-provider.js';
 import { ConversationNotFound, OperationConflict, RevisionConflict, StaleQuestionSet, type ConfirmedFact, type ConversationRepository, type GenerationRun, type ProjectTarget, type StoredRevision } from '../projects/conversation.repository.js';
-import { AiOrchestrator, OrchestrationFailure, type ConversationTurn, type GenerationOutcome } from './orchestrator.js';
+import { AiOrchestrator, OrchestrationFailure, type ConversationTurn, type GenerationOutcome, type PipelineDiagnostic } from './orchestrator.js';
 import { reconstructMessageHistory } from './message-provenance.js';
 import { recoveryGuidance, recoveryMessage } from './recovery-guidance.js';
 import { projectUnderstanding } from './understanding.js';
@@ -17,6 +17,9 @@ export class ConversationServiceFailure extends Error {
   constructor(readonly code: string, message: string, readonly statusCode: number, readonly retryAfterMs?: number, readonly generationRunId?: string, readonly providerDiagnostic?: ProviderDiagnostic) { super(message); this.name = 'ConversationServiceFailure'; }
 }
 export type ConversationDependencies = { repository: ConversationRepository; orchestrator?: AiOrchestrator };
+
+/** Asynchronous-turn observers: the run id as soon as it exists, then each pipeline stage. */
+export type TurnHooks = { onRunCreated?: (runId: string) => void; onStage?: (diagnostic: PipelineDiagnostic) => void };
 
 export class ConversationService {
   private readonly orchestrator?: AiOrchestrator;
@@ -61,11 +64,11 @@ export class ConversationService {
     if (typeof name !== 'string' || !name.trim() || name.length > 128) throw new ConversationServiceFailure('PROJECT_NAME_INVALID', 'Nome do projeto deve ter de 1 a 128 caracteres', 400);
     return { ...await this.repo().createProject(this.environment.localTenantId, name.trim(), targetProfile), status: 'draft', currentRevision: 0 };
   }
-  async submitMessage(sessionId: string, text: string, baseRevision: number, dataClassification?: 'synthetic' | 'public', operationId?: string) {
+  async submitMessage(sessionId: string, text: string, baseRevision: number, dataClassification?: 'synthetic' | 'public', operationId?: string, hooks?: TurnHooks) {
     this.guardExternalData(dataClassification);
-    return this.processTurn(sessionId, text, baseRevision, 'user', undefined, operationId, undefined, undefined, dataClassification);
+    return this.processTurn(sessionId, text, baseRevision, 'user', undefined, operationId, undefined, undefined, dataClassification, hooks);
   }
-  async answerQuestions(sessionId: string, answers: string[], baseRevision: number, dataClassification?: 'synthetic' | 'public', questionSetId?: string, operationId?: string) {
+  async answerQuestions(sessionId: string, answers: string[], baseRevision: number, dataClassification?: 'synthetic' | 'public', questionSetId?: string, operationId?: string, hooks?: TurnHooks) {
     this.guardExternalData(dataClassification);
     this.ensureRepository();
     const requestHash = hashOperation({ kind: 'answers', baseRevision, answers: Array.isArray(answers) ? answers.map(answer => typeof answer === 'string' ? answer.trim() : answer) : answers, questionSetId: questionSetId || null });
@@ -85,7 +88,7 @@ export class ConversationService {
         const semanticSlot = question.semanticSlot || identity.semanticSlot;
         return { question: question.question, answer: answers[index].trim(), confirmedAt, answeredAt: confirmedAt, questionId: question.questionId || identity.questionId, requirementId: question.requirementId || identity.requirementId, semanticSlot, semanticFactId: semanticFactId(semanticSlot), questionStatus: 'answered', state: 'confirmed' };
       });
-    return this.processTurn(sessionId, text, baseRevision, 'confirmed-answer', facts, operationId, questionSetId, requestHash, dataClassification);
+    return this.processTurn(sessionId, text, baseRevision, 'confirmed-answer', facts, operationId, questionSetId, requestHash, dataClassification, hooks);
   }
   async session(sessionId: string) { this.ensureRepository(); await this.repo().reconcileInterruptedRuns(this.environment.localTenantId, sessionId); const session = await this.sessionOrThrow(sessionId); return { ...session, questionSetId: stableQuestionSetId(session.pendingQuestions), pendingQuestions: publicQuestions(session.pendingQuestions) }; }
   /** "O que entendi / o que falta": confirmed facts, open questions and a business projection of the newest revision. */
@@ -154,7 +157,7 @@ export class ConversationService {
     return result;
   }
 
-  private async processTurn(sessionId: string, text: string, baseRevision: number, sourceMessageType: 'user' | 'confirmed-answer' = 'user', facts?: ConfirmedFact[], operationId?: string, expectedQuestionSetId?: string, suppliedRequestHash?: string, dataClassification?: 'synthetic' | 'public') {
+  private async processTurn(sessionId: string, text: string, baseRevision: number, sourceMessageType: 'user' | 'confirmed-answer' = 'user', facts?: ConfirmedFact[], operationId?: string, expectedQuestionSetId?: string, suppliedRequestHash?: string, dataClassification?: 'synthetic' | 'public', hooks?: TurnHooks) {
     this.ensureRepository();
     if (operationId !== undefined && (typeof operationId !== 'string' || operationId.length < 8 || operationId.length > 128)) throw new ConversationServiceFailure('OPERATION_ID_INVALID', 'operationId deve conter de 8 a 128 caracteres', 400);
     if (expectedQuestionSetId !== undefined && (typeof expectedQuestionSetId !== 'string' || expectedQuestionSetId.length > 64)) throw new ConversationServiceFailure('QUESTION_SET_INVALID', 'questionSetId inválido', 400);
@@ -172,6 +175,7 @@ export class ConversationService {
     const turn = await this.repo().beginTurn(tenantId, sessionId, { operationId, requestHash, baseRevision, role: 'user', content: text.trim(), facts, expectedQuestionSetId }, this.orchestratorProvider(), this.orchestratorModel());
     const submittedMessage = turn.message; const run = turn.run;
     if (turn.replay) return { ...(run.result as Record<string, unknown> || {}), generationRunId: run.id, status: run.status, replayed: true };
+    hooks?.onRunCreated?.(run.id);
     let providerCallStarted = Boolean(run.providerStartedAt);
     try {
       const [storedMessages, currentSpec, confirmedFacts] = await Promise.all([this.repo().listMessages(tenantId, sessionId, 100), this.repo().getCurrentSpec(tenantId, sessionId), this.repo().listConfirmedFacts(tenantId, sessionId)]);
@@ -181,7 +185,7 @@ export class ConversationService {
       const confirmedAnswerText = new Set(confirmedFacts.map(fact => fact.answer.trim()));
       const authoritativeUserMessages = storedMessages.filter(message => message.role === 'user' && !confirmedAnswerText.has(message.content.trim())).map(message => ({ id: message.id, text: message.content }));
       const original = authoritativeUserMessages[0];
-      try { outcome = await this.orchestrator.generate({ text: text.trim(), sourceMessageId: submittedMessage.id, sourceMessageType, originalSource: original, authoritativeUserMessages, dataClassification, history, currentSpec, targetProfile: session.targetProfile, confirmedFacts: confirmedFacts.slice(-40), onProviderCallStart: async () => { await this.repo().markProviderStarted(tenantId, run.id); providerCallStarted = true; } }); }
+      try { outcome = await this.orchestrator.generate({ onStage: hooks?.onStage, text: text.trim(), sourceMessageId: submittedMessage.id, sourceMessageType, originalSource: original, authoritativeUserMessages, dataClassification, history, currentSpec, targetProfile: session.targetProfile, confirmedFacts: confirmedFacts.slice(-40), onProviderCallStart: async () => { await this.repo().markProviderStarted(tenantId, run.id); providerCallStarted = true; } }); }
       catch (error) {
         const mapped = mapServiceError(error);
         if (this.environment.logLevel !== 'silent' && process.env.NODE_ENV !== 'production' && error instanceof OrchestrationFailure && error.graphIrSchemaDiagnostics) {

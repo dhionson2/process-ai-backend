@@ -64,7 +64,7 @@ const rules: Rule[] = [
     guidance: { category: 'configuration', title: 'Configuração da IA indisponível', message: 'A geração está bloqueada pela configuração ou pela política do servidor. Fale com o administrador do ambiente.', actions: ['contact-admin'] },
   },
   {
-    match: exact('REVISION_CONFLICT', 'OPERATION_ID_CONFLICT', 'QUESTION_SET_INVALID'),
+    match: exact('REVISION_CONFLICT', 'OPERATION_ID_CONFLICT', 'QUESTION_SET_INVALID', 'QUESTION_SET_STALE'),
     guidance: { category: 'conflict', title: 'A sessão mudou enquanto você editava', message: 'Outra alteração foi salva antes desta. Recarregue a sessão para ver a versão atual e envie novamente.', actions: ['reload'] },
   },
   {
