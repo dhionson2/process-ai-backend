@@ -5,7 +5,8 @@ import { normalizeInterpretation } from '../interpretation-context.js';
 import { assessReadiness } from '../readiness.js';
 import { identityForQuestion, semanticSlotForQuestion } from '../semantic-grounding.js';
 import { applyConfirmations, confirmationKey } from '../confirmations.js';
-import { applySemanticRefinement, compileBusinessIntent, IntentCompilationError, SemanticGroundingError } from '../semantic-process.js';
+import { compileBusinessIntent, IntentCompilationError, SemanticGroundingError } from '../semantic-process.js';
+import { removalKey, removalQuestion, unexpectedRemovals } from '../preservation.js';
 import type { ModelCalls } from './model-calls.js';
 import type { TurnContext } from './turn-context.js';
 import { next, OrchestrationFailure, stop, type GenerationOutcome, type Json, type RepairBudget, type StageResult } from './types.js';
@@ -96,10 +97,9 @@ type Compiled = { plan: Json; spec: Json; compiledIntent?: Json };
 
 /** Compiles one plan; compiler errors are rethrown typed for the stage that decides who answers them. */
 async function compose(ctx: TurnContext, rawPlan: Json, model: string): Promise<{ spec: Json; compiledIntent?: Json }> {
-  const plan = ctx.refinementMode ? rawPlan : applyConfirmations(rawPlan, ctx.confirmations);
-  ctx.trace.push({ stage: 'compilation', status: 'started', details: { kind: plan.kind, modelConfigurationFlags: plan.pendingConfiguration?.length || 0 } });
+  const plan = applyConfirmations(rawPlan, ctx.confirmations);
+  ctx.trace.push({ stage: 'compilation', status: 'started', details: { kind: plan.kind, refinement: ctx.refinementMode, modelConfigurationFlags: plan.pendingConfiguration?.length || 0 } });
   try {
-    if (ctx.refinementMode) return { spec: applySemanticRefinement(ctx.args.currentSpec!, plan, { sourceText: ctx.userSource }) };
     const compiled = await compileBusinessIntent(plan, {
       targetProfile: ctx.targetProfile, knowledgeVersion: ctx.knowledge.version, model,
       sourceText: ctx.userSource,
@@ -110,9 +110,15 @@ async function compose(ctx: TurnContext, rawPlan: Json, model: string): Promise<
     });
     ctx.auditCoverage(compiled.businessIntent as Json);
     assertNoRejectedItems(ctx, compiled.spec);
+    if (ctx.refinementMode) {
+      assertPreserved(ctx, compiled.spec);
+      // A description edited by hand in the Modeler survives a replanning that did not ask to change it.
+      const current = ctx.args.currentSpec!;
+      if (typeof current.description === 'string' && current.description && !/descri/i.test(ctx.args.text)) compiled.spec.description = current.description;
+    }
     return { spec: compiled.spec, compiledIntent: compiled.businessIntent as Json };
   } catch (error) {
-    if (!ctx.coverageAudited() && !ctx.refinementMode) ctx.auditCoverage(plan);
+    if (!ctx.coverageAudited()) ctx.auditCoverage(plan);
     ctx.trace.push({ stage: 'compilation', status: 'rejected', details: { code: error instanceof IntentCompilationError ? 'INTENT_INCOMPLETE' : error instanceof SemanticGroundingError ? `SEMANTIC_GROUNDING_${error.status.toUpperCase()}` : 'REFINEMENT_AMBIGUOUS' } });
     if (error instanceof IntentCompilationError) throw error;
     if (error instanceof SemanticGroundingError) throw new OrchestrationFailure(`SEMANTIC_GROUNDING_${error.status.toUpperCase()}`, error.message);
@@ -138,11 +144,27 @@ function assertNoRejectedItems(ctx: TurnContext, spec: Json): void {
   }
 }
 
-/** Turns a compiler gap into the right conversation: a question for the requester, or a refinement clarification. */
+/**
+ * Preservation gate of a refinement: the replanned process may only drop what the request asked to drop.
+ * Anything else missing is a model omission (one correction), then a yes/no question per element.
+ */
+function assertPreserved(ctx: TurnContext, spec: Json): void {
+  const dropped = unexpectedRemovals(ctx.args.currentSpec!, spec, ctx.args.text, ctx.removals);
+  if (!dropped.length) return;
+  ctx.trace.push({ stage: 'preservation', status: 'dropped', details: { elements: dropped.map(item => `${item.kind}:${item.name}`) } });
+  const list = dropped.map(item => `“${item.name}”`).join(', ');
+  const question = `A nova versão deixaria de fora ${list}, que o pedido não mandou remover. Mantenha esses elementos com os mesmos nomes e responsáveis, a menos que o pedido peça explicitamente a remoção.`;
+  throw new IntentCompilationError(question, question, 'model-omission', undefined, dropped.map(item => ({ question: removalQuestion(item), requirementId: removalKey(item) })));
+}
+
+/** Turns a compiler gap into the right conversation: every question of the gap goes to the requester in one round. */
 function compilerGapOutcome(stage: Stage, error: unknown, plan: Json): GenerationOutcome {
-  if (error instanceof IntentCompilationError) return clarify(stage, { kind: 'need_clarification', summary: 'A intenção foi interpretada, mas falta uma informação para compilar o fluxo com segurança.', questions: [{ question: error.question, blocking: true, ...(error.subject ? { requirementId: confirmationKey(error.subject) } : {}) }] }, plan);
-  if (!stage.ctx.refinementMode || !(error instanceof OrchestrationFailure) || error.code !== 'REFINEMENT_AMBIGUOUS') throw error;
-  return clarify(stage, { kind: 'need_clarification', summary: 'O refinamento não foi aplicado; falta esclarecer uma referência do processo.', questions: [{ question: refinementQuestion(error.message), blocking: true }] }, plan);
+  if (!(error instanceof IntentCompilationError)) throw error;
+  const questions = error.questions ?? [{ question: error.question, ...(error.subject ? { requirementId: confirmationKey(error.subject) } : {}) }];
+  const summary = stage.ctx.refinementMode && error.origin === 'model-omission'
+    ? 'O ajuste foi interpretado, mas a nova versão deixaria de fora parte do processo atual. Confirme antes de eu redesenhar.'
+    : 'A intenção foi interpretada, mas falta uma informação para compilar o fluxo com segurança.';
+  return clarify(stage, { kind: 'need_clarification', summary, questions: questions.map(item => ({ ...item, blocking: true })) }, plan);
 }
 
 /**
@@ -154,9 +176,10 @@ export async function compile(stage: Stage, plan: Json): Promise<StageResult<Com
   try { return next({ plan, ...await compose(ctx, plan, calls.lastModel) }); }
   catch (error) {
     const modelSide = error instanceof IntentCompilationError && (error.origin === 'model-omission' || error.origin === 'model-divergence');
-    if (!(modelSide && !ctx.refinementMode && budget.canUse('omission'))) return stop(compilerGapOutcome(stage, error, plan));
+    if (!(modelSide && budget.canUse('omission'))) return stop(compilerGapOutcome(stage, error, plan));
+    const subjects = error.questions?.length ? error.message : error.subject ? `${error.subject.kind} “${error.subject.name}”` : 'elemento';
     const correction = error.origin === 'model-divergence'
-      ? `Correção obrigatória: um elemento da interpretação anterior não tem sustentação literal no texto do solicitante (${error.subject ? `${error.subject.kind} “${error.subject.name}”` : 'elemento'}). Nomeie etapas, campos e participantes com as palavras que o solicitante usou e cite como evidência um trecho literal dele; se o elemento não foi pedido, remova-o.`
+      ? `Correção obrigatória: elementos da interpretação anterior não têm sustentação literal no texto do solicitante (${subjects}). Nomeie etapas, campos e participantes com as palavras que o solicitante usou e cite como evidência um trecho literal dele; se o elemento não foi pedido, remova-o.`
       : `Correção obrigatória: a interpretação anterior omitiu algo que o solicitante descreveu explicitamente. ${error.question}`;
     const omissionPrompt = `${ctx.prompt}\n\n${correction}\nRetorne o BusinessIntent completo, preservando todos os demais fatos, sem inventar etapas, campos, papéis ou regras.\nResposta anterior:\n${JSON.stringify(plan)}`;
     if (omissionPrompt.length + ctx.schemaChars > ctx.environment.aiMaxInputChars) return stop(compilerGapOutcome(stage, error, plan));
@@ -213,7 +236,7 @@ export async function finalize(stage: Stage, validated: Validated): Promise<Gene
   const { plan, spec, compiledIntent, validation } = validated;
   const base = { provider: calls.providerId, model: calls.lastModel, latencyMs: calls.latencyMs, usage: { ...calls.usage }, repairAttempts: budget.reported(), knowledgeVersion: ctx.knowledge.version, knowledgeModules: ctx.knowledge.moduleIds, intermediate: compiledIntent || plan };
   if (!validation.valid) {
-    const question = !ctx.refinementMode ? clarificationForProcessSpecDiagnostics(validation.diagnostics) : undefined;
+    const question = clarificationForProcessSpecDiagnostics(validation.diagnostics);
     if (question) {
       ctx.trace.push({ stage: 'clarification', status: 'required', details: { code: 'PROCESSSPEC_SEMANTIC_CLARIFICATION', diagnosticCodes: [...new Set(validation.diagnostics.map(item => item.code))] } });
       return clarify(stage, { kind: 'need_clarification', summary: 'A proposta ainda não representa com segurança um detalhe do processo. Confirme o ponto abaixo antes de gerar os artefatos.', questions: [{ question, blocking: true }] }, plan);
@@ -248,14 +271,6 @@ export function findRepeatedQuestion(questions: Array<{ question: string; semant
     if (repeated) return repeated;
   }
   return undefined;
-}
-function refinementQuestion(reason: string): string {
-  if (/papel.*inexistente/i.test(reason)) return 'Qual é o papel do novo responsável e como o runtime deve localizá-lo (atribuição manual, grupo ou relação hierárquica)?';
-  if (/exatamente uma saída/i.test(reason)) return 'Em qual ponto exato do fluxo ramificado a nova tarefa deve ser inserida?';
-  if (/gateway condicionado/i.test(reason)) return 'Como as duas decisões devem se combinar para definir aprovação ou reprovação, e qual justificativa deve ser informada ao solicitante?';
-  if (/ID de nó já utilizado/i.test(reason)) return 'Qual identificador único deve ser usado para a nova tarefa?';
-  if (/nó de refinamento inexistente/i.test(reason)) return 'A qual tarefa existente esta alteração deve se referir?';
-  return 'Esclareça o ponto de inserção, o papel responsável e o comportamento esperado nas saídas da nova aprovação.';
 }
 function clarificationForProcessSpecDiagnostics(diagnostics: Array<{ code: string }>): string | undefined {
   const codes = new Set(diagnostics.map(item => item.code));

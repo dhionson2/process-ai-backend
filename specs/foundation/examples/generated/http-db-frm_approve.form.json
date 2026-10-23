@@ -1,5 +1,7 @@
 {
   "type": "default",
+  "id": "Form_frm_approve",
+  "schemaVersion": 19,
   "components": [
     {
       "type": "checkbox",

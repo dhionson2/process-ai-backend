@@ -8,7 +8,9 @@ import type { ConfirmedFact } from '../../projects/conversation.repository.js';
 import { interpretationSchema } from '../interpretation-context.js';
 import { evaluateRequirementCoverage, extractRequirementLedger, proposeLiteralCoverageLinks, type CoverageElement, type RequirementType } from '../requirement-coverage.js';
 import { extractNumericThresholdFacts, latestSemanticFactEvents, reconcileExplicitNumericCorrection, semanticSlotForQuestion } from '../semantic-grounding.js';
-import { allowedOperationsSummary, assertSemanticPlanBounds, businessIntentSchema, SemanticPlanLimitError, semanticRefinementSchema } from '../semantic-process.js';
+import { allowedOperationsSummary, assertSemanticPlanBounds, businessIntentSchema, SemanticPlanLimitError } from '../semantic-process.js';
+import { removalDecisions, type RemovalDecisions } from '../preservation.js';
+import { describeSpec } from '../spec-summary.js';
 import { collectConfirmations, type Confirmations } from '../confirmations.js';
 import { OrchestrationFailure, type GenerationArguments, type Json, type PipelineDiagnostic } from './types.js';
 
@@ -41,6 +43,8 @@ export type TurnContext = {
   confirmations: Confirmations;
   /** Items the requester rejected in the panel; enforced after compilation. */
   rejectedItems: Array<{ kind: string; label: string }>;
+  /** Refinements: elements the requester already agreed (or refused) to drop. */
+  removals: RemovalDecisions;
   trace: PipelineDiagnostic[];
   refinementMode: boolean;
   targetProfile: NonNullable<GenerationArguments['targetProfile']>;
@@ -83,7 +87,11 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
     return `${turn.role === 'user' ? 'Solicitante' : 'Assistente'}: ${content}`;
   }).join('\n');
   const reconciliationPrompt = numericReconciliation.directive ? `\n\nReconciliação de fatos estruturada (modo controlado):\n${numericReconciliation.directive}\n` : '';
-  const currentSpecText = args.currentSpec ? JSON.stringify(args.currentSpec) : '';
+  // A refinement replans the whole process: the model sees what exists (names it must keep), the original
+  // description and every earlier request, and returns a complete BusinessIntent after the change.
+  const currentSpecText = args.currentSpec ? describeSpec(args.currentSpec) : '';
+  const priorRequests = (args.authoritativeUserMessages ?? []).map(message => message.text).filter(text => text !== args.text && text !== args.originalSource?.text);
+  const originalText = args.originalSource && args.originalSource.text !== args.text ? args.originalSource.text : '';
   let factChars = 0;
   const factText = confirmedFacts.slice().reverse().filter(fact => {
     const size = fact.question.length + fact.answer.length + (fact.semanticSlot?.length || 0) + 32;
@@ -97,7 +105,9 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
   const refinementMode = Boolean(args.currentSpec);
   // Yes/no answers bound to an element become requester statements that the element can cite as evidence.
   const confirmations = collectConfirmations(confirmedFacts);
-  const userSource = [args.text, ...recentHistory.filter(turn => turn.role === 'user').map(turn => turn.content), ...confirmedFacts.map(fact => fact.answer), ...confirmations.statements].join('\n');
+  // Everything the requester ever wrote counts as evidence: in a refinement the original description may be far behind the recent history.
+  const userSource = [args.text, ...recentHistory.filter(turn => turn.role === 'user').map(turn => turn.content), ...(args.authoritativeUserMessages ?? []).map(message => message.text), ...(args.originalSource ? [args.originalSource.text] : []), ...confirmedFacts.map(fact => fact.answer), ...confirmations.statements].filter((text, index, all) => all.indexOf(text) === index).join('\n');
+  const removals = removalDecisions(confirmedFacts);
 
   const coverageMessages = [
     { id: args.sourceMessageId || `message_${createHash('sha256').update(args.text).digest('hex').slice(0, 16)}`, text: args.text },
@@ -117,11 +127,11 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
   };
 
   const integrationsRequested = technicalIntent(userSource);
-  const outputSchema = refinementMode ? semanticRefinementSchema() : interpretationSchema(integrationsRequested);
+  const outputSchema = interpretationSchema(integrationsRequested);
   // Validate against the exact provider-facing contract. The compiler-owned pendingConfiguration
   // is added by normalizeInterpretation, so allow that one field in the local post-normalization check.
   const validationSchema = structuredClone(outputSchema);
-  if (!refinementMode) {
+  {
     const businessSchema = validationSchema.oneOf?.find((variant: Json) => variant.properties?.kind?.const === 'business_intent');
     const internalBusinessSchema = businessIntentSchema().oneOf[1];
     if (businessSchema) businessSchema.properties.pendingConfiguration = internalBusinessSchema.properties.pendingConfiguration;
@@ -132,7 +142,7 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
     catch (error) { if (error instanceof SemanticPlanLimitError) throw new OrchestrationFailure('MODEL_PLAN_LIMIT_EXCEEDED', error.message); throw error; }
   };
   const schemaChars = JSON.stringify(outputSchema).length;
-  const contextReserve = args.text.length + history.length + currentSpecText.length + factText.length + 500 + schemaChars;
+  const contextReserve = args.text.length + history.length + currentSpecText.length + originalText.length + priorRequests.join('\n').length + factText.length + 900 + schemaChars;
   const knowledgeBudget = Math.max(0, Math.min(10000, environment.aiMaxInputChars - contextReserve));
   const knowledge = await knowledgeEngine.selectInterpretation(userSource, Math.min(3500, knowledgeBudget));
   // Stable material first (profile, knowledge), volatile material last: keeps the provider's prompt-cache prefix warm.
@@ -144,7 +154,14 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
     // Ledger verdicts appear only when the requester gave them; otherwise the prompt is unchanged.
     if (verdicts.confirmed.length) value += `\n\nItens confirmados pelo solicitante no painel (fatos desta sessão):\n${verdicts.confirmed.map(item => `- ${kindLabel[item.kind] ?? item.kind}: ${item.label}`).join('\n')}`;
     if (verdicts.rejected.length) value += `\n\nItens rejeitados pelo solicitante (não incluir no processo):\n${verdicts.rejected.map(item => `- ${kindLabel[item.kind] ?? item.kind}: ${item.label}`).join('\n')}`;
-    if (args.currentSpec) value += `\n\nProcessSpec atual a preservar e refinar:\n${currentSpecText}`;
+    if (args.currentSpec) {
+      value += '\n\nAJUSTE DE UM PROCESSO EXISTENTE.';
+      if (originalText) value += `\nDescrição original do processo (evidência válida para tudo que já existe):\n${originalText}`;
+      if (priorRequests.length) value += `\nPedidos de ajuste anteriores, já aplicados:\n${priorRequests.map(text => `- ${text}`).join('\n')}`;
+      value += `\nProcesso atual, como está no editor (fonte de verdade a preservar; repita os mesmos nomes):\n${currentSpecText}`;
+      value += `\nPedido de ajuste atual (o que muda):\n${args.text}`;
+      value += '\nRetorne o BusinessIntent COMPLETO do processo depois do ajuste: todas as etapas, decisões, participantes e campos que já existiam e não foram citados no pedido continuam, com os mesmos nomes e responsáveis. Aplique somente o que o pedido muda — acrescentar, remover, renomear, mover, trocar o responsável, incluir uma opção numa decisão ou um retorno a uma etapa anterior são todos aceitáveis. Em `evidence`, cite a descrição original para o que já existia e o pedido de ajuste para o que mudou. Em changeSummary, diga em uma frase o que mudou. Não pergunte sobre o que já está no processo atual.';
+    }
     return value;
   };
   const operationCatalog = integrationsRequested ? await allowedOperationsSummary() : '';
@@ -158,7 +175,7 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
   if (groundingMode === 'controlled') trace.push({ stage: 'semantic-reconciliation', status: numericReconciliation.status, details: { priorThresholdCount: priorThresholdFacts.length, activeFactCount: numericReconciliation.facts.filter(fact => fact.state === 'confirmed').length, supersededFactCount: numericReconciliation.facts.filter(fact => fact.state === 'superseded').length } });
 
   return {
-    args, environment, confirmations, rejectedItems: verdicts.rejected, trace, refinementMode, targetProfile, groundingMode, confirmedFacts, userSource, knowledge,
+    args, environment, confirmations, rejectedItems: verdicts.rejected, removals, trace, refinementMode, targetProfile, groundingMode, confirmedFacts, userSource, knowledge,
     outputSchema, schemaChars, validator, composePrompt, prompt, request, enforcePlanBounds, auditCoverage,
     coverageAudited: () => coverageAudited,
   };

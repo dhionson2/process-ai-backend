@@ -1,4 +1,4 @@
-import type { ConfirmationSubject } from './confirmations.js';
+import { confirmationKey, type ConfirmationSubject } from './confirmations.js';
 import { createHash } from 'node:crypto';
 import { readFoundationJson } from '../../shared/files.js';
 import { businessPatternForActivity } from './business-patterns.js';
@@ -160,8 +160,14 @@ export function semanticRefinementSchema(): Json {
  *   corrected first; if that fails, the requester answers a yes/no question bound to `subject`.
  */
 export type IntentGapOrigin = 'needs-user' | 'model-omission' | 'model-divergence';
+export type CompilationQuestion = { question: string; requirementId?: string };
 export class IntentCompilationError extends Error {
-  constructor(readonly question: string, message = question, readonly origin: IntentGapOrigin = 'needs-user', readonly subject?: ConfirmationSubject) { super(message); this.name = 'IntentCompilationError'; }
+  /** Every question this gap raises; when absent, `question` (bound to `subject`) is the only one. */
+  readonly questions?: CompilationQuestion[];
+  constructor(readonly question: string, message = question, readonly origin: IntentGapOrigin = 'needs-user', readonly subject?: ConfirmationSubject, questions?: CompilationQuestion[]) {
+    super(message); this.name = 'IntentCompilationError';
+    if (questions?.length) this.questions = questions;
+  }
 }
 export class SemanticGroundingError extends Error {
   constructor(readonly status: 'divergent' | 'inconclusive', message: string) { super(message); this.name = 'SemanticGroundingError'; }
@@ -188,6 +194,7 @@ export async function compileBusinessIntent(value: BusinessIntentV1 | Json, opti
   // Runtime configuration is derived below. A model-supplied `blocking` flag cannot gate preview.
   // Structural ambiguities use need_clarification or fail compilation with a concrete diagnostic.
   const questions: DraftQuestion[] = [];
+  const unsupported: ConfirmationSubject[] = [];
   let rejectionReasonConfirmed = /(?:se|caso|quando).{0,100}(?:reprov|rejeit).{0,120}(?:motivo|justific|raz[aã]o)|(?:motivo|justific|raz[aã]o).{0,100}(?:se|quando|caso).{0,50}(?:reprov|rejeit)/i.test([options.sourceText || '', confirmedSource].join('\n'));
   const addSuggestion = (text: string, evidence?: string) => {
     if (assumptions.some(item => normalized(item.text) === normalized(text))) return;
@@ -270,7 +277,9 @@ export async function compileBusinessIntent(value: BusinessIntentV1 | Json, opti
         addSuggestion(`A atividade “${activity.name}” não tem suporte literal suficiente e não foi incluída no fluxo confirmado.`, activity.evidence);
         if (grounding && grounding.status !== 'equivalent') throw new SemanticGroundingError(grounding.status, grounding.reason);
         ask(`A atividade “${activity.name}” deve fazer parte deste processo?`, `activity:${activity.name}`);
-        throw unsupportedElement('activity', activity.name);
+        // Collected, not thrown: every unsupported element is asked in the same round.
+        if (!unsupported.some(item => item.kind === 'activity' && normalized(item.name) === normalized(activity.name))) unsupported.push({ kind: 'activity', name: activity.name });
+        continue;
       }
       if (activity.kind === 'integration') {
         if (activitySource && !technicalIntent(activitySource)) throw new IntentCompilationError(`A atividade “${activity.name}” foi interpretada como integração técnica sem solicitação explícita. Confirme se há uma integração ou uma tarefa humana.`);
@@ -312,6 +321,7 @@ export async function compileBusinessIntent(value: BusinessIntentV1 | Json, opti
   rejectionReasonConfirmed ||= (intent.rules || []).some((rule: Json) => rule.provenance?.confirmed && /(?:se|caso|quando).{0,100}(?:reprov|rejeit).{0,120}(?:motivo|justific|raz[aã]o)|(?:motivo|justific|raz[aã]o).{0,100}(?:se|quando|caso).{0,50}(?:reprov|rejeit)/i.test(rule.text));
   const startFields = selectedFields(intent.startFields || [], 'start');
   const activities = await normalizeActivities(intent.activities || []);
+  if (unsupported.length) throw unsupportedElements(unsupported);
   if (!activities.length) throw new IntentCompilationError('O modelo não identificou nenhuma atividade do processo que possa ser confirmada na descrição. Quais tarefas ou decisões devem fazer parte do fluxo?');
   if (hasExplicitDecision(activitySource) && !containsDecision(activities)) {
     { const question = 'A descrição contém uma decisão explícita, mas o BusinessIntent não a representou como aprovação ou decisão com alternativas. Confirme como estruturar os ramos antes de gerar a prévia.'; throw new IntentCompilationError(question, question, 'model-omission'); }
@@ -369,13 +379,44 @@ function isRejectionReasonField(name: string): boolean {
   return /(?:motivo|reason|justific\w*|raz[aã]o).{0,40}(?:reprov|rejei)|(?:reprov|rejei).{0,40}(?:motivo|reason|justific\w*|raz[aã]o)/i.test(name);
 }
 /** One honest yes/no question per element without literal support, bound to the element so the answer counts. */
-function unsupportedElement(kind: ConfirmationSubject['kind'], name: string): IntentCompilationError {
+function unsupportedQuestion(kind: ConfirmationSubject['kind'], name: string): string {
   const label = kind === 'activity' ? 'A etapa' : kind === 'field' ? 'O campo' : 'O participante';
-  const question = `${label} “${name}” não aparece com essas palavras no seu pedido. Ela deve fazer parte do processo? Responda sim ou não, ou descreva com suas palavras.`
+  return `${label} “${name}” não aparece com essas palavras no seu pedido. Ela deve fazer parte do processo? Responda sim ou não, ou descreva com suas palavras.`
     .replace('Ela deve', kind === 'activity' ? 'Ela deve' : 'Ele deve');
-  return new IntentCompilationError(question, question, 'model-divergence', { kind, name });
 }
-const containsQuote = (context: string, quote: string) => normalized(context).includes(normalized(quote));
+/** All elements without literal support go to the person in ONE round, each question bound to its element. */
+function unsupportedElements(subjects: ConfirmationSubject[]): IntentCompilationError {
+  const first = subjects[0];
+  const question = unsupportedQuestion(first.kind, first.name);
+  const summary = subjects.length > 1 ? `${subjects.length} elementos não aparecem com essas palavras no seu pedido: ${subjects.map(item => `“${item.name}”`).join(', ')}.` : question;
+  return new IntentCompilationError(question, summary, 'model-divergence', first, subjects.map(subject => ({ question: unsupportedQuestion(subject.kind, subject.name), requirementId: confirmationKey(subject) })));
+}
+/**
+ * The quote is in the context literally, or nearly so: people mistype ("verias", "repova") and the model
+ * quotes them corrected. Nearly means at least 80% of the quote's words appear in the context, each exactly or
+ * within one edit for words of five letters or more. Word order is not required, every word still has to exist.
+ */
+const containsQuote = (context: string, quote: string) => {
+  const source = normalized(context); const needle = normalized(quote);
+  if (!needle) return false;
+  if (source.includes(needle)) return true;
+  const sourceWords = source.split(' ');
+  const needleWords = needle.split(' ').filter(word => word.length >= 3);
+  if (!needleWords.length) return false;
+  const found = needleWords.filter(word => sourceWords.some(candidate => candidate === word || (word.length >= 5 && candidate.length >= 5 && withinOneEdit(word, candidate)))).length;
+  return found / needleWords.length >= 0.8;
+};
+function withinOneEdit(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0; let j = 0; let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i += 1; j += 1; continue; }
+    if (edits) return false;
+    edits = 1;
+    if (a.length > b.length) i += 1; else if (b.length > a.length) j += 1; else { i += 1; j += 1; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
 function adequateQuote(context: string, quote?: string): boolean {
   if (!quote || !containsQuote(context, quote)) return false;
   const stop = new Set(['a', 'as', 'ao', 'aos', 'de', 'da', 'das', 'do', 'dos', 'e', 'em', 'na', 'nas', 'no', 'nos', 'o', 'os', 'para', 'por', 'que', 'se']);
@@ -420,7 +461,7 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
   for (const actor of intent.actors as Json[]) {
     const key = normalized(actor.name);
     if (!key || roleIndex.has(key)) throw new IntentCompilationError(`Há mais de um ator chamado “${actor.name}”. Esclareça qual tarefa pertence a cada ator.`);
-    if (roleEvidenceText && !roleNameSupported(actor.name, roleEvidenceText)) throw unsupportedElement('actor', actor.name);
+    if (roleEvidenceText && !roleNameSupported(actor.name, roleEvidenceText)) throw unsupportedElements([{ kind: 'actor', name: actor.name }]);
     if (roleEvidenceText && actor.resolution !== 'requester' && initiatesRequest(actor.name, roleEvidenceText)) {
       actor.resolution = 'requester';
       const index = normalized(roleEvidenceText).indexOf(normalized(actor.name));
@@ -459,7 +500,7 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
     if (!selectedInputs.length) return undefined;
     if (activitySourceText) for (const input of selectedInputs) {
       if (!input.evidence && ['Decisão', 'Motivo da rejeição'].includes(input.name)) continue;
-      if (!input.evidence || !containsQuote(activitySourceText, input.evidence)) throw unsupportedElement('field', input.name);
+      if (!input.evidence || !containsQuote(activitySourceText, input.evidence)) throw unsupportedElements([{ kind: 'field', name: input.name }]);
     }
     const fields = selectedInputs.map(input => {
       const specType = fieldTypes[input.type];
@@ -490,9 +531,9 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
   const walk = (steps: StepIntent[]) => {
     for (const step of steps) {
       if (activitySourceText && (!step.evidence || !containsQuote(activitySourceText, step.evidence))) {
-        throw unsupportedElement('activity', step.name);
+        throw unsupportedElements([{ kind: 'activity', name: step.name }]);
       }
-      if (activitySourceText && !stepEvidenceMatchesName(step.name, step.evidence)) throw unsupportedElement('activity', step.name);
+      if (activitySourceText && !stepEvidenceMatchesName(step.name, step.evidence)) throw unsupportedElements([{ kind: 'activity', name: step.name }]);
       if (options.sourceText && step.evidence && step.actor && !containsQuote(step.evidence, step.actor)) {
         throw new IntentCompilationError(`A solicitação não liga “${step.actor}” à atividade “${step.name}”. Qual papel deve executá-la?`);
       }
@@ -680,12 +721,20 @@ function assertConditionalCoverage(activities: Json[], source: string): void {
   const evidenceByBranch = { approved: [] as string[], rejected: [] as string[] };
   let rejectionReasonRepresented = false;
   const evidence = (items: Json[]): string[] => items.flatMap(item => [item.evidence || '', ...evidence(item.onApproved || []), ...evidence(item.onRejected || []), ...(item.alternatives || []).flatMap((option: Json) => evidence(option.steps || []))]);
+  // A decision whose options read "Aprovado"/"Rejeitado" (a three-way review, for instance) carries the same branches as an approval.
+  const branchOf = (option: Json): 'approved' | 'rejected' | null => {
+    const label = normalized(`${option.label ?? ''} ${option.value ?? ''}`);
+    if (/\b(aprov|defer|aceit|autoriz)/.test(label)) return 'approved';
+    if (/\b(reprov|rejeit|indefer|negad|recus)/.test(label)) return 'rejected';
+    return null;
+  };
   const walk = (items: Json[]) => { for (const item of items) {
     if (item.kind === 'approval') {
       evidenceByBranch.approved.push(...evidence(item.onApproved || []));
       evidenceByBranch.rejected.push(...evidence(item.onRejected || []));
       if (item.requiresRejectionReason === true) rejectionReasonRepresented = true;
     }
+    if (item.kind === 'decision') for (const option of item.alternatives || []) { const side = branchOf(option); if (side) evidenceByBranch[side].push(...evidence(option.steps || [])); }
     walk([...(item.onApproved || []), ...(item.onRejected || []), ...(item.alternatives || []).flatMap((option: Json) => option.steps || [])]);
   } };
   walk(activities);

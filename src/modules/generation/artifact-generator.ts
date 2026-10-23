@@ -12,7 +12,11 @@ const NS = {
   dc: 'http://www.omg.org/spec/DD/20100524/DC',
   di: 'http://www.omg.org/spec/DD/20100524/DI',
   xsi: 'http://www.w3.org/2001/XMLSchema-instance',
+  // Same targetNamespace bpmn-js writes; the Modeler («Abrir») imports the file as any hand-made diagram.
+  target: 'http://bpmn.io/schema/bpmn',
 };
+/** form-js schema version the Modeler's vendored form-js (1.24.x) writes; older or missing versions are migrated on import. */
+export const FORM_SCHEMA_VERSION = 19;
 
 const xml = (value: unknown): string => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
 const stable = (value: unknown): string => JSON.stringify(value, (_key, item) => {
@@ -37,26 +41,43 @@ function compileFeelExpression(expr: Dict): string {
   if (op === 'isSet') return `${compileFeelExpression(expr.arg)} != null`;
   return `(${compileFeelExpression(expr.left)} ${({ eq: '=', ne: '!=', gt: '>', gte: '>=', lt: '<', lte: '<=' } as Record<string, string>)[op]} ${compileFeelExpression(expr.right)})`;
 }
-function layout(spec: Dict): Map<string, Box> {
-  const nodes: Dict[] = spec.nodes;
-  const outgoing = new Map<string, string[]>();
-  for (const flow of spec.flows) outgoing.set(flow.source, [...(outgoing.get(flow.source) || []), flow.target]);
-  const start = nodes.find(node => node.type === 'startEvent')!.id;
-  const depths = new Map([[start, 0]]);
-  const queue = [start];
-  for (let i = 0; i < queue.length; i++) for (const target of outgoing.get(queue[i]) || []) if (!depths.has(target)) { depths.set(target, depths.get(queue[i])! + 1); queue.push(target); }
-  const layers = new Map<number, Dict[]>();
-  for (const node of nodes) { const depth = depths.get(node.id) ?? nodes.length; layers.set(depth, [...(layers.get(depth) || []), node]); }
-  const result = new Map<string, Box>();
-  for (const [depth, group] of [...layers].sort(([a], [b]) => a - b)) group.forEach((node, row) => {
-    const [width, height] = ['startEvent', 'endEvent'].includes(node.type) ? [36, 36] : node.type.endsWith('Gateway') ? [50, 50] : [140, 80];
-    result.set(node.id, { x: 110 + depth * 210, y: 130 + (row - (group.length - 1) / 2) * 180, width, height });
+const NODE_SIZE = (node: Dict): [number, number] => ['startEvent', 'endEvent'].includes(node.type) ? [36, 36] : node.type.endsWith('Gateway') ? [50, 50] : [140, 80];
+
+/**
+ * Automatic layout by ELK (layered, left to right): the same engine bpmn-js users reach for, so edges do not
+ * cross needlessly, decision branches stay side by side and a loop back to an earlier step is routed around.
+ * Deterministic for the same ProcessSpec: elkjs is pure and seeded by element order.
+ */
+async function layout(spec: Dict): Promise<{ boxes: Map<string, Box>; routes: Map<string, Array<[number, number]>> }> {
+  // elkjs ships no typings for the bundled entry; only `layout()` is used here.
+  const ELK = (await import('elkjs/lib/elk.bundled.js')).default as unknown as new () => { layout(graph: Dict): Promise<Dict> };
+  const elk = new ELK();
+  const graph = await elk.layout({
+    id: 'root',
+    layoutOptions: {
+      'elk.algorithm': 'layered', 'elk.direction': 'RIGHT',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '70', 'elk.spacing.nodeNode': '40', 'elk.spacing.edgeNode': '30',
+      'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF', 'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+      'elk.edgeRouting': 'ORTHOGONAL', 'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+      'elk.padding': '[top=60,left=110,bottom=60,right=60]',
+    },
+    children: spec.nodes.map((node: Dict) => { const [width, height] = NODE_SIZE(node); return { id: node.id, width, height }; }),
+    edges: spec.flows.map((flow: Dict) => ({ id: flow.id, sources: [flow.source], targets: [flow.target] })),
   });
-  return result;
+  const boxes = new Map<string, Box>();
+  for (const child of graph.children ?? []) boxes.set(child.id, { x: Math.round(child.x ?? 0), y: Math.round(child.y ?? 0), width: child.width ?? 0, height: child.height ?? 0 });
+  const routes = new Map<string, Array<[number, number]>>();
+  for (const edge of graph.edges ?? []) {
+    const section = (edge as Dict).sections?.[0];
+    if (!section) continue;
+    const points: Array<[number, number]> = [[section.startPoint.x, section.startPoint.y], ...((section.bendPoints ?? []) as Array<{ x: number; y: number }>).map(point => [point.x, point.y] as [number, number]), [section.endPoint.x, section.endPoint.y]];
+    routes.set(edge.id, points.map(([x, y]) => [Math.round(x), Math.round(y)]));
+  }
+  return { boxes, routes };
 }
 
-function generateBpmn(spec: Dict): string {
-  const positions = layout(spec);
+async function generateBpmn(spec: Dict): Promise<string> {
+  const { boxes: positions, routes } = await layout(spec);
   const outgoing = new Map<string, Dict[]>();
   const incoming = new Map<string, Dict[]>();
   for (const flow of spec.flows) {
@@ -65,7 +86,7 @@ function generateBpmn(spec: Dict): string {
   }
   const lines = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    `<bpmn:definitions xmlns:bpmn="${NS.bpmn}" xmlns:bpmndi="${NS.bpmndi}" xmlns:dc="${NS.dc}" xmlns:di="${NS.di}" xmlns:xsi="${NS.xsi}" xmlns:process-ai="urn:process-ai:preview" xmlns:flowable="http://flowable.org/bpmn" id="Definitions_${xml(spec.id)}" targetNamespace="urn:process-design:preview">`,
+    `<bpmn:definitions xmlns:bpmn="${NS.bpmn}" xmlns:bpmndi="${NS.bpmndi}" xmlns:dc="${NS.dc}" xmlns:di="${NS.di}" xmlns:xsi="${NS.xsi}" xmlns:flowable="http://flowable.org/bpmn" id="Definitions_${xml(spec.id)}" targetNamespace="${NS.target}">`,
     `  <bpmn:process id="${xml(spec.id)}" name="${xml(spec.name)}" isExecutable="false">`,
   ];
   for (const node of spec.nodes) {
@@ -106,11 +127,8 @@ function generateBpmn(spec: Dict): string {
   for (const flow of spec.flows) {
     const source = positions.get(flow.source)!;
     const target = positions.get(flow.target)!;
-    const x1 = source.x + source.width; const y1 = source.y + source.height / 2;
-    const x2 = target.x; const y2 = target.y + target.height / 2;
-    const points: Array<[number, number]> = [[x1, y1]];
-    if (y1 !== y2) { const mid = (x1 + x2) / 2; points.push([mid, y1], [mid, y2]); }
-    points.push([x2, y2]);
+    // ELK routed the edge; a missing section (degenerate graph) falls back to a straight connector.
+    const points = routes.get(flow.id) ?? [[source.x + source.width, source.y + source.height / 2], [target.x, target.y + target.height / 2]] as Array<[number, number]>;
     const waypointXml = points.map(([x, y]) => `<di:waypoint x="${x}" y="${y}" />`).join('');
     lines.push(`      <bpmndi:BPMNEdge id="Edge_${xml(flow.id)}" bpmnElement="${xml(flow.id)}">${waypointXml}</bpmndi:BPMNEdge>`);
   }
@@ -126,7 +144,12 @@ function compileForm(form: Dict): Record<string, unknown> {
     if (field.required) component.validate = { required: true };
     if (field.type === 'integer') component.numberType = 'integer';
     if (field.type === 'decimal') component.numberType = 'decimal';
-    if (field.type === 'date' || field.type === 'datetime') component.subtype = field.type;
+    if (field.type === 'date' || field.type === 'datetime') {
+      // form-js datetime components label the date (and time) inputs, not the component; `label` alone renders no text.
+      component.subtype = field.type; component.dateLabel = field.label;
+      if (field.type === 'datetime') component.timeLabel = 'Hora';
+      delete component.label;
+    }
     if (field.type === 'select') component.values = field.options;
     const visible = field.visibleWhen ? compileFeelExpression(field.visibleWhen) : undefined;
     if (visible) component.conditional = { hide: `= not(${visible})` };
@@ -136,7 +159,7 @@ function compileForm(form: Dict): Record<string, unknown> {
     return component;
   });
   components.push({ type: 'button', key: 'submit', label: 'Enviar', action: 'submit', id: `Submit_${form.id}` });
-  return { type: 'default', components };
+  return { type: 'default', id: `Form_${form.id}`, schemaVersion: FORM_SCHEMA_VERSION, components };
 }
 
 async function writeExamples(): Promise<void> {
@@ -164,7 +187,7 @@ export async function generateArtifacts(value: unknown): Promise<GeneratedArtifa
   let forms: GeneratedArtifacts['forms'];
   try { forms = spec.forms.map((form: Dict) => ({ id: form.id, json: compileForm(form) })); }
   catch (error) { return { bpmnXml: '', forms: [], manifest: {}, diagnostics: [{ code: 'FORM_RULE_UNSUPPORTED', path: '/forms', message: error instanceof Error ? error.message : 'Regra de formulário não suportada', severity: 'error' }] }; }
-  const bpmnXml = generateBpmn(spec);
+  const bpmnXml = await generateBpmn(spec);
   const hashes: Record<string, string> = {};
   hashes['process.bpmn'] = createHash('sha256').update(bpmnXml).digest('hex');
   for (const form of forms) hashes[`${form.id}.form.json`] = createHash('sha256').update(`${JSON.stringify(form.json, null, 2)}\n`).digest('hex');

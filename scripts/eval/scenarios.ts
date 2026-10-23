@@ -133,4 +133,52 @@ export const scenarios: EvalScenario[] = [
     text: 'O morador abre um chamado de manutenção informando o local e uma descrição do problema. O síndico autoriza ou recusa o chamado. Se autorizar, a zeladoria executa o reparo e depois o morador avalia o atendimento. Se recusar, o morador é avisado do motivo.',
     expect: { activities: [['autoriz', 'aprov', 'analis'], ['repar', 'execut'], ['avali']], roles: [['morador'], ['sindico'], ['zeladoria']], minDecisions: 1, forbidden: ['orcamento', 'pagamento', 'compra'] },
   },
+  {
+    id: 'S15-ferias-pedir-ajuste',
+    title: 'Ajuste: terceira opção do gestor (pedir ajuste) com retorno ao solicitante',
+    text: 'O funcionário solicita férias informando o início e o fim. O gestor aprova ou reprova. Se reprovado, o funcionário recebe uma notificação com o motivo. Se aprovado, o RH faz o pagamento das férias.',
+    expect: { activities: [['aprov', 'analis', 'decid'], ['pag']], roles: [['funcionario'], ['gestor'], ['rh']], minDecisions: 1, forbidden: ['saldo', 'folha'] },
+    followUps: [{
+      text: 'O gestor também pode pedir ajuste: nesse caso o pedido volta para o funcionário ajustar e depois retorna para a análise do gestor.',
+      answers: [{ when: /terceira|opção|opcao/i, answer: 'Sim, é uma terceira opção além de aprovar e reprovar.' }, { when: /volta|retorn/i, answer: 'Sim, depois do ajuste volta para a análise do gestor.' }],
+      fallback: 'Sim.',
+      expect: { activities: [['ajust', 'corrig']], minDecisions: 1 },
+    }],
+  },
+  {
+    id: 'S16-reembolso-conferencia',
+    title: 'Ajuste: inserir conferência antes do pagamento',
+    text: 'O colaborador abre o pedido de reembolso informando o valor e anexando a justificativa. O gestor imediato aprova ou reprova. Se aprovado, o financeiro paga o reembolso. Se reprovado, o colaborador é informado do motivo.',
+    expect: { activities: [['aprov', 'analis'], ['pag']], roles: [['colaborador'], ['gestor'], ['financeiro']], minDecisions: 1, forbidden: ['nota fiscal', 'auditoria'] },
+    followUps: [{
+      text: 'Antes do pagamento, o financeiro confere se a justificativa está completa.',
+      answers: [{ when: /onde|qual|ponto|depois|antes/i, answer: 'Depois da aprovação do gestor e antes do pagamento.' }],
+      fallback: 'Sim.',
+      expect: { activities: [['confer', 'verific']] },
+    }],
+  },
+  {
+    id: 'S17-compra-remover-etapa',
+    title: 'Ajuste: remover uma etapa pedida explicitamente',
+    text: 'Um funcionário solicita compra de material informando o material e a quantidade. O gestor analisa a solicitação. Se aprovar, o setor de compras providencia a compra e depois o almoxarifado registra a entrada. Se reprovar, o funcionário recebe a justificativa.',
+    expect: { activities: [['analis', 'aprov'], ['provid', 'compra'], ['registr', 'entrada']], roles: [['funcionario'], ['gestor'], ['compras'], ['almoxarifado']], minDecisions: 1, forbidden: ['cotacao', 'licitacao'] },
+    followUps: [{
+      text: 'Remova a etapa de registro da entrada pelo almoxarifado; o processo termina quando a compra é providenciada.',
+      fallback: 'Sim, pode remover.',
+      expect: { activities: [['provid', 'compra']] },
+      removed: ['registr', 'entrada'],
+    }],
+  },
+  {
+    id: 'S18-viagem-renomear',
+    title: 'Ajuste: renomear uma etapa e trocar o responsável',
+    text: 'O servidor solicita uma viagem informando o destino e as datas. A chefia aprova ou reprova. Se aprovado, a secretaria emite as passagens. Se reprovado, o servidor é informado do motivo.',
+    expect: { activities: [['aprov', 'analis'], ['emit', 'passag']], roles: [['servidor'], ['chefia'], ['secretaria']], minDecisions: 1, forbidden: ['diaria', 'hotel'] },
+    followUps: [{
+      text: 'Renomeie a etapa de emitir passagens para "Comprar passagens e reservar hospedagem" e passe essa etapa para o setor de viagens.',
+      fallback: 'Sim.',
+      expect: { activities: [['comprar', 'passag']], roles: [['viagens']] },
+      removed: ['emit'],
+    }],
+  },
 ].map(scenario => ({ fallback: noExtraRule, ...scenario }));

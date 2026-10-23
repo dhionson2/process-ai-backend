@@ -23,7 +23,10 @@ import { readEnvironment, type Environment } from '../../src/config/env.js';
 import { configuredProvider } from '../../src/modules/ai/provider.factory.js';
 import { InMemoryConversationRepository } from '../../src/modules/projects/conversation.repository.js';
 import { ProviderFailure, type ModelProvider, type ProviderUsage, type StructuredRequest, type StructuredResponse } from '../../src/modules/providers/model-provider.js';
-import { scenarios, type EvalScenario } from './scenarios.js';
+import { generateArtifacts } from '../../src/modules/generation/artifact-generator.js';
+import { assessModelerImportability } from '../../src/modules/generation/modeler-compat.js';
+import { sameElement } from '../../src/modules/ai/preservation.js';
+import { scenarios, type EvalFollowUp, type EvalScenario } from './scenarios.js';
 
 type CallRecord = { latencyMs: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; costUsd?: number; failed?: string };
 type ScenarioResult = {
@@ -33,9 +36,22 @@ type ScenarioResult = {
   forbiddenHits: string[]; unexpectedTasks: string[];
   calls: number; latencyMs: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; costUsd: number | null;
   errorCode?: string;
+  /** "Importável no Modeler": the generated BPMN and forms pass the Modeler's import rules (modeler-compat.ts). */
+  importable?: boolean; importProblems?: string[];
+  /** Adjustment turns after the first version (the daily use): each must apply the change and keep the rest. */
+  followUps?: FollowUpResult[];
   /** Kept so the scoreboard can be re-scored offline. Synthetic content only. */
   spec?: unknown;
 };
+
+/** Generates the artifacts for a validated spec and judges them by the Modeler's rules; re-runnable offline from a saved spec. */
+export async function importability(spec: unknown): Promise<Pick<ScenarioResult, 'importable' | 'importProblems'>> {
+  if (!spec) return {};
+  const artifacts = await generateArtifacts(spec);
+  if (artifacts.diagnostics.some(item => item.severity === 'error')) return { importable: false, importProblems: artifacts.diagnostics.filter(item => item.severity === 'error').map(item => `${item.code}: ${item.message}`) };
+  const report = await assessModelerImportability(artifacts);
+  return { importable: report.importable, importProblems: report.problems };
+}
 
 const argv = process.argv.slice(2);
 const option = (name: string) => { const index = argv.indexOf(`--${name}`); return index >= 0 ? argv[index + 1] : undefined; };
@@ -110,7 +126,7 @@ export function scoreSpec(scenario: EvalScenario, spec: any) {
   };
 }
 
-function answerFor(scenario: EvalScenario, question: string): string {
+function answerFor(scenario: Pick<EvalScenario, 'answers' | 'fallback'>, question: string): string {
   // Any yes/no confirmation about an element the requester described is answered the way a person would.
   if (/Responda sim ou não/i.test(question)) return 'sim';
   return scenario.answers?.find(candidate => candidate.when.test(question))?.answer ?? scenario.fallback ?? 'Não há regra adicional além do que já foi descrito.';
@@ -154,10 +170,58 @@ async function runScenario(app: Awaited<ReturnType<typeof buildApp>>, recorder: 
     const latest = Math.max(...revisions.map(item => item.revision));
     spec = (await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}/revisions/${latest}` })).json().processSpec;
   }
-  return scoreResult(scenario, { id: scenario.id, title: scenario.title, outcome, clarificationRounds: rounds, questionsAsked: asked.length, repeatedQuestions, askedFirst, ...usage, ...(body.code ? { errorCode: body.code } : {}), spec });
+  const followUps: FollowUpResult[] = [];
+  let currentRevision = 0;
+  let finalSpec = spec;
+  if (outcome === 'validated' && scenario.followUps?.length) {
+    const latestRevision = async () => { const { revisions } = (await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}/revisions` })).json() as { revisions: Array<{ revision: number }> }; return Math.max(...revisions.map(item => item.revision)); };
+    let revision = await latestRevision();
+    await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/revisions/${revision}/accept`, payload: { baseRevision: currentRevision } });
+    currentRevision = revision;
+    for (const followUp of scenario.followUps) {
+      const askedHere: string[] = []; let repeatedHere = 0; let followRounds = 0;
+      let reply = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/refinements`, payload: { text: followUp.text, baseRevision: currentRevision, dataClassification: 'synthetic' } });
+      let followBody: any = reply.json();
+      while (followBody.status === 'needs-input' && followRounds < 3) {
+        followRounds += 1;
+        const questions: string[] = (followBody.questions ?? []).map((question: any) => String(question.question ?? question));
+        for (const question of questions) { if (askedHere.some(previous => normalize(previous) === normalize(question))) repeatedHere += 1; askedHere.push(question); }
+        reply = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/answers`, payload: { answers: questions.map(question => answerFor({ ...scenario, answers: followUp.answers, fallback: followUp.fallback ?? scenario.fallback }, question)), baseRevision: currentRevision, questionSetId: followBody.questionSetId, dataClassification: 'synthetic' } });
+        followBody = reply.json();
+      }
+      const followOutcome = followBody.status ?? (followBody.code ? `error:${followBody.code}` : `http-${reply.statusCode}`);
+      if (followOutcome !== 'validated') { followUps.push({ text: followUp.text, outcome: followOutcome, pass: false, reasons: [followBody.message ?? followBody.code ?? followOutcome], questionsAsked: askedHere.length, repeatedQuestions: repeatedHere, lost: [] }); break; }
+      revision = await latestRevision();
+      const nextSpec = (await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}/revisions/${revision}` })).json().processSpec;
+      const score = scoreFollowUp(finalSpec, nextSpec, followUp);
+      if (repeatedHere) score.reasons.push(`${repeatedHere} pergunta(s) repetida(s)`);
+      followUps.push({ text: followUp.text, outcome: followOutcome, pass: score.reasons.length === 0, reasons: score.reasons, questionsAsked: askedHere.length, repeatedQuestions: repeatedHere, lost: score.lost, spec: nextSpec });
+      await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/revisions/${revision}/accept`, payload: { baseRevision: currentRevision } });
+      currentRevision = revision; finalSpec = nextSpec;
+    }
+  }
+  return scoreResult(scenario, { id: scenario.id, title: scenario.title, outcome, clarificationRounds: rounds, questionsAsked: asked.length, repeatedQuestions, askedFirst, ...usage, ...(body.code ? { errorCode: body.code } : {}), spec, ...(scenario.followUps?.length ? { followUps } : {}), ...(await importability(finalSpec)) });
 }
 
 type RawResult = Omit<ScenarioResult, 'pass' | 'failureReasons' | 'coverage' | 'forbiddenHits' | 'unexpectedTasks'>;
+export type FollowUpResult = { text: string; outcome: string; pass: boolean; reasons: string[]; questionsAsked: number; repeatedQuestions: number; lost: string[]; spec?: unknown };
+
+const taskNames = (spec: any): string[] => (spec?.nodes ?? []).filter((node: any) => node.type === 'userTask' || node.type === 'serviceTask').map((node: any) => String(node.name ?? ''));
+/** An adjustment passes when it adds what was asked, removes only what was asked, and keeps everything else. */
+export function scoreFollowUp(previous: any, current: any, followUp: EvalFollowUp): Pick<FollowUpResult, 'reasons' | 'lost'> {
+  const reasons: string[] = [];
+  const tasks = taskNames(current).map(normalize);
+  const roles = (current?.roles ?? []).map((role: any) => normalize(String(role.label ?? role.id ?? '')));
+  for (const stems of followUp.expect.activities ?? []) if (!tasks.some(name => stems.some(stem => hasStem(name, stem)))) reasons.push(`faltou a etapa pedida (${stems.join('/')})`);
+  for (const stems of followUp.expect.roles ?? []) if (!roles.some(label => stems.some(stem => hasStem(label, stem)))) reasons.push(`faltou o participante pedido (${stems.join('/')})`);
+  const decisions = (current?.nodes ?? []).filter((node: any) => node.type === 'exclusiveGateway' && (current.flows ?? []).filter((flow: any) => flow.source === node.id).length > 1).length;
+  if (followUp.expect.minDecisions !== undefined && decisions < followUp.expect.minDecisions) reasons.push(`decisões ${decisions} < ${followUp.expect.minDecisions}`);
+  const removed = followUp.removed ?? [];
+  for (const stem of removed) if (tasks.some(name => hasStem(name, stem))) reasons.push(`a etapa a remover continua (${stem})`);
+  const lost = taskNames(previous).filter(name => !removed.some(stem => hasStem(normalize(name), stem)) && !taskNames(current).some(candidate => sameElement(candidate, name)));
+  if (lost.length) reasons.push(`perdeu etapas não pedidas: ${lost.join(', ')}`);
+  return { reasons, lost };
+}
 
 /** Pure scoring step; `--rebuild` re-applies it to saved specs without calling any model. */
 export function scoreResult(scenario: EvalScenario, raw: RawResult): ScenarioResult {
@@ -168,6 +232,8 @@ export function scoreResult(scenario: EvalScenario, raw: RawResult): ScenarioRes
   if (score?.forbiddenHits.length) failureReasons.push(`inventou: ${score.forbiddenHits.join(', ')}`);
   if (scenario.expectsClarification && !raw.askedFirst) failureReasons.push('não perguntou antes de gerar');
   if (raw.repeatedQuestions > 0) failureReasons.push(`${raw.repeatedQuestions} pergunta(s) repetida(s)`);
+  if (raw.importable === false) failureReasons.push(`não importável no Modeler: ${(raw.importProblems ?? []).join('; ')}`);
+  (raw.followUps ?? []).forEach((followUp, index) => { if (!followUp.pass) failureReasons.push(`ajuste ${index + 1}: ${followUp.reasons.join('; ') || followUp.outcome}`); });
   return {
     ...raw, pass: failureReasons.length === 0, failureReasons,
     coverage: score?.coverage ?? { activities: '-', roles: '-', decisions: '-', ratio: 0 },
@@ -185,6 +251,9 @@ export function summarize(results: ScenarioResult[]) {
     passed: results.filter(result => result.pass).length,
     passRate: results.length ? results.filter(result => result.pass).length / results.length : 0,
     validRate: results.length ? valid.length / results.length : 0,
+    importableRate: results.length ? results.filter(result => result.importable === true).length / results.length : 0,
+    adjustments: results.reduce((total, result) => total + (result.followUps?.length ?? 0), 0),
+    adjustmentsPassed: results.reduce((total, result) => total + (result.followUps?.filter(item => item.pass).length ?? 0), 0),
     meanCoverage: results.length ? results.reduce((total, result) => total + result.coverage.ratio, 0) / results.length : 0,
     inventedElements: results.reduce((total, result) => total + result.forbiddenHits.length, 0),
     repeatedQuestions: results.reduce((total, result) => total + result.repeatedQuestions, 0),
@@ -207,7 +276,8 @@ async function rebuildScoreboard() {
     const run = JSON.parse(await readFile(resolve(runsDirectory, file), 'utf8'));
     // Partial runs (--only) are smoke checks; the scoreboard compares full-corpus runs only.
     if (scenarios.some(scenario => !run.scenarioIds?.includes(scenario.id))) continue;
-    run.results = run.results.map((result: ScenarioResult) => { const scenario = scenarios.find(item => item.id === result.id); return scenario ? scoreResult(scenario, result) : result; });
+    // Importability is judged by today's generator and rules, so an old run is re-scored against the current Modeler contract.
+    run.results = await Promise.all(run.results.map(async (result: ScenarioResult) => { const scenario = scenarios.find(item => item.id === result.id); return scenario ? scoreResult(scenario, { ...result, ...(await importability(result.spec)) }) : result; }));
     run.summary = summarize(run.results);
     latest.set(`${run.provider}|${run.model}|${run.label ?? ''}`, run);
   }
@@ -217,18 +287,18 @@ async function rebuildScoreboard() {
   const lines = [
     '# Placar de avaliação — Process AI Studio', '',
     `Gerado em ${scoreboard.generatedAt}. Corpus sintético de ${scenarios.length} cenários (\`scripts/eval/scenarios.ts\`). Cada linha é a execução mais recente de um provider/modelo.`, '',
-    '| Provider | Modelo | Rótulo | Aprovados | Válidos | Cobertura média | Invenções | Perguntas repetidas | Latência média | Tokens/cenário | Custo total | Custo por processo válido |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|',
-    ...runs.map(run => `| ${run.provider} | ${run.model} | ${run.label ?? '—'} | ${run.summary.passed}/${run.summary.scenarios} (${percent(run.summary.passRate)}) | ${percent(run.summary.validRate)} | ${percent(run.summary.meanCoverage)} | ${run.summary.inventedElements} | ${run.summary.repeatedQuestions} | ${(run.summary.meanLatencyMs / 1000).toFixed(1)} s | ${run.summary.tokensPerScenario} | ${usd(run.summary.totalCostUsd)} | ${usd(run.summary.costPerValidProcessUsd)} |`),
+    '| Provider | Modelo | Rótulo | Aprovados | Válidos | Importáveis no Modeler | Ajustes | Cobertura média | Invenções | Perguntas repetidas | Latência média | Tokens/cenário | Custo total | Custo por processo válido |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    ...runs.map(run => `| ${run.provider} | ${run.model} | ${run.label ?? '—'} | ${run.summary.passed}/${run.summary.scenarios} (${percent(run.summary.passRate)}) | ${percent(run.summary.validRate)} | ${percent(run.summary.importableRate ?? 0)} | ${run.summary.adjustments ? `${run.summary.adjustmentsPassed}/${run.summary.adjustments}` : '—'} | ${percent(run.summary.meanCoverage)} | ${run.summary.inventedElements} | ${run.summary.repeatedQuestions} | ${(run.summary.meanLatencyMs / 1000).toFixed(1)} s | ${run.summary.tokensPerScenario} | ${usd(run.summary.totalCostUsd)} | ${usd(run.summary.costPerValidProcessUsd)} |`),
     '', '## Detalhe por cenário', '',
-    ...runs.flatMap(run => [`### ${run.provider} / ${run.model}${run.label ? ` (${run.label})` : ''} — ${run.startedAt}`, '', '| Cenário | Resultado | Atividades | Papéis | Decisões | Perguntas | Chamadas | Latência | Falhas |', '|---|---|---|---|---|---|---|---|---|',
-      ...run.results.map((result: ScenarioResult) => `| ${result.id} | ${result.pass ? '✅' : '❌'} ${result.outcome} | ${result.coverage.activities} | ${result.coverage.roles} | ${result.coverage.decisions} | ${result.questionsAsked} | ${result.calls} | ${(result.latencyMs / 1000).toFixed(1)} s | ${result.failureReasons.join('; ') || '—'} |`), '']),
+    ...runs.flatMap(run => [`### ${run.provider} / ${run.model}${run.label ? ` (${run.label})` : ''} — ${run.startedAt}`, '', '| Cenário | Resultado | Importável | Atividades | Papéis | Decisões | Perguntas | Chamadas | Latência | Falhas |', '|---|---|---|---|---|---|---|---|---|---|',
+      ...run.results.map((result: ScenarioResult) => `| ${result.id} | ${result.pass ? '✅' : '❌'} ${result.outcome} | ${result.importable === true ? '✅' : result.importable === false ? '❌' : '—'} | ${result.coverage.activities} | ${result.coverage.roles} | ${result.coverage.decisions} | ${result.questionsAsked} | ${result.calls} | ${(result.latencyMs / 1000).toFixed(1)} s | ${result.failureReasons.join('; ') || '—'} |`), '']),
   ];
   await writeFile(resolve(evalDirectory, 'SCOREBOARD.md'), `${lines.join('\n')}\n`);
   return scoreboard;
 }
 
-export type GateThresholds = { minPassed: number; minValidRate: number; maxInvented: number; maxRepeatedQuestions: number };
+export type GateThresholds = { minPassed: number; minValidRate: number; minImportableRate?: number; maxInvented: number; maxRepeatedQuestions: number };
 
 /** Gate failures for a run summary; an empty list means the gate passes. */
 export function checkGate(summary: ReturnType<typeof summarize>, gate: GateThresholds, stalePrompts = 0): string[] {
@@ -236,6 +306,7 @@ export function checkGate(summary: ReturnType<typeof summarize>, gate: GateThres
   if (stalePrompts > 0) failures.push(`${stalePrompts} prompt(s) mudaram desde a gravação da cassete: rode uma avaliação real (npm run eval:claude) para regravar e medir o efeito`);
   if (summary.passed < gate.minPassed) failures.push(`aprovados ${summary.passed}/${summary.scenarios} < mínimo ${gate.minPassed}`);
   if (summary.validRate < gate.minValidRate) failures.push(`válidos ${percent(summary.validRate)} < mínimo ${percent(gate.minValidRate)}`);
+  if (gate.minImportableRate !== undefined && summary.importableRate < gate.minImportableRate) failures.push(`importáveis no Modeler ${percent(summary.importableRate)} < mínimo ${percent(gate.minImportableRate)}`);
   if (summary.inventedElements > gate.maxInvented) failures.push(`${summary.inventedElements} invenção(ões) > máximo ${gate.maxInvented}`);
   if (summary.repeatedQuestions > gate.maxRepeatedQuestions) failures.push(`${summary.repeatedQuestions} pergunta(s) repetida(s) > máximo ${gate.maxRepeatedQuestions}`);
   return failures;
