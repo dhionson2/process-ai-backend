@@ -9,6 +9,7 @@ import { interpretationSchema } from '../interpretation-context.js';
 import { evaluateRequirementCoverage, extractRequirementLedger, proposeLiteralCoverageLinks, type CoverageElement, type RequirementType } from '../requirement-coverage.js';
 import { extractNumericThresholdFacts, latestSemanticFactEvents, reconcileExplicitNumericCorrection, semanticSlotForQuestion } from '../semantic-grounding.js';
 import { allowedOperationsSummary, assertSemanticPlanBounds, businessIntentSchema, SemanticPlanLimitError, semanticRefinementSchema } from '../semantic-process.js';
+import { collectConfirmations, type Confirmations } from '../confirmations.js';
 import { OrchestrationFailure, type GenerationArguments, type Json, type PipelineDiagnostic } from './types.js';
 
 export const systemInstruction = [
@@ -36,6 +37,8 @@ export type ContextEnvironment = Pick<Environment, 'aiReadinessGate' | 'aiTimeou
 export type TurnContext = {
   args: GenerationArguments;
   environment: ContextEnvironment;
+  /** Yes/no answers to element questions; applied to the plan before compilation. */
+  confirmations: Confirmations;
   /** Items the requester rejected in the panel; enforced after compilation. */
   rejectedItems: Array<{ kind: string; label: string }>;
   trace: PipelineDiagnostic[];
@@ -92,7 +95,9 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
   const targetProfile = args.targetProfile || 'generic-bpmn2';
   const verdicts = args.requirementVerdicts ?? { confirmed: [], rejected: [] };
   const refinementMode = Boolean(args.currentSpec);
-  const userSource = [args.text, ...recentHistory.filter(turn => turn.role === 'user').map(turn => turn.content), ...confirmedFacts.map(fact => fact.answer)].join('\n');
+  // Yes/no answers bound to an element become requester statements that the element can cite as evidence.
+  const confirmations = collectConfirmations(confirmedFacts);
+  const userSource = [args.text, ...recentHistory.filter(turn => turn.role === 'user').map(turn => turn.content), ...confirmedFacts.map(fact => fact.answer), ...confirmations.statements].join('\n');
 
   const coverageMessages = [
     { id: args.sourceMessageId || `message_${createHash('sha256').update(args.text).digest('hex').slice(0, 16)}`, text: args.text },
@@ -153,7 +158,7 @@ export async function buildTurnContext(args: GenerationArguments, environment: C
   if (groundingMode === 'controlled') trace.push({ stage: 'semantic-reconciliation', status: numericReconciliation.status, details: { priorThresholdCount: priorThresholdFacts.length, activeFactCount: numericReconciliation.facts.filter(fact => fact.state === 'confirmed').length, supersededFactCount: numericReconciliation.facts.filter(fact => fact.state === 'superseded').length } });
 
   return {
-    args, environment, rejectedItems: verdicts.rejected, trace, refinementMode, targetProfile, groundingMode, confirmedFacts, userSource, knowledge,
+    args, environment, confirmations, rejectedItems: verdicts.rejected, trace, refinementMode, targetProfile, groundingMode, confirmedFacts, userSource, knowledge,
     outputSchema, schemaChars, validator, composePrompt, prompt, request, enforcePlanBounds, auditCoverage,
     coverageAudited: () => coverageAudited,
   };

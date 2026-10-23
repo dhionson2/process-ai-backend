@@ -40,6 +40,10 @@ const rules: Rule[] = [
     guidance: { category: 'interpretation-divergence', title: 'A IA propôs algo que você não descreveu', message: 'A proposta trazia uma etapa, papel ou campo que não aparece no seu texto, então ela foi descartada para não inventar regras. Se esse item deve existir, descreva-o explicitamente; caso contrário, tente novamente.', actions: ['rephrase', 'retry'] },
   },
   {
+    match: exact('CLARIFICATION_UNRESOLVED'),
+    guidance: { category: 'missing-information', title: 'Sua resposta não resolveu o ponto', message: 'Essa pergunta já foi respondida, então ela não será repetida. Descreva a etapa, o campo ou a regra com suas próprias palavras em uma nova mensagem, de preferência dizendo quem faz o quê.', actions: ['rephrase'] },
+  },
+  {
     match: exact('MODEL_REPEATED_QUESTION'),
     guidance: { category: 'interpretation-divergence', title: 'A IA repetiu uma pergunta já respondida', message: 'A resposta anterior já cobre esse ponto. Reformule a resposta de forma mais direta ou tente novamente.', actions: ['rephrase', 'retry'] },
   },

@@ -13,7 +13,7 @@ import { diagnoseGraphIRSchema, sanitizeGraphIrDiagnostics, validateGraphIR } fr
 import { lowerGraphIRToProcessSpec } from '../graph-ir/processspec.adapter.js';
 import { evaluateActivityGrounding } from './semantic-grounding.js';
 import { mapProviderError, ModelCalls } from './pipeline/model-calls.js';
-import { clarificationOutcome, compile, finalize, interpret, readiness, recoverRepeatedQuestion, validate } from './pipeline/stages.js';
+import { clarificationOutcome, clarify, compile, finalize, interpret, readiness, recoverRepeatedQuestion, validate } from './pipeline/stages.js';
 import { buildTurnContext } from './pipeline/turn-context.js';
 import { OrchestrationFailure, RepairBudget, type GenerationArguments, type GenerationOutcome, type PipelineDiagnostic } from './pipeline/types.js';
 
@@ -78,7 +78,7 @@ export class AiOrchestrator {
     const ctx = await buildTurnContext(args, this.environment, this.model, this.provider.id, this.knowledge, trace);
     const stage = { ctx, calls: new ModelCalls(this.provider, this.concurrency, ctx.request, args.onProviderCallStart, trace, this.environment.aiRepairModel), budget: new RepairBudget() };
     const interpreted = await recoverRepeatedQuestion(stage, await interpret(stage));
-    if (interpreted.kind === 'need_clarification') return clarificationOutcome(interpreted, stage.calls.lastModel, stage.calls.latencyMs, { ...stage.calls.usage }, stage.calls.providerId, ctx.knowledge.version, ctx.knowledge.moduleIds, interpreted);
+    if (interpreted.kind === 'need_clarification') return clarify(stage, interpreted, interpreted);
     const ready = readiness(stage, interpreted);
     if ('stop' in ready) return ready.stop;
     const compiled = await compile(stage, ready.next);

@@ -112,4 +112,25 @@ export const scenarios: EvalScenario[] = [
     text: 'O servidor se inscreve em um treinamento informando o curso desejado. A escola de governo verifica se há vagas. Se houver vaga, a inscrição é confirmada ao servidor. Se não houver, o servidor entra em lista de espera.',
     expect: { activities: [['verific', 'vaga', 'analis'], ['confirm', 'inscri']], roles: [['servidor'], ['escola']], minDecisions: 1, forbidden: ['pagamento', 'certificado'] },
   },
+  {
+    id: 'S13-orcamento-ajuste',
+    title: 'Orçamento com ajuste e sugestão do RH (pedido informal)',
+    expectsClarification: true,
+    text: 'quero criar um fluxo onde vao pedir orçamento pro rh aprovar compra de materiais pra empresa ai o rh pode aprovar ou nao pedir ajuste sugerir orçamento etc',
+    answers: [
+      { when: /ajuste/i, answer: 'O ajuste volta pro solicitante refazer o orçamento e depois volta pro RH.' },
+      { when: /suger|sugest/i, answer: 'O solicitante recebe uma notificação com a sugestão e deve aceitar ou reprovar.' },
+      { when: /depois|após|apos|acontece|aprova/i, answer: 'O RH envia para a etapa de compra e notifica o solicitante.' },
+      { when: /dados|informa|campos/i, answer: 'O solicitante informa os materiais e o valor do orçamento.' },
+      { when: /quem|solicit|inicia/i, answer: 'O solicitante pede o orçamento.' },
+    ],
+    fallback: 'O solicitante pede o orçamento informando materiais e valor; o RH aprova, pede ajuste ou sugere outro orçamento; no ajuste volta pro solicitante refazer e depois volta pro RH; na sugestão o solicitante aceita ou reprova; aprovado, o RH envia para compra e notifica o solicitante.',
+    expect: { activities: [['aprov', 'analis', 'avali'], ['ajust', 'refaz', 'corrig', 'revis'], ['compra']], roles: [['rh', 'recursos humanos'], ['solicitante']], minDecisions: 1, forbidden: ['pagamento', 'licitacao', 'cotacao'] },
+  },
+  {
+    id: 'S14-manutencao-predial',
+    title: 'Manutenção predial com autorização do síndico e avaliação',
+    text: 'O morador abre um chamado de manutenção informando o local e uma descrição do problema. O síndico autoriza ou recusa o chamado. Se autorizar, a zeladoria executa o reparo e depois o morador avalia o atendimento. Se recusar, o morador é avisado do motivo.',
+    expect: { activities: [['autoriz', 'aprov', 'analis'], ['repar', 'execut'], ['avali']], roles: [['morador'], ['sindico'], ['zeladoria']], minDecisions: 1, forbidden: ['orcamento', 'pagamento', 'compra'] },
+  },
 ].map(scenario => ({ fallback: noExtraRule, ...scenario }));

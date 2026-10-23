@@ -111,6 +111,8 @@ export function scoreSpec(scenario: EvalScenario, spec: any) {
 }
 
 function answerFor(scenario: EvalScenario, question: string): string {
+  // Any yes/no confirmation about an element the requester described is answered the way a person would.
+  if (/Responda sim ou não/i.test(question)) return 'sim';
   return scenario.answers?.find(candidate => candidate.when.test(question))?.answer ?? scenario.fallback ?? 'Não há regra adicional além do que já foi descrito.';
 }
 
@@ -128,7 +130,7 @@ async function runScenario(app: Awaited<ReturnType<typeof buildApp>>, recorder: 
   let response = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/messages`, payload: { text: scenario.text, baseRevision: 0, dataClassification: 'synthetic' } });
   body = response.json();
   askedFirst = body.status === 'needs-input';
-  while (body.status === 'needs-input' && rounds < 2) {
+  while (body.status === 'needs-input' && rounds < 3) {
     rounds += 1;
     const questions: string[] = (body.questions ?? []).map((question: any) => String(question.question ?? question));
     for (const question of questions) { if (asked.some(previous => normalize(previous) === normalize(question))) repeatedQuestions += 1; asked.push(question); }

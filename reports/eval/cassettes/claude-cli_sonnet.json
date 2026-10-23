@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-10-22T23:00:16.786Z",
+  "recordedAt": "2026-10-23T00:09:44.691Z",
   "provider": "claude-cli",
   "model": "sonnet",
   "scenarios": {
@@ -40,31 +40,27 @@
           ],
           "activities": [
             {
-              "kind": "task",
-              "name": "Solicitar férias",
-              "actor": "Servidor",
-              "evidence": "O servidor solicita férias"
-            },
-            {
               "kind": "approval",
-              "name": "Aprovar ou reprovar férias",
+              "name": "Aprovar solicitação de férias",
               "actor": "Gestor",
               "evidence": "O gestor aprova ou reprova",
               "requiresRejectionReason": true,
               "onApproved": [
                 {
                   "kind": "task",
-                  "name": "Registrar férias",
+                  "name": "Registrar as férias",
                   "actor": "RH",
-                  "evidence": "o RH registra as férias"
+                  "evidence": "o RH registra as férias",
+                  "fields": []
                 }
               ],
               "onRejected": [
                 {
                   "kind": "task",
-                  "name": "Informar motivo da reprovação",
+                  "name": "Informar o motivo ao servidor",
                   "actor": "Servidor",
-                  "evidence": "o servidor é informado do motivo"
+                  "evidence": "o servidor é informado do motivo",
+                  "fields": []
                 }
               ]
             }
@@ -83,12 +79,12 @@
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6080,
-          "outputTokens": 621,
-          "cachedInputTokens": 5567,
-          "costUsd": 0.011062399999999998
+          "inputTokens": 6078,
+          "outputTokens": 588,
+          "cachedInputTokens": 4355,
+          "costUsd": 0.01533
         },
-        "latencyMs": 5319
+        "latencyMs": 5203
       }
     ],
     "S02-compra": [
@@ -97,7 +93,7 @@
         "value": {
           "kind": "business_intent",
           "name": "Solicitação de compra de material",
-          "purpose": "Permitir que um funcionário solicite a compra de material, com análise do gestor e encaminhamento ao setor de compras ou retorno de justificativa ao funcionário.",
+          "purpose": "Permitir que um funcionário solicite a compra de material, com análise do gestor e encaminhamento ao setor de compras ou retorno da justificativa ao funcionário.",
           "actors": [
             {
               "name": "Funcionário",
@@ -128,6 +124,13 @@
           ],
           "activities": [
             {
+              "kind": "task",
+              "name": "Solicitar compra de material",
+              "actor": "Funcionário",
+              "evidence": "Um funcionário solicita compra de material",
+              "fields": []
+            },
+            {
               "kind": "approval",
               "name": "Analisar solicitação",
               "actor": "Gestor",
@@ -138,7 +141,8 @@
                   "kind": "task",
                   "name": "Providenciar a compra",
                   "actor": "Setor de compras",
-                  "evidence": "o setor de compras providencia a compra"
+                  "evidence": "o setor de compras providencia a compra",
+                  "fields": []
                 }
               ],
               "onRejected": [
@@ -146,7 +150,8 @@
                   "kind": "task",
                   "name": "Receber justificativa",
                   "actor": "Funcionário",
-                  "evidence": "o funcionário recebe a justificativa"
+                  "evidence": "o funcionário recebe a justificativa",
+                  "fields": []
                 }
               ]
             }
@@ -165,12 +170,12 @@
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6088,
-          "outputTokens": 624,
+          "inputTokens": 6087,
+          "outputTokens": 690,
           "cachedInputTokens": 4355,
-          "costUsd": 0.015739
+          "costUsd": 0.016395
         },
-        "latencyMs": 5169
+        "latencyMs": 5656
       }
     ],
     "S03-reembolso-duas-aprovacoes": [
@@ -203,13 +208,13 @@
               "name": "Valor",
               "type": "decimal",
               "required": true,
-              "evidence": "informando o valor e a descrição"
+              "evidence": "informando o valor"
             },
             {
               "name": "Descrição",
               "type": "paragraph",
               "required": true,
-              "evidence": "informando o valor e a descrição"
+              "evidence": "e a descrição"
             }
           ],
           "activities": [
@@ -227,17 +232,19 @@
                   "onApproved": [
                     {
                       "kind": "task",
-                      "name": "Pagar o reembolso",
+                      "name": "Pagar reembolso",
                       "actor": "Financeiro",
-                      "evidence": "o financeiro paga o reembolso"
+                      "evidence": "o financeiro paga o reembolso",
+                      "fields": []
                     }
                   ],
                   "onRejected": [
                     {
                       "kind": "task",
-                      "name": "Informar o colaborador sobre a reprovação",
+                      "name": "Informar colaborador da reprovação",
                       "actor": "Colaborador",
-                      "evidence": "encerra o processo informando o colaborador"
+                      "evidence": "encerra o processo informando o colaborador",
+                      "fields": []
                     }
                   ]
                 }
@@ -245,9 +252,10 @@
               "onRejected": [
                 {
                   "kind": "task",
-                  "name": "Informar o colaborador sobre a reprovação",
+                  "name": "Informar colaborador da reprovação",
                   "actor": "Colaborador",
-                  "evidence": "encerra o processo informando o colaborador"
+                  "evidence": "encerra o processo informando o colaborador",
+                  "fields": []
                 }
               ]
             }
@@ -270,12 +278,12 @@
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6123,
-          "outputTokens": 1125,
+          "inputTokens": 6125,
+          "outputTokens": 1063,
           "cachedInputTokens": 4355,
-          "costUsd": 0.020934
+          "costUsd": 0.020322
         },
-        "latencyMs": 8706
+        "latencyMs": 8360
       }
     ],
     "S04-ferias-incompleto": [
@@ -284,7 +292,7 @@
         "value": {
           "kind": "business_intent",
           "name": "Solicitação de férias",
-          "purpose": "Permitir a criação de uma solicitação de férias que é submetida à aprovação do gestor.",
+          "purpose": "Permitir que um colaborador solicite férias e que o gestor aprove ou reprove a solicitação.",
           "actors": [
             {
               "name": "Gestor",
@@ -297,7 +305,7 @@
               "kind": "approval",
               "name": "Aprovar solicitação de férias",
               "actor": "Gestor",
-              "evidence": "aprovação do gestor",
+              "evidence": "solicitação de férias para aprovação do gestor",
               "onApproved": [],
               "onRejected": []
             }
@@ -305,29 +313,32 @@
           "rules": [],
           "suggestions": [
             {
-              "text": "Incluir campos de período de férias (data de início e data de fim) no formulário de solicitação."
+              "text": "Incluir período de férias (data de início e fim) como campos da solicitação."
+            },
+            {
+              "text": "Incluir motivo da reprovação quando o gestor rejeitar."
             }
           ]
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6031,
-          "outputTokens": 270,
+          "inputTokens": 6036,
+          "outputTokens": 305,
           "cachedInputTokens": 5522,
-          "costUsd": 0.0074984000000000006
+          "costUsd": 0.0078684
         },
-        "latencyMs": 4203
+        "latencyMs": 4266
       },
       {
-        "promptSha256": "fb3dd914154db3ac454358562992fbe0adea3f1ed1892e782d3632ecc59d6509",
+        "promptSha256": "48f1474c90c1322e419016beef0bdc080c325adb0e68a2ec1ecc578984191e29",
         "value": {
           "kind": "business_intent",
           "name": "Solicitação de férias",
-          "purpose": "Permitir que o servidor solicite férias, com aprovação do gestor e registro das férias pelo RH quando aprovado.",
+          "purpose": "Permitir que o servidor solicite férias, que o gestor aprove ou reprove, e que o RH registre as férias aprovadas ou o servidor seja informado do motivo da reprovação.",
           "actors": [
             {
               "name": "Servidor",
-              "evidence": "O servidor solicita as férias"
+              "evidence": "O servidor solicita as férias."
             },
             {
               "name": "Gestor",
@@ -343,26 +354,33 @@
               "name": "Data inicial das férias",
               "type": "date",
               "required": true,
-              "evidence": "data inicial"
+              "evidence": "data inicial e a data final das férias"
             },
             {
               "name": "Data final das férias",
               "type": "date",
               "required": true,
-              "evidence": "data final das férias"
+              "evidence": "data inicial e a data final das férias"
             }
           ],
           "activities": [
             {
+              "kind": "task",
+              "name": "Solicitar férias",
+              "actor": "Servidor",
+              "evidence": "O servidor solicita as férias.",
+              "fields": []
+            },
+            {
               "kind": "approval",
               "name": "Aprovar solicitação de férias",
               "actor": "Gestor",
-              "evidence": "aprovação do gestor",
+              "evidence": "solicitação de férias para aprovação do gestor",
               "requiresRejectionReason": true,
               "onApproved": [
                 {
                   "kind": "task",
-                  "name": "Registrar as férias",
+                  "name": "Registrar férias",
                   "actor": "RH",
                   "evidence": "o RH registra as férias",
                   "fields": []
@@ -371,7 +389,7 @@
               "onRejected": [
                 {
                   "kind": "task",
-                  "name": "Informar o motivo da reprovação ao servidor",
+                  "name": "Informar motivo da reprovação ao servidor",
                   "actor": "Servidor",
                   "evidence": "o servidor é informado do motivo",
                   "fields": []
@@ -393,12 +411,12 @@
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6676,
-          "outputTokens": 588,
-          "cachedInputTokens": 4355,
-          "costUsd": 0.018143
+          "inputTokens": 6679,
+          "outputTokens": 680,
+          "cachedInputTokens": 6169,
+          "costUsd": 0.0121968
         },
-        "latencyMs": 5502
+        "latencyMs": 5306
       }
     ],
     "S05-correcao-ciclo": [
@@ -407,122 +425,7 @@
         "value": {
           "kind": "business_intent",
           "name": "Pedido de certidão",
-          "purpose": "Permitir que o requerente solicite uma certidão, que o atendente confira os dados e emita a certidão quando os dados estiverem completos.",
-          "actors": [
-            {
-              "name": "Requerente",
-              "evidence": "O requerente envia um pedido de certidão"
-            },
-            {
-              "name": "Atendente",
-              "evidence": "O atendente confere os dados"
-            }
-          ],
-          "startFields": [
-            {
-              "name": "Tipo de certidão",
-              "type": "text",
-              "required": true,
-              "evidence": "informando o tipo de certidão"
-            }
-          ],
-          "activities": [
-            {
-              "kind": "task",
-              "name": "Enviar pedido de certidão",
-              "actor": "Requerente",
-              "evidence": "O requerente envia um pedido de certidão",
-              "fields": []
-            },
-            {
-              "kind": "task",
-              "name": "Conferir dados",
-              "actor": "Atendente",
-              "evidence": "O atendente confere os dados",
-              "fields": [
-                {
-                  "name": "Situação dos dados",
-                  "type": "choice",
-                  "required": true,
-                  "evidence": "Se os dados estiverem incompletos",
-                  "choices": [
-                    {
-                      "label": "Incompletos",
-                      "value": "incompletos"
-                    },
-                    {
-                      "label": "Completos",
-                      "value": "completos"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "kind": "decision",
-              "name": "Dados completos?",
-              "field": "Situação dos dados",
-              "evidence": "Se os dados estiverem incompletos... Se estiverem completos",
-              "alternatives": [
-                {
-                  "label": "Dados incompletos",
-                  "value": "incompletos",
-                  "operator": "eq",
-                  "steps": [
-                    {
-                      "kind": "task",
-                      "name": "Corrigir pedido",
-                      "actor": "Requerente",
-                      "evidence": "o pedido volta ao requerente para correção",
-                      "fields": []
-                    }
-                  ],
-                  "returnTo": "Conferir dados"
-                },
-                {
-                  "label": "Dados completos",
-                  "value": "completos",
-                  "operator": "eq",
-                  "steps": [
-                    {
-                      "kind": "task",
-                      "name": "Emitir certidão",
-                      "actor": "Atendente",
-                      "evidence": "o atendente emite a certidão",
-                      "fields": []
-                    }
-                  ]
-                }
-              ]
-            }
-          ],
-          "rules": [
-            {
-              "text": "Se os dados estiverem incompletos, o pedido volta ao requerente para correção e depois retorna ao atendente.",
-              "evidence": "Se os dados estiverem incompletos, o pedido volta ao requerente"
-            },
-            {
-              "text": "Se os dados estiverem completos, o atendente emite a certidão.",
-              "evidence": "Se estiverem completos, o atendente emite a certidão"
-            }
-          ],
-          "suggestions": []
-        },
-        "model": "claude-sonnet-5-5",
-        "usage": {
-          "inputTokens": 6102,
-          "outputTokens": 830,
-          "cachedInputTokens": 5593,
-          "costUsd": 0.0131736
-        },
-        "latencyMs": 7187
-      },
-      {
-        "promptSha256": "cfca6cdc09fbea9931ef9f911a880dbf3ce22a6793724297beb826c5698948a1",
-        "value": {
-          "kind": "business_intent",
-          "name": "Pedido de certidão",
-          "purpose": "Permitir que o requerente envie um pedido de certidão, que o atendente confira os dados e emita a certidão quando estiverem completos, devolvendo ao requerente para correção quando estiverem incompletos.",
+          "purpose": "Receber pedido de certidão do requerente, conferir os dados pelo atendente, devolver para correção se incompletos e emitir a certidão se completos.",
           "actors": [
             {
               "name": "Requerente",
@@ -556,17 +459,17 @@
               "evidence": "O atendente confere os dados",
               "fields": [
                 {
-                  "name": "Dados completos?",
+                  "name": "Resultado da conferência",
                   "type": "choice",
                   "required": true,
                   "evidence": "Se os dados estiverem incompletos",
                   "choices": [
                     {
-                      "label": "Completos",
+                      "label": "Dados completos",
                       "value": "completos"
                     },
                     {
-                      "label": "Incompletos",
+                      "label": "Dados incompletos",
                       "value": "incompletos"
                     }
                   ]
@@ -576,11 +479,11 @@
             {
               "kind": "decision",
               "name": "Dados completos?",
-              "field": "Dados completos?",
-              "evidence": "Se estiverem completos, o atendente emite a certidão",
+              "field": "Resultado da conferência",
+              "evidence": "Se os dados estiverem incompletos... Se estiverem completos",
               "alternatives": [
                 {
-                  "label": "Incompletos",
+                  "label": "Dados incompletos",
                   "value": "incompletos",
                   "operator": "eq",
                   "steps": [
@@ -595,7 +498,7 @@
                   "returnTo": "Conferir os dados"
                 },
                 {
-                  "label": "Completos",
+                  "label": "Dados completos",
                   "value": "completos",
                   "operator": "eq",
                   "steps": [
@@ -614,7 +517,7 @@
           "rules": [
             {
               "text": "Se os dados estiverem incompletos, o pedido volta ao requerente para correção e depois retorna ao atendente.",
-              "evidence": "o pedido volta ao requerente para correção e depois retorna ao atendente"
+              "evidence": "Se os dados estiverem incompletos, o pedido volta ao requerente"
             },
             {
               "text": "Se os dados estiverem completos, o atendente emite a certidão.",
@@ -625,12 +528,127 @@
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6357,
-          "outputTokens": 1136,
+          "inputTokens": 6100,
+          "outputTokens": 1009,
           "cachedInputTokens": 4355,
-          "costUsd": 0.022145
+          "costUsd": 0.019659999999999997
         },
-        "latencyMs": 9949
+        "latencyMs": 7346
+      },
+      {
+        "promptSha256": "7e69e0ba8e80a4654f98671170415ee864e7da557c9a6f5eac79712f7bf43ae2",
+        "value": {
+          "kind": "business_intent",
+          "name": "Pedido de certidão",
+          "purpose": "Receber pedido de certidão do requerente, conferir os dados pelo atendente, devolver para correção se incompletos e emitir a certidão se completos.",
+          "actors": [
+            {
+              "name": "Requerente",
+              "evidence": "O requerente envia um pedido de certidão"
+            },
+            {
+              "name": "Atendente",
+              "evidence": "O atendente confere os dados"
+            }
+          ],
+          "startFields": [
+            {
+              "name": "Tipo de certidão",
+              "type": "text",
+              "required": true,
+              "evidence": "informando o tipo de certidão"
+            }
+          ],
+          "activities": [
+            {
+              "kind": "task",
+              "name": "Enviar pedido de certidão",
+              "actor": "Requerente",
+              "evidence": "O requerente envia um pedido de certidão",
+              "fields": []
+            },
+            {
+              "kind": "task",
+              "name": "Conferir os dados",
+              "actor": "Atendente",
+              "evidence": "O atendente confere os dados",
+              "fields": [
+                {
+                  "name": "Resultado da conferência",
+                  "type": "choice",
+                  "required": true,
+                  "evidence": "Se os dados estiverem incompletos",
+                  "choices": [
+                    {
+                      "label": "Dados completos",
+                      "value": "completos"
+                    },
+                    {
+                      "label": "Dados incompletos",
+                      "value": "incompletos"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "decision",
+              "name": "Se os dados estiverem incompletos",
+              "field": "Resultado da conferência",
+              "evidence": "Se os dados estiverem incompletos",
+              "alternatives": [
+                {
+                  "label": "Dados incompletos",
+                  "value": "incompletos",
+                  "operator": "eq",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Correção do pedido",
+                      "actor": "Requerente",
+                      "evidence": "o pedido volta ao requerente para correção",
+                      "fields": []
+                    }
+                  ],
+                  "returnTo": "Conferir os dados"
+                },
+                {
+                  "label": "Dados completos",
+                  "value": "completos",
+                  "operator": "eq",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Emitir a certidão",
+                      "actor": "Atendente",
+                      "evidence": "o atendente emite a certidão",
+                      "fields": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "rules": [
+            {
+              "text": "Se os dados estiverem incompletos, o pedido volta ao requerente para correção e depois retorna ao atendente.",
+              "evidence": "Se os dados estiverem incompletos, o pedido volta ao requerente"
+            },
+            {
+              "text": "Se os dados estiverem completos, o atendente emite a certidão.",
+              "evidence": "Se estiverem completos, o atendente emite a certidão"
+            }
+          ],
+          "suggestions": []
+        },
+        "model": "claude-sonnet-5-5",
+        "usage": {
+          "inputTokens": 7076,
+          "outputTokens": 1180,
+          "cachedInputTokens": 4355,
+          "costUsd": 0.025962000000000002
+        },
+        "latencyMs": 8300
       }
     ],
     "S06-contratacao": [
@@ -639,7 +657,7 @@
         "value": {
           "kind": "business_intent",
           "name": "Abertura de vaga",
-          "purpose": "Permitir que o gestor solicite a abertura de uma vaga, com análise do RH, decisão da diretoria e publicação da vaga pelo RH, comunicando o gestor em caso de reprovação.",
+          "purpose": "Permitir que o gestor solicite a abertura de uma vaga, com análise do RH e decisão da diretoria, publicação pelo RH se aprovada e comunicação ao gestor se reprovada.",
           "actors": [
             {
               "name": "Gestor",
@@ -680,11 +698,11 @@
               "kind": "approval",
               "name": "Analisar solicitação de vaga",
               "actor": "RH",
-              "evidence": "O RH analisa e, se estiver de acordo",
+              "evidence": "O RH analisa e, se estiver de acordo, encaminha",
               "onApproved": [
                 {
                   "kind": "approval",
-                  "name": "Decidir sobre abertura da vaga",
+                  "name": "Decidir abertura da vaga",
                   "actor": "Diretoria",
                   "evidence": "encaminha para a diretoria decidir",
                   "onApproved": [
@@ -699,8 +717,8 @@
                   "onRejected": [
                     {
                       "kind": "task",
-                      "name": "Comunicar reprovação ao gestor",
-                      "actor": "Gestor",
+                      "name": "Comunicar reprovação da diretoria ao gestor",
+                      "actor": "RH",
                       "evidence": "Se o RH ou a diretoria reprovarem, o gestor é comunicado",
                       "fields": []
                     }
@@ -710,8 +728,8 @@
               "onRejected": [
                 {
                   "kind": "task",
-                  "name": "Comunicar reprovação ao gestor",
-                  "actor": "Gestor",
+                  "name": "Comunicar reprovação do RH ao gestor",
+                  "actor": "RH",
                   "evidence": "Se o RH ou a diretoria reprovarem, o gestor é comunicado",
                   "fields": []
                 }
@@ -720,28 +738,32 @@
           ],
           "rules": [
             {
-              "text": "Se o RH reprovar a solicitação, o gestor é comunicado.",
-              "evidence": "Se o RH ou a diretoria reprovarem, o gestor é comunicado"
+              "text": "Se o RH estiver de acordo, a solicitação é encaminhada para a diretoria decidir.",
+              "evidence": "se estiver de acordo, encaminha para a diretoria decidir"
             },
             {
-              "text": "Se a diretoria reprovar a solicitação, o gestor é comunicado.",
-              "evidence": "Se o RH ou a diretoria reprovarem, o gestor é comunicado"
-            },
-            {
-              "text": "A vaga só é publicada pelo RH após aprovação da diretoria.",
+              "text": "Se a diretoria aprovar, o RH publica a vaga.",
               "evidence": "Se a diretoria aprovar, o RH publica a vaga"
+            },
+            {
+              "text": "Se o RH ou a diretoria reprovarem, o gestor é comunicado.",
+              "evidence": "Se o RH ou a diretoria reprovarem, o gestor é comunicado"
             }
           ],
-          "suggestions": []
+          "suggestions": [
+            {
+              "text": "Definir quem executa a comunicação ao gestor (assumido RH neste rascunho) e o canal de comunicação."
+            }
+          ]
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6122,
-          "outputTokens": 1185,
+          "inputTokens": 6121,
+          "outputTokens": 1285,
           "cachedInputTokens": 4355,
-          "costUsd": 0.021507000000000005
+          "costUsd": 0.022503000000000002
         },
-        "latencyMs": 9818
+        "latencyMs": 8933
       }
     ],
     "S07-viagem": [
@@ -750,7 +772,7 @@
         "value": {
           "kind": "business_intent",
           "name": "Solicitação de viagem a serviço",
-          "purpose": "Permitir que o servidor solicite uma viagem a serviço, com aprovação da chefia imediata e compra da passagem pelo setor de viagens ou aviso ao servidor em caso de reprovação.",
+          "purpose": "Permitir que o servidor solicite uma viagem a serviço, com aprovação da chefia imediata e compra de passagem pelo setor de viagens quando aprovada.",
           "actors": [
             {
               "name": "Servidor",
@@ -787,13 +809,6 @@
           ],
           "activities": [
             {
-              "kind": "task",
-              "name": "Solicitar viagem a serviço",
-              "actor": "Servidor",
-              "evidence": "O servidor solicita uma viagem a serviço",
-              "fields": []
-            },
-            {
               "kind": "approval",
               "name": "Aprovar viagem a serviço",
               "actor": "Chefia imediata",
@@ -803,8 +818,7 @@
                   "kind": "task",
                   "name": "Comprar passagem",
                   "actor": "Setor de viagens",
-                  "evidence": "o setor de viagens compra a passagem",
-                  "fields": []
+                  "evidence": "o setor de viagens compra a passagem"
                 }
               ],
               "onRejected": [
@@ -812,8 +826,7 @@
                   "kind": "task",
                   "name": "Avisar servidor da reprovação",
                   "actor": "Servidor",
-                  "evidence": "o servidor é avisado",
-                  "fields": []
+                  "evidence": "Se reprovar, o servidor é avisado"
                 }
               ]
             }
@@ -832,12 +845,12 @@
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6089,
-          "outputTokens": 737,
+          "inputTokens": 6092,
+          "outputTokens": 661,
           "cachedInputTokens": 4355,
-          "costUsd": 0.0169
+          "costUsd": 0.016137
         },
-        "latencyMs": 7188
+        "latencyMs": 5307
       }
     ],
     "S08-acesso-sistema": [
@@ -846,7 +859,7 @@
         "value": {
           "kind": "business_intent",
           "name": "Solicitação de acesso a sistema",
-          "purpose": "Permitir que o colaborador solicite acesso a um sistema, com aprovação do gestor e concessão do acesso pela equipe de suporte, ou comunicação da negativa ao colaborador.",
+          "purpose": "Permitir que um colaborador solicite acesso a um sistema, com aprovação do gestor e concessão do acesso pela equipe de suporte, ou comunicação da negativa ao colaborador.",
           "actors": [
             {
               "name": "Colaborador",
@@ -877,14 +890,21 @@
           ],
           "activities": [
             {
+              "kind": "task",
+              "name": "Pedir acesso a um sistema",
+              "actor": "Colaborador",
+              "evidence": "O colaborador pede acesso a um sistema",
+              "fields": []
+            },
+            {
               "kind": "approval",
-              "name": "Aprovar solicitação de acesso",
+              "name": "Aprovar ou reprovar acesso",
               "actor": "Gestor",
               "evidence": "O gestor aprova ou reprova",
               "onApproved": [
                 {
                   "kind": "task",
-                  "name": "Conceder acesso",
+                  "name": "Conceder o acesso",
                   "actor": "Equipe de suporte",
                   "evidence": "a equipe de suporte concede o acesso",
                   "fields": []
@@ -893,7 +913,7 @@
               "onRejected": [
                 {
                   "kind": "task",
-                  "name": "Receber negativa",
+                  "name": "Receber a negativa",
                   "actor": "Colaborador",
                   "evidence": "o colaborador recebe a negativa",
                   "fields": []
@@ -915,12 +935,12 @@
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6098,
-          "outputTokens": 641,
+          "inputTokens": 6095,
+          "outputTokens": 705,
           "cachedInputTokens": 4355,
-          "costUsd": 0.015948
+          "costUsd": 0.016576
         },
-        "latencyMs": 6780
+        "latencyMs": 5883
       }
     ],
     "S09-sem-decisao": [
@@ -929,7 +949,7 @@
         "value": {
           "kind": "business_intent",
           "name": "Tratamento de sugestão do cidadão",
-          "purpose": "Permitir que o cidadão envie uma sugestão, que a ouvidoria a registre e depois responda ao cidadão.",
+          "purpose": "Permitir que o cidadão envie uma sugestão à ouvidoria, que a registra e responde ao cidadão.",
           "actors": [
             {
               "name": "Cidadão",
@@ -945,19 +965,19 @@
               "name": "Assunto",
               "type": "text",
               "required": true,
-              "evidence": "informando o assunto e a descrição"
+              "evidence": "informando o assunto"
             },
             {
               "name": "Descrição",
               "type": "paragraph",
               "required": true,
-              "evidence": "informando o assunto e a descrição"
+              "evidence": "a descrição"
             }
           ],
           "activities": [
             {
               "kind": "task",
-              "name": "Registrar sugestão",
+              "name": "Registrar a sugestão",
               "actor": "Ouvidoria",
               "evidence": "A ouvidoria registra a sugestão",
               "fields": []
@@ -967,20 +987,32 @@
               "name": "Responder ao cidadão",
               "actor": "Ouvidoria",
               "evidence": "depois responde ao cidadão",
-              "fields": []
+              "fields": [
+                {
+                  "name": "Resposta ao cidadão",
+                  "type": "paragraph",
+                  "required": true,
+                  "evidence": "responde ao cidadão"
+                }
+              ]
             }
           ],
-          "rules": [],
+          "rules": [
+            {
+              "text": "A ouvidoria responde ao cidadão somente depois de registrar a sugestão.",
+              "evidence": "registra a sugestão e depois responde ao cidadão"
+            }
+          ],
           "suggestions": []
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6060,
-          "outputTokens": 418,
+          "inputTokens": 6061,
+          "outputTokens": 509,
           "cachedInputTokens": 4355,
-          "costUsd": 0.013545000000000001
+          "costUsd": 0.014469000000000001
         },
-        "latencyMs": 7423
+        "latencyMs": 5043
       }
     ],
     "S10-compra-vaga": [
@@ -988,18 +1020,14 @@
         "promptSha256": "0b9888d3dc4674d5b6bcde1b78af94cff8ad500069bf53b4ccf969208025d3f1",
         "value": {
           "kind": "need_clarification",
-          "summary": "O pedido informa apenas que é um processo de compras, sem etapas, responsáveis ou resultados que permitam estruturar o fluxo.",
+          "summary": "O pedido informa apenas que se deseja um processo de compras, sem etapas, responsáveis ou resultados que permitam estruturar o fluxo.",
           "questions": [
             {
               "question": "Quais são as etapas do processo de compras, em ordem (por exemplo, quem solicita, quem aprova, quem executa a compra)?",
               "blocking": true
             },
             {
-              "question": "Quais papéis ou setores participam e o que cada um faz no processo?",
-              "blocking": true
-            },
-            {
-              "question": "Existe alguma aprovação ou decisão no processo? Se sim, o que acontece quando for aprovado e quando for reprovado?",
+              "question": "Existe alguma aprovação ou decisão no processo? Se sim, quem decide e o que acontece quando é aprovado e quando é reprovado?",
               "blocking": true
             },
             {
@@ -1011,30 +1039,30 @@
         "model": "claude-sonnet-5-5",
         "usage": {
           "inputTokens": 6021,
-          "outputTokens": 314,
+          "outputTokens": 286,
           "cachedInputTokens": 4355,
-          "costUsd": 0.0123
+          "costUsd": 0.012020000000000001
         },
-        "latencyMs": 5973
+        "latencyMs": 11416
       },
       {
-        "promptSha256": "6f1133f497f1fc803baa8b681ca2293cfd777b1109a5a94bc085b77a61b282e0",
+        "promptSha256": "53aad63ceb90944b4a5cee506d34164d0e2c84f6bbd975c961a65c9f94b3c734",
         "value": {
           "kind": "business_intent",
           "name": "Processo de compras",
-          "purpose": "Permitir que um funcionário solicite a compra de um item, com aprovação do gestor e providência pelo setor de compras ou retorno da justificativa ao funcionário em caso de reprovação.",
+          "purpose": "Permitir que um funcionário solicite uma compra, que o gestor aprove ou reprove, e que o setor de compras providencie a compra quando aprovada.",
           "actors": [
             {
               "name": "Funcionário",
-              "evidence": "Um funcionário solicita a compra"
+              "evidence": "Um funcionário solicita a compra."
             },
             {
               "name": "Gestor",
-              "evidence": "o gestor aprova ou reprova"
+              "evidence": "Se o gestor aprovar"
             },
             {
               "name": "Setor de compras",
-              "evidence": "o setor de compras providencia"
+              "evidence": "o setor de compras providencia a compra"
             }
           ],
           "startFields": [
@@ -1042,13 +1070,13 @@
               "name": "Item",
               "type": "text",
               "required": true,
-              "evidence": "O funcionário informa o item e a quantidade"
+              "evidence": "O funcionário informa o item e a quantidade."
             },
             {
               "name": "Quantidade",
               "type": "integer",
               "required": true,
-              "evidence": "O funcionário informa o item e a quantidade"
+              "evidence": "O funcionário informa o item e a quantidade."
             }
           ],
           "activities": [
@@ -1056,15 +1084,14 @@
               "kind": "task",
               "name": "Solicitar a compra",
               "actor": "Funcionário",
-              "evidence": "Um funcionário solicita a compra",
+              "evidence": "Um funcionário solicita a compra.",
               "fields": []
             },
             {
               "kind": "approval",
-              "name": "Aprovar compra",
+              "name": "Aprovar a compra",
               "actor": "Gestor",
-              "evidence": "o gestor aprova ou reprova",
-              "requiresRejectionReason": true,
+              "evidence": "Se o gestor aprovar",
               "onApproved": [
                 {
                   "kind": "task",
@@ -1082,33 +1109,30 @@
                   "evidence": "o funcionário recebe a justificativa",
                   "fields": []
                 }
-              ]
+              ],
+              "requiresRejectionReason": true
             }
           ],
           "rules": [
             {
               "text": "Se o gestor aprovar, o setor de compras providencia a compra.",
-              "evidence": "Se o gestor aprovar, o setor de compras providencia a compra"
+              "evidence": "Se o gestor aprovar, o setor de compras providencia a compra."
             },
             {
               "text": "Se o gestor reprovar, o funcionário recebe a justificativa e o processo termina.",
-              "evidence": "Se reprovar, o funcionário recebe a justificativa e o processo termina"
-            },
-            {
-              "text": "Não há outras regras.",
-              "evidence": "Não há outras regras."
+              "evidence": "Se reprovar, o funcionário recebe a justificativa e o processo termina."
             }
           ],
           "suggestions": []
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6944,
-          "outputTokens": 744,
+          "inputTokens": 6697,
+          "outputTokens": 704,
           "cachedInputTokens": 4355,
-          "costUsd": 0.020977
+          "costUsd": 0.019427
         },
-        "latencyMs": 7456
+        "latencyMs": 5684
       }
     ],
     "S11-manutencao": [
@@ -1117,7 +1141,7 @@
         "value": {
           "kind": "business_intent",
           "name": "Chamado de manutenção",
-          "purpose": "Registrar chamados de manutenção, classificá-los na triagem, atendê-los conforme urgência e obter a confirmação da solução pelo usuário.",
+          "purpose": "Registrar chamados de manutenção, classificá-los na triagem, atendê-los conforme a urgência e obter a confirmação da solução pelo usuário.",
           "actors": [
             {
               "name": "Usuário",
@@ -1149,12 +1173,140 @@
           "activities": [
             {
               "kind": "task",
-              "name": "Classificar o chamado",
+              "name": "Classificar chamado",
               "actor": "Triagem",
               "evidence": "A triagem classifica o chamado",
               "fields": [
                 {
-                  "name": "Urgência do chamado",
+                  "name": "Classificação do chamado",
+                  "type": "choice",
+                  "required": true,
+                  "evidence": "Se for urgente ... Se não for urgente",
+                  "choices": [
+                    {
+                      "label": "Urgente",
+                      "value": "urgente"
+                    },
+                    {
+                      "label": "Não urgente",
+                      "value": "nao_urgente"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "decision",
+              "name": "Chamado é urgente?",
+              "field": "Classificação do chamado",
+              "evidence": "Se for urgente",
+              "alternatives": [
+                {
+                  "label": "Urgente",
+                  "operator": "eq",
+                  "value": "urgente",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Atender chamado imediatamente",
+                      "actor": "Equipe de manutenção",
+                      "evidence": "a equipe de manutenção atende imediatamente"
+                    }
+                  ]
+                },
+                {
+                  "label": "Não urgente",
+                  "operator": "eq",
+                  "value": "nao_urgente",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Atender chamado da fila",
+                      "actor": "Equipe de manutenção",
+                      "evidence": "o chamado entra na fila e a equipe de manutenção atende depois"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "task",
+              "name": "Confirmar solução",
+              "actor": "Usuário",
+              "evidence": "o usuário confirma a solução"
+            }
+          ],
+          "rules": [
+            {
+              "text": "Chamados urgentes são atendidos imediatamente pela equipe de manutenção.",
+              "evidence": "Se for urgente, a equipe de manutenção atende imediatamente"
+            },
+            {
+              "text": "Chamados não urgentes entram na fila e são atendidos depois.",
+              "evidence": "o chamado entra na fila e a equipe de manutenção atende depois"
+            }
+          ],
+          "suggestions": []
+        },
+        "model": "claude-sonnet-5-5",
+        "usage": {
+          "inputTokens": 6114,
+          "outputTokens": 1198,
+          "cachedInputTokens": 4355,
+          "costUsd": 0.021651
+        },
+        "latencyMs": 8809
+      },
+      {
+        "promptSha256": "8a21961554465998ab18d8c20f41674de6b2d24932204c8487cc61a00aece1b1",
+        "value": {
+          "kind": "business_intent",
+          "name": "Chamado de manutenção",
+          "purpose": "Registrar um chamado de manutenção, classificá-lo na triagem, atender conforme a urgência e confirmar a solução com o usuário.",
+          "actors": [
+            {
+              "name": "Usuário",
+              "evidence": "O usuário abre um chamado de manutenção"
+            },
+            {
+              "name": "Triagem",
+              "evidence": "A triagem classifica o chamado"
+            },
+            {
+              "name": "Equipe de manutenção",
+              "evidence": "a equipe de manutenção atende imediatamente"
+            }
+          ],
+          "startFields": [
+            {
+              "name": "Local",
+              "type": "text",
+              "required": true,
+              "evidence": "informando o local e o problema"
+            },
+            {
+              "name": "Problema",
+              "type": "paragraph",
+              "required": true,
+              "evidence": "informando o local e o problema"
+            }
+          ],
+          "activities": [
+            {
+              "kind": "task",
+              "name": "Abrir chamado de manutenção",
+              "actor": "Usuário",
+              "evidence": "O usuário abre um chamado de manutenção",
+              "fields": []
+            },
+            {
+              "kind": "task",
+              "name": "Classificar chamado",
+              "actor": "Triagem",
+              "evidence": "A triagem classifica o chamado",
+              "fields": [
+                {
+                  "name": "Classificação do chamado",
                   "type": "choice",
                   "required": true,
                   "evidence": "Se for urgente",
@@ -1174,13 +1326,12 @@
             {
               "kind": "decision",
               "name": "Chamado é urgente?",
-              "field": "Urgência do chamado",
-              "evidence": "Se for urgente",
+              "field": "Classificação do chamado",
               "alternatives": [
                 {
                   "label": "Urgente",
-                  "operator": "eq",
                   "value": "urgente",
+                  "operator": "eq",
                   "steps": [
                     {
                       "kind": "task",
@@ -1193,8 +1344,8 @@
                 },
                 {
                   "label": "Não urgente",
-                  "operator": "eq",
                   "value": "nao_urgente",
+                  "operator": "eq",
                   "steps": [
                     {
                       "kind": "task",
@@ -1216,7 +1367,276 @@
             },
             {
               "kind": "task",
-              "name": "Confirmar a solução",
+              "name": "Confirmar solução",
+              "actor": "Usuário",
+              "evidence": "o usuário confirma a solução",
+              "fields": []
+            }
+          ],
+          "rules": [
+            {
+              "text": "Se o chamado for urgente, a equipe de manutenção atende imediatamente.",
+              "evidence": "Se for urgente, a equipe de manutenção atende imediatamente"
+            },
+            {
+              "text": "Se não for urgente, o chamado entra na fila e a equipe de manutenção atende depois.",
+              "evidence": "Se não for urgente, o chamado entra na fila"
+            },
+            {
+              "text": "Não há regra adicional além do que foi descrito.",
+              "evidence": "Não há regra adicional além do que já foi descrito."
+            }
+          ],
+          "suggestions": []
+        },
+        "model": "claude-sonnet-5-5",
+        "usage": {
+          "inputTokens": 6283,
+          "outputTokens": 1028,
+          "cachedInputTokens": 4355,
+          "costUsd": 0.020736
+        },
+        "latencyMs": 6755
+      },
+      {
+        "promptSha256": "a7d16b4b28df4f0eb81b9410f08e0cf3d2fede0b402476653d7137bd969fe26e",
+        "value": {
+          "kind": "business_intent",
+          "name": "Chamado de manutenção",
+          "purpose": "Registrar um chamado de manutenção, classificá-lo na triagem, atender conforme a urgência e confirmar a solução com o usuário.",
+          "actors": [
+            {
+              "name": "Usuário",
+              "evidence": "O usuário abre um chamado de manutenção"
+            },
+            {
+              "name": "Triagem",
+              "evidence": "A triagem classifica o chamado"
+            },
+            {
+              "name": "Equipe de manutenção",
+              "evidence": "a equipe de manutenção atende imediatamente"
+            }
+          ],
+          "startFields": [
+            {
+              "name": "Local",
+              "type": "text",
+              "required": true,
+              "evidence": "informando o local e o problema"
+            },
+            {
+              "name": "Problema",
+              "type": "paragraph",
+              "required": true,
+              "evidence": "informando o local e o problema"
+            }
+          ],
+          "activities": [
+            {
+              "kind": "task",
+              "name": "Abre um chamado de manutenção",
+              "actor": "Usuário",
+              "evidence": "O usuário abre um chamado de manutenção",
+              "fields": []
+            },
+            {
+              "kind": "task",
+              "name": "Classifica o chamado",
+              "actor": "Triagem",
+              "evidence": "A triagem classifica o chamado",
+              "fields": [
+                {
+                  "name": "Classificação do chamado",
+                  "type": "choice",
+                  "required": true,
+                  "evidence": "Se for urgente",
+                  "choices": [
+                    {
+                      "label": "Urgente",
+                      "value": "urgente"
+                    },
+                    {
+                      "label": "Não urgente",
+                      "value": "nao_urgente"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "decision",
+              "name": "Se for urgente",
+              "field": "Classificação do chamado",
+              "alternatives": [
+                {
+                  "label": "Urgente",
+                  "value": "urgente",
+                  "operator": "eq",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Atende imediatamente",
+                      "actor": "Equipe de manutenção",
+                      "evidence": "a equipe de manutenção atende imediatamente",
+                      "fields": []
+                    }
+                  ]
+                },
+                {
+                  "label": "Não urgente",
+                  "value": "nao_urgente",
+                  "operator": "eq",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Entra na fila",
+                      "actor": "Triagem",
+                      "evidence": "o chamado entra na fila",
+                      "fields": []
+                    },
+                    {
+                      "kind": "task",
+                      "name": "Atende depois",
+                      "actor": "Equipe de manutenção",
+                      "evidence": "a equipe de manutenção atende depois",
+                      "fields": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "task",
+              "name": "Confirma a solução",
+              "actor": "Usuário",
+              "evidence": "o usuário confirma a solução",
+              "fields": []
+            }
+          ],
+          "rules": [
+            {
+              "text": "Se for urgente, a equipe de manutenção atende imediatamente.",
+              "evidence": "Se for urgente, a equipe de manutenção atende imediatamente"
+            },
+            {
+              "text": "Se não for urgente, o chamado entra na fila e a equipe de manutenção atende depois.",
+              "evidence": "Se não for urgente, o chamado entra na fila"
+            },
+            {
+              "text": "Não há regra adicional além do que já foi descrito.",
+              "evidence": "Não há regra adicional além do que já foi descrito."
+            }
+          ],
+          "suggestions": []
+        },
+        "model": "claude-sonnet-5-5",
+        "usage": {
+          "inputTokens": 7445,
+          "outputTokens": 1013,
+          "cachedInputTokens": 4355,
+          "costUsd": 0.026035000000000003
+        },
+        "latencyMs": 6606
+      },
+      {
+        "promptSha256": "5c1c6c35a6be2c1a13f3cb5b5e14edd96386b5fcbe38439cd47e61628f4f57f6",
+        "value": {
+          "kind": "business_intent",
+          "name": "Chamado de manutenção",
+          "purpose": "Registrar um chamado de manutenção, classificá-lo na triagem, atendê-lo conforme a urgência e confirmar a solução com o usuário.",
+          "actors": [
+            {
+              "name": "Usuário",
+              "evidence": "O usuário abre um chamado de manutenção"
+            },
+            {
+              "name": "Triagem",
+              "evidence": "A triagem classifica o chamado"
+            },
+            {
+              "name": "Equipe de manutenção",
+              "evidence": "a equipe de manutenção atende imediatamente"
+            }
+          ],
+          "startFields": [
+            {
+              "name": "Local",
+              "type": "text",
+              "required": true,
+              "evidence": "informando o local e o problema"
+            },
+            {
+              "name": "Problema",
+              "type": "paragraph",
+              "required": true,
+              "evidence": "informando o local e o problema"
+            }
+          ],
+          "activities": [
+            {
+              "kind": "task",
+              "name": "Classificar chamado",
+              "actor": "Triagem",
+              "evidence": "A triagem classifica o chamado",
+              "fields": [
+                {
+                  "name": "Classificação do chamado",
+                  "type": "choice",
+                  "required": true,
+                  "evidence": "Se for urgente",
+                  "choices": [
+                    {
+                      "label": "Urgente",
+                      "value": "urgente"
+                    },
+                    {
+                      "label": "Não urgente",
+                      "value": "nao_urgente"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "decision",
+              "name": "Chamado é urgente?",
+              "field": "Classificação do chamado",
+              "evidence": "Se for urgente",
+              "alternatives": [
+                {
+                  "label": "Urgente",
+                  "value": "urgente",
+                  "operator": "eq",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Atender chamado imediatamente",
+                      "actor": "Equipe de manutenção",
+                      "evidence": "a equipe de manutenção atende imediatamente",
+                      "fields": []
+                    }
+                  ]
+                },
+                {
+                  "label": "Não urgente",
+                  "value": "nao_urgente",
+                  "operator": "eq",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Atender chamado depois da fila",
+                      "actor": "Equipe de manutenção",
+                      "evidence": "entra na fila e a equipe de manutenção atende depois",
+                      "fields": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "task",
+              "name": "Confirmar solução",
               "actor": "Usuário",
               "evidence": "o usuário confirma a solução",
               "fields": []
@@ -1229,19 +1649,19 @@
             },
             {
               "text": "Chamados não urgentes entram na fila e são atendidos depois.",
-              "evidence": "o chamado entra na fila e a equipe de manutenção atende depois"
+              "evidence": "Se não for urgente, o chamado entra na fila"
             }
           ],
           "suggestions": []
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6120,
-          "outputTokens": 937,
+          "inputTokens": 6549,
+          "outputTokens": 1186,
           "cachedInputTokens": 4355,
-          "costUsd": 0.01903
+          "costUsd": 0.023582000000000002
         },
-        "latencyMs": 8450
+        "latencyMs": 8321
       }
     ],
     "S12-treinamento": [
@@ -1250,114 +1670,7 @@
         "value": {
           "kind": "business_intent",
           "name": "Inscrição em treinamento",
-          "purpose": "Permitir que o servidor se inscreva em um treinamento e que a escola de governo confirme a inscrição ou coloque o servidor em lista de espera conforme a disponibilidade de vagas.",
-          "actors": [
-            {
-              "name": "Servidor",
-              "evidence": "O servidor se inscreve em um treinamento"
-            },
-            {
-              "name": "Escola de governo",
-              "evidence": "A escola de governo verifica se há vagas"
-            }
-          ],
-          "startFields": [
-            {
-              "name": "Curso desejado",
-              "type": "text",
-              "required": true,
-              "evidence": "informando o curso desejado"
-            }
-          ],
-          "activities": [
-            {
-              "kind": "task",
-              "name": "Verificar se há vagas",
-              "actor": "Escola de governo",
-              "evidence": "A escola de governo verifica se há vagas",
-              "fields": [
-                {
-                  "name": "Há vaga disponível",
-                  "type": "choice",
-                  "required": true,
-                  "evidence": "verifica se há vagas",
-                  "choices": [
-                    {
-                      "label": "Sim",
-                      "value": "sim"
-                    },
-                    {
-                      "label": "Não",
-                      "value": "nao"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "kind": "decision",
-              "name": "Há vaga?",
-              "field": "Há vaga disponível",
-              "evidence": "Se houver vaga... Se não houver",
-              "alternatives": [
-                {
-                  "label": "Há vaga",
-                  "value": "sim",
-                  "operator": "eq",
-                  "steps": [
-                    {
-                      "kind": "task",
-                      "name": "Confirmar inscrição ao servidor",
-                      "actor": "Escola de governo",
-                      "evidence": "a inscrição é confirmada ao servidor",
-                      "fields": []
-                    }
-                  ]
-                },
-                {
-                  "label": "Não há vaga",
-                  "value": "nao",
-                  "operator": "eq",
-                  "steps": [
-                    {
-                      "kind": "task",
-                      "name": "Incluir servidor em lista de espera",
-                      "actor": "Escola de governo",
-                      "evidence": "o servidor entra em lista de espera",
-                      "fields": []
-                    }
-                  ]
-                }
-              ]
-            }
-          ],
-          "rules": [
-            {
-              "text": "Se houver vaga, a inscrição é confirmada ao servidor.",
-              "evidence": "Se houver vaga, a inscrição é confirmada ao servidor"
-            },
-            {
-              "text": "Se não houver vaga, o servidor entra em lista de espera.",
-              "evidence": "Se não houver, o servidor entra em lista de espera"
-            }
-          ],
-          "suggestions": []
-        },
-        "model": "claude-sonnet-5-5",
-        "usage": {
-          "inputTokens": 6090,
-          "outputTokens": 772,
-          "cachedInputTokens": 4355,
-          "costUsd": 0.017247
-        },
-        "latencyMs": 8183
-      },
-      {
-        "promptSha256": "40575db509da8d91aa19c7aee58caee1c6927325ebb8d5ef4fb5eb3fb1e4653f",
-        "value": {
-          "kind": "business_intent",
-          "name": "Inscrição em treinamento",
-          "purpose": "Permitir que o servidor se inscreva em um treinamento e que a escola de governo confirme a inscrição ou coloque o servidor em lista de espera conforme a disponibilidade de vagas.",
+          "purpose": "Permitir que o servidor se inscreva em um treinamento e que a escola de governo verifique vagas para confirmar a inscrição ou colocá-lo em lista de espera.",
           "actors": [
             {
               "name": "Servidor",
@@ -1388,13 +1701,13 @@
               "kind": "task",
               "name": "Verificar vagas",
               "actor": "Escola de governo",
-              "evidence": "verifica se há vagas",
+              "evidence": "A escola de governo verifica se há vagas",
               "fields": [
                 {
-                  "name": "Há vaga",
+                  "name": "Há vaga disponível",
                   "type": "choice",
                   "required": true,
-                  "evidence": "Se houver vaga",
+                  "evidence": "verifica se há vagas",
                   "choices": [
                     {
                       "label": "Sim",
@@ -1411,8 +1724,8 @@
             {
               "kind": "decision",
               "name": "Há vaga?",
-              "field": "Há vaga",
-              "evidence": "Se houver vaga",
+              "field": "Há vaga disponível",
+              "evidence": "Se houver vaga... Se não houver",
               "alternatives": [
                 {
                   "label": "Há vaga",
@@ -1436,6 +1749,7 @@
                     {
                       "kind": "task",
                       "name": "Incluir servidor em lista de espera",
+                      "actor": "Escola de governo",
                       "evidence": "o servidor entra em lista de espera",
                       "fields": []
                     }
@@ -1458,12 +1772,576 @@
         },
         "model": "claude-sonnet-5-5",
         "usage": {
-          "inputTokens": 6347,
-          "outputTokens": 1174,
+          "inputTokens": 6089,
+          "outputTokens": 823,
           "cachedInputTokens": 4355,
-          "costUsd": 0.02249
+          "costUsd": 0.017752999999999998
         },
-        "latencyMs": 10225
+        "latencyMs": 6244
+      },
+      {
+        "promptSha256": "33920db520dc5a2c8c39c81a89105e5f3e5fca0cfc51a7be272a0c99ff1e621a",
+        "value": {
+          "kind": "business_intent",
+          "name": "Inscrição em treinamento",
+          "purpose": "Permitir que o servidor se inscreva em um treinamento e que a escola de governo verifique vagas para confirmar a inscrição ou colocá-lo em lista de espera.",
+          "actors": [
+            {
+              "name": "Servidor",
+              "evidence": "O servidor se inscreve em um treinamento"
+            },
+            {
+              "name": "Escola de governo",
+              "evidence": "A escola de governo verifica se há vagas"
+            }
+          ],
+          "startFields": [
+            {
+              "name": "Curso desejado",
+              "type": "text",
+              "required": true,
+              "evidence": "informando o curso desejado"
+            }
+          ],
+          "activities": [
+            {
+              "kind": "task",
+              "name": "Inscrever-se em treinamento",
+              "actor": "Servidor",
+              "evidence": "O servidor se inscreve em um treinamento",
+              "fields": []
+            },
+            {
+              "kind": "task",
+              "name": "Verificar vagas",
+              "actor": "Escola de governo",
+              "evidence": "A escola de governo verifica se há vagas",
+              "fields": [
+                {
+                  "name": "Há vagas",
+                  "type": "choice",
+                  "required": true,
+                  "evidence": "verifica se há vagas",
+                  "choices": [
+                    {
+                      "label": "Sim",
+                      "value": "sim"
+                    },
+                    {
+                      "label": "Não",
+                      "value": "nao"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "decision",
+              "name": "Se houver vaga",
+              "field": "Há vagas",
+              "evidence": "Se houver vaga, a inscrição é confirmada ao servidor",
+              "alternatives": [
+                {
+                  "label": "Houver vaga",
+                  "operator": "eq",
+                  "value": "sim",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Confirmar inscrição ao servidor",
+                      "actor": "Escola de governo",
+                      "evidence": "a inscrição é confirmada ao servidor",
+                      "fields": []
+                    }
+                  ]
+                },
+                {
+                  "label": "Não houver vaga",
+                  "operator": "eq",
+                  "value": "nao",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Entrar em lista de espera",
+                      "actor": "Servidor",
+                      "evidence": "o servidor entra em lista de espera",
+                      "fields": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "rules": [
+            {
+              "text": "Se houver vaga, a inscrição é confirmada ao servidor.",
+              "evidence": "Se houver vaga, a inscrição é confirmada ao servidor"
+            },
+            {
+              "text": "Se não houver vaga, o servidor entra em lista de espera.",
+              "evidence": "Se não houver, o servidor entra em lista de espera"
+            }
+          ],
+          "suggestions": []
+        },
+        "model": "claude-sonnet-5-5",
+        "usage": {
+          "inputTokens": 7051,
+          "outputTokens": 1063,
+          "cachedInputTokens": 4355,
+          "costUsd": 0.024629
+        },
+        "latencyMs": 7517
+      }
+    ],
+    "S13-orcamento-ajuste": [
+      {
+        "promptSha256": "81738077e0f194ce21c4b2cb6e55bb045410ca9212df0848efd96f83b8a075c3",
+        "value": {
+          "kind": "business_intent",
+          "name": "Aprovação de orçamento para compra de materiais",
+          "purpose": "Permitir que um solicitante peça orçamento para compra de materiais da empresa e que o RH analise, podendo aprovar, pedir ajuste ou sugerir orçamento.",
+          "actors": [
+            {
+              "name": "Solicitante",
+              "evidence": "vao pedir orçamento"
+            },
+            {
+              "name": "RH",
+              "evidence": "pro rh aprovar compra de materiais"
+            }
+          ],
+          "startFields": [
+            {
+              "name": "Descrição dos materiais",
+              "type": "paragraph",
+              "required": true,
+              "evidence": "compra de materiais pra empresa"
+            },
+            {
+              "name": "Orçamento",
+              "type": "decimal",
+              "required": true,
+              "evidence": "pedir orçamento"
+            }
+          ],
+          "activities": [
+            {
+              "kind": "task",
+              "name": "Pedir orçamento",
+              "actor": "Solicitante",
+              "evidence": "vao pedir orçamento",
+              "fields": []
+            },
+            {
+              "kind": "task",
+              "name": "Analisar orçamento",
+              "actor": "RH",
+              "evidence": "rh aprovar compra de materiais",
+              "fields": [
+                {
+                  "name": "Decisão do RH",
+                  "type": "choice",
+                  "required": true,
+                  "evidence": "aprovar ou nao pedir ajuste sugerir orçamento",
+                  "choices": [
+                    {
+                      "label": "Aprovar",
+                      "value": "aprovar"
+                    },
+                    {
+                      "label": "Pedir ajuste",
+                      "value": "pedir_ajuste"
+                    },
+                    {
+                      "label": "Sugerir orçamento",
+                      "value": "sugerir_orcamento"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "decision",
+              "name": "Decisão do RH sobre o orçamento",
+              "field": "Decisão do RH",
+              "evidence": "aprovar ou nao pedir ajuste sugerir orçamento",
+              "alternatives": [
+                {
+                  "label": "Aprovar",
+                  "operator": "eq",
+                  "value": "aprovar",
+                  "steps": []
+                },
+                {
+                  "label": "Pedir ajuste",
+                  "operator": "eq",
+                  "value": "pedir_ajuste",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Ajustar orçamento",
+                      "actor": "Solicitante",
+                      "evidence": "pedir ajuste",
+                      "fields": []
+                    }
+                  ],
+                  "returnTo": "Analisar orçamento"
+                },
+                {
+                  "label": "Sugerir orçamento",
+                  "operator": "eq",
+                  "value": "sugerir_orcamento",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Sugerir orçamento",
+                      "actor": "RH",
+                      "evidence": "sugerir orçamento",
+                      "fields": [
+                        {
+                          "name": "Orçamento sugerido",
+                          "type": "decimal",
+                          "required": true,
+                          "evidence": "sugerir orçamento"
+                        }
+                      ]
+                    }
+                  ],
+                  "returnTo": "Analisar orçamento"
+                }
+              ]
+            }
+          ],
+          "rules": [
+            {
+              "text": "O RH pode aprovar, pedir ajuste ou sugerir orçamento.",
+              "evidence": "aprovar ou nao pedir ajuste sugerir orçamento"
+            }
+          ],
+          "suggestions": [
+            {
+              "text": "Definir se o RH também pode reprovar a compra, já que o pedido cita \"etc\" para outras opções."
+            },
+            {
+              "text": "Após ajuste ou sugestão, confirmar se o fluxo volta à análise do RH (assumido nesta prévia)."
+            }
+          ]
+        },
+        "model": "claude-sonnet-5-5",
+        "usage": {
+          "inputTokens": 6075,
+          "outputTokens": 1829,
+          "cachedInputTokens": 5569,
+          "costUsd": 0.023126800000000003
+        },
+        "latencyMs": 12861
+      },
+      {
+        "promptSha256": "7ece5a7e9b27755bddc37bc02d1d94ae76143e1786267c6cdbff56ba29a8807f",
+        "value": {
+          "kind": "business_intent",
+          "name": "Aprovação de orçamento para compra de materiais",
+          "purpose": "Permitir que o solicitante peça orçamento para compra de materiais da empresa e que o RH analise, podendo aprovar, pedir ajuste ou sugerir orçamento.",
+          "actors": [
+            {
+              "name": "Solicitante",
+              "evidence": "O solicitante pede o orçamento."
+            },
+            {
+              "name": "RH",
+              "evidence": "pedir orçamento pro rh aprovar compra de materiais"
+            }
+          ],
+          "startFields": [
+            {
+              "name": "Materiais",
+              "type": "paragraph",
+              "required": true,
+              "evidence": "O solicitante informa os materiais"
+            },
+            {
+              "name": "Valor do orçamento",
+              "type": "decimal",
+              "required": true,
+              "evidence": "o valor do orçamento"
+            }
+          ],
+          "activities": [
+            {
+              "kind": "task",
+              "name": "Pedir orçamento",
+              "actor": "Solicitante",
+              "evidence": "O solicitante pede o orçamento."
+            },
+            {
+              "kind": "task",
+              "name": "Analisar orçamento",
+              "actor": "RH",
+              "evidence": "rh aprovar compra de materiais",
+              "fields": [
+                {
+                  "name": "Decisão do RH",
+                  "type": "choice",
+                  "required": true,
+                  "evidence": "o rh pode aprovar ou nao pedir ajuste sugerir orçamento",
+                  "choices": [
+                    {
+                      "label": "Aprovar",
+                      "value": "aprovar"
+                    },
+                    {
+                      "label": "Pedir ajuste",
+                      "value": "pedir_ajuste"
+                    },
+                    {
+                      "label": "Sugerir orçamento",
+                      "value": "sugerir_orcamento"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "decision",
+              "name": "Decisão do RH sobre o orçamento",
+              "field": "Decisão do RH",
+              "evidence": "o rh pode aprovar ou nao pedir ajuste sugerir orçamento",
+              "alternatives": [
+                {
+                  "label": "Aprovar",
+                  "value": "aprovar",
+                  "operator": "eq",
+                  "steps": []
+                },
+                {
+                  "label": "Pedir ajuste",
+                  "value": "pedir_ajuste",
+                  "operator": "eq",
+                  "steps": [],
+                  "returnTo": "Pedir orçamento"
+                },
+                {
+                  "label": "Sugerir orçamento",
+                  "value": "sugerir_orcamento",
+                  "operator": "eq",
+                  "steps": [
+                    {
+                      "kind": "task",
+                      "name": "Sugerir orçamento",
+                      "actor": "RH",
+                      "evidence": "sugerir orçamento",
+                      "fields": [
+                        {
+                          "name": "Orçamento sugerido",
+                          "type": "decimal",
+                          "required": false,
+                          "evidence": "sugerir orçamento"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "rules": [
+            {
+              "text": "O RH pode aprovar, pedir ajuste ou sugerir orçamento.",
+              "evidence": "o rh pode aprovar ou nao pedir ajuste sugerir orçamento"
+            }
+          ],
+          "suggestions": [
+            {
+              "text": "Definir o que acontece após o RH sugerir um orçamento (por exemplo, retornar ao solicitante para aceite)."
+            },
+            {
+              "text": "Confirmar se o pedido de ajuste deve retornar o fluxo ao solicitante para reenviar o orçamento."
+            },
+            {
+              "text": "O 'etc' do pedido pode indicar outras opções de decisão do RH; liste-as se existirem."
+            }
+          ]
+        },
+        "model": "claude-sonnet-5-5",
+        "usage": {
+          "inputTokens": 6568,
+          "outputTokens": 1643,
+          "cachedInputTokens": 4355,
+          "costUsd": 0.028208999999999998
+        },
+        "latencyMs": 11678
+      },
+      {
+        "promptSha256": "5d9d657ad8688f70128f0659d3d88d40c2b4fa301bf093efa3364ee9cbefcdda",
+        "value": {
+          "kind": "business_intent",
+          "name": "Aprovação de orçamento para compra de materiais",
+          "purpose": "Permitir que o solicitante peça orçamento para compra de materiais da empresa e que o RH aprove a compra, podendo também pedir ajuste ou sugerir orçamento.",
+          "actors": [
+            {
+              "name": "Solicitante",
+              "evidence": "O solicitante pede o orçamento."
+            },
+            {
+              "name": "RH",
+              "evidence": "pedir orçamento pro rh aprovar compra de materiais"
+            }
+          ],
+          "startFields": [
+            {
+              "name": "Materiais",
+              "type": "paragraph",
+              "required": true,
+              "evidence": "O solicitante informa os materiais"
+            },
+            {
+              "name": "Valor do orçamento",
+              "type": "decimal",
+              "required": true,
+              "evidence": "o valor do orçamento"
+            }
+          ],
+          "activities": [
+            {
+              "kind": "task",
+              "name": "Pedir orçamento",
+              "actor": "Solicitante",
+              "evidence": "O solicitante pede o orçamento."
+            },
+            {
+              "kind": "approval",
+              "name": "Aprovar compra de materiais",
+              "actor": "RH",
+              "evidence": "rh aprovar compra de materiais",
+              "onApproved": [],
+              "onRejected": []
+            }
+          ],
+          "rules": [
+            {
+              "text": "O RH pode aprovar, pedir ajuste ou sugerir orçamento.",
+              "evidence": "o rh pode aprovar ou nao pedir ajuste sugerir orçamento"
+            }
+          ],
+          "suggestions": [
+            {
+              "text": "Definir o que acontece quando o RH pedir ajuste (por exemplo, retornar ao solicitante para reenviar o orçamento)."
+            },
+            {
+              "text": "Definir o que acontece após o RH sugerir um orçamento (por exemplo, retornar ao solicitante para aceite)."
+            },
+            {
+              "text": "O 'etc' do pedido pode indicar outras opções de decisão do RH; liste-as se existirem."
+            }
+          ]
+        },
+        "model": "claude-sonnet-5-5",
+        "usage": {
+          "inputTokens": 7780,
+          "outputTokens": 1210,
+          "cachedInputTokens": 4355,
+          "costUsd": 0.029568
+        },
+        "latencyMs": 9119
+      }
+    ],
+    "S14-manutencao-predial": [
+      {
+        "promptSha256": "775e8cb5441012968953784a9219b148c7eb7cb92a5f140798e6dc68c82722aa",
+        "value": {
+          "kind": "business_intent",
+          "name": "Chamado de manutenção",
+          "purpose": "Permitir que o morador abra um chamado de manutenção, que o síndico autorize ou recuse, e que a zeladoria execute o reparo com posterior avaliação do morador.",
+          "actors": [
+            {
+              "name": "Morador",
+              "evidence": "O morador abre um chamado de manutenção"
+            },
+            {
+              "name": "Síndico",
+              "evidence": "O síndico autoriza ou recusa o chamado"
+            },
+            {
+              "name": "Zeladoria",
+              "evidence": "a zeladoria executa o reparo"
+            }
+          ],
+          "startFields": [
+            {
+              "name": "Local",
+              "type": "text",
+              "required": true,
+              "evidence": "informando o local"
+            },
+            {
+              "name": "Descrição do problema",
+              "type": "paragraph",
+              "required": true,
+              "evidence": "uma descrição do problema"
+            }
+          ],
+          "activities": [
+            {
+              "kind": "task",
+              "name": "Abrir chamado de manutenção",
+              "actor": "Morador",
+              "evidence": "O morador abre um chamado de manutenção",
+              "fields": []
+            },
+            {
+              "kind": "approval",
+              "name": "Autorizar ou recusar chamado",
+              "actor": "Síndico",
+              "evidence": "O síndico autoriza ou recusa o chamado",
+              "requiresRejectionReason": true,
+              "onApproved": [
+                {
+                  "kind": "task",
+                  "name": "Executar reparo",
+                  "actor": "Zeladoria",
+                  "evidence": "a zeladoria executa o reparo",
+                  "fields": []
+                },
+                {
+                  "kind": "task",
+                  "name": "Avaliar atendimento",
+                  "actor": "Morador",
+                  "evidence": "o morador avalia o atendimento",
+                  "fields": []
+                }
+              ],
+              "onRejected": [
+                {
+                  "kind": "task",
+                  "name": "Avisar morador do motivo da recusa",
+                  "actor": "Morador",
+                  "evidence": "o morador é avisado do motivo",
+                  "fields": []
+                }
+              ]
+            }
+          ],
+          "rules": [
+            {
+              "text": "Se o síndico autorizar, a zeladoria executa o reparo e depois o morador avalia o atendimento.",
+              "evidence": "Se autorizar, a zeladoria executa o reparo e depois o morador avalia"
+            },
+            {
+              "text": "Se o síndico recusar, o morador é avisado do motivo.",
+              "evidence": "Se recusar, o morador é avisado do motivo"
+            }
+          ],
+          "suggestions": []
+        },
+        "model": "claude-sonnet-5-5",
+        "usage": {
+          "inputTokens": 6107,
+          "outputTokens": 776,
+          "cachedInputTokens": 4355,
+          "costUsd": 0.017357
+        },
+        "latencyMs": 6887
       }
     ]
   }

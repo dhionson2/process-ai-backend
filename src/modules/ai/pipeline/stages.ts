@@ -4,6 +4,7 @@ import { validateProcessSpec } from '../../validation/validation.service.js';
 import { normalizeInterpretation } from '../interpretation-context.js';
 import { assessReadiness } from '../readiness.js';
 import { identityForQuestion, semanticSlotForQuestion } from '../semantic-grounding.js';
+import { applyConfirmations, confirmationKey } from '../confirmations.js';
 import { applySemanticRefinement, compileBusinessIntent, IntentCompilationError, SemanticGroundingError } from '../semantic-process.js';
 import type { ModelCalls } from './model-calls.js';
 import type { TurnContext } from './turn-context.js';
@@ -11,9 +12,27 @@ import { next, OrchestrationFailure, stop, type GenerationOutcome, type Json, ty
 
 type Stage = { ctx: TurnContext; calls: ModelCalls; budget: RepairBudget };
 
-/** Ends the turn asking the requester; usage and latency are the turn totals so far. */
+/**
+ * Ends the turn asking the requester; usage and latency are the turn totals so far. Every question of every
+ * origin (model, readiness gate, compiler, validator) passes the same guard: a question the requester already
+ * answered is never asked again. If nothing new is left to ask, the turn fails with recovery guidance instead
+ * of looping.
+ */
 export function clarify({ ctx, calls }: Pick<Stage, 'ctx' | 'calls'>, value: Json, intermediate?: Json): GenerationOutcome {
-  return clarificationOutcome(value, calls.lastModel, calls.latencyMs, { ...calls.usage }, calls.providerId, ctx.knowledge.version, ctx.knowledge.moduleIds, intermediate);
+  const fresh = (value.questions ?? []).filter((question: Json) => !alreadyAnswered(ctx, question));
+  if (!fresh.length) {
+    ctx.trace.push({ stage: 'clarification', status: 'loop-prevented', details: { repeated: (value.questions ?? []).length } });
+    throw new OrchestrationFailure('CLARIFICATION_UNRESOLVED', 'A pergunta já foi respondida, mas a resposta não resolveu o ponto; nenhuma pergunta repetida foi enviada');
+  }
+  if (fresh.length < (value.questions ?? []).length) ctx.trace.push({ stage: 'clarification', status: 'repeated-dropped', details: { dropped: (value.questions ?? []).length - fresh.length } });
+  return clarificationOutcome({ ...value, questions: fresh }, calls.lastModel, calls.latencyMs, { ...calls.usage }, calls.providerId, ctx.knowledge.version, ctx.knowledge.moduleIds, intermediate);
+}
+const foldQuestion = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function alreadyAnswered(ctx: TurnContext, question: Json): boolean {
+  const identity = identityForQuestion(question.question, question.requirementId);
+  return ctx.confirmedFacts.some(fact => (question.requirementId && fact.requirementId === question.requirementId)
+    || (fact.semanticSlot && fact.semanticSlot === identity.semanticSlot)
+    || foldQuestion(fact.question) === foldQuestion(question.question));
 }
 export function clarificationOutcome(value: Json, model: string, latencyMs: number, usage: GenerationOutcome['usage'], provider: string, knowledgeVersion: string, knowledgeModules: string[], intermediate?: Json): GenerationOutcome {
   const questions = (value.questions || []).map((question: Json) => ({ ...question, ...identityForQuestion(question.question, question.requirementId) }));
@@ -58,7 +77,8 @@ export async function recoverRepeatedQuestion({ ctx, calls, budget }: Stage, val
     throw new OrchestrationFailure('MODEL_PLAN_INVALID', 'A recuperação de pergunta repetida retornou estrutura fora do contrato interno');
   }
   ctx.enforcePlanBounds(recovered);
-  if (recovered.kind === 'need_clarification' && findRepeatedQuestion(recovered.questions, ctx.confirmedFacts, mode)) throw new OrchestrationFailure('MODEL_REPEATED_QUESTION', 'O modelo voltou a repetir uma pergunta já respondida; a sessão e a revisão atual foram preservadas');
+  // Still-repeated questions are dropped by the guard in clarify(); new questions in the same answer still reach the requester.
+  if (recovered.kind === 'need_clarification' && findRepeatedQuestion(recovered.questions, ctx.confirmedFacts, mode)) ctx.trace.push({ stage: 'normalization', status: 'recovery-still-repeated', details: {} });
   return recovered;
 }
 
@@ -75,7 +95,8 @@ export function readiness(stage: Stage, plan: Json): StageResult<Json> {
 type Compiled = { plan: Json; spec: Json; compiledIntent?: Json };
 
 /** Compiles one plan; compiler errors are rethrown typed for the stage that decides who answers them. */
-async function compose(ctx: TurnContext, plan: Json, model: string): Promise<{ spec: Json; compiledIntent?: Json }> {
+async function compose(ctx: TurnContext, rawPlan: Json, model: string): Promise<{ spec: Json; compiledIntent?: Json }> {
+  const plan = ctx.refinementMode ? rawPlan : applyConfirmations(rawPlan, ctx.confirmations);
   ctx.trace.push({ stage: 'compilation', status: 'started', details: { kind: plan.kind, modelConfigurationFlags: plan.pendingConfiguration?.length || 0 } });
   try {
     if (ctx.refinementMode) return { spec: applySemanticRefinement(ctx.args.currentSpec!, plan, { sourceText: ctx.userSource }) };
@@ -119,7 +140,7 @@ function assertNoRejectedItems(ctx: TurnContext, spec: Json): void {
 
 /** Turns a compiler gap into the right conversation: a question for the requester, or a refinement clarification. */
 function compilerGapOutcome(stage: Stage, error: unknown, plan: Json): GenerationOutcome {
-  if (error instanceof IntentCompilationError) return clarify(stage, { kind: 'need_clarification', summary: 'A intenção foi interpretada, mas falta uma informação para compilar o fluxo com segurança.', questions: [{ question: error.question, blocking: true }] }, plan);
+  if (error instanceof IntentCompilationError) return clarify(stage, { kind: 'need_clarification', summary: 'A intenção foi interpretada, mas falta uma informação para compilar o fluxo com segurança.', questions: [{ question: error.question, blocking: true, ...(error.subject ? { requirementId: confirmationKey(error.subject) } : {}) }] }, plan);
   if (!stage.ctx.refinementMode || !(error instanceof OrchestrationFailure) || error.code !== 'REFINEMENT_AMBIGUOUS') throw error;
   return clarify(stage, { kind: 'need_clarification', summary: 'O refinamento não foi aplicado; falta esclarecer uma referência do processo.', questions: [{ question: refinementQuestion(error.message), blocking: true }] }, plan);
 }
@@ -132,8 +153,12 @@ export async function compile(stage: Stage, plan: Json): Promise<StageResult<Com
   const { ctx, calls, budget } = stage;
   try { return next({ plan, ...await compose(ctx, plan, calls.lastModel) }); }
   catch (error) {
-    if (!(error instanceof IntentCompilationError && error.origin === 'model-omission' && !ctx.refinementMode && budget.canUse('omission'))) return stop(compilerGapOutcome(stage, error, plan));
-    const omissionPrompt = `${ctx.prompt}\n\nCorreção obrigatória: a interpretação anterior omitiu algo que o solicitante descreveu explicitamente. ${error.question}\nRetorne o BusinessIntent completo, preservando todos os demais fatos, sem inventar etapas, campos, papéis ou regras.\nResposta anterior:\n${JSON.stringify(plan)}`;
+    const modelSide = error instanceof IntentCompilationError && (error.origin === 'model-omission' || error.origin === 'model-divergence');
+    if (!(modelSide && !ctx.refinementMode && budget.canUse('omission'))) return stop(compilerGapOutcome(stage, error, plan));
+    const correction = error.origin === 'model-divergence'
+      ? `Correção obrigatória: um elemento da interpretação anterior não tem sustentação literal no texto do solicitante (${error.subject ? `${error.subject.kind} “${error.subject.name}”` : 'elemento'}). Nomeie etapas, campos e participantes com as palavras que o solicitante usou e cite como evidência um trecho literal dele; se o elemento não foi pedido, remova-o.`
+      : `Correção obrigatória: a interpretação anterior omitiu algo que o solicitante descreveu explicitamente. ${error.question}`;
+    const omissionPrompt = `${ctx.prompt}\n\n${correction}\nRetorne o BusinessIntent completo, preservando todos os demais fatos, sem inventar etapas, campos, papéis ou regras.\nResposta anterior:\n${JSON.stringify(plan)}`;
     if (omissionPrompt.length + ctx.schemaChars > ctx.environment.aiMaxInputChars) return stop(compilerGapOutcome(stage, error, plan));
     budget.consume('omission');
     ctx.trace.push({ stage: 'compilation', status: 'omission-repair', details: {} });

@@ -1,3 +1,4 @@
+import type { ConfirmationSubject } from './confirmations.js';
 import { createHash } from 'node:crypto';
 import { readFoundationJson } from '../../shared/files.js';
 import { businessPatternForActivity } from './business-patterns.js';
@@ -151,10 +152,16 @@ export function semanticRefinementSchema(): Json {
   return { $schema: 'https://json-schema.org/draft/2020-12/schema', oneOf: [clarification, refinement] };
 }
 
-/** `model-omission`: the requester already stated it and the interpretation dropped it, so the model (not the user) is asked to fix it. */
-export type IntentGapOrigin = 'needs-user' | 'model-omission';
+/**
+ * Who should resolve a compilation gap:
+ * - `needs-user`: information only the requester has;
+ * - `model-omission`: the requester stated it and the interpretation dropped it;
+ * - `model-divergence`: the interpretation added or named an element without literal support. The model is
+ *   corrected first; if that fails, the requester answers a yes/no question bound to `subject`.
+ */
+export type IntentGapOrigin = 'needs-user' | 'model-omission' | 'model-divergence';
 export class IntentCompilationError extends Error {
-  constructor(readonly question: string, message = question, readonly origin: IntentGapOrigin = 'needs-user') { super(message); this.name = 'IntentCompilationError'; }
+  constructor(readonly question: string, message = question, readonly origin: IntentGapOrigin = 'needs-user', readonly subject?: ConfirmationSubject) { super(message); this.name = 'IntentCompilationError'; }
 }
 export class SemanticGroundingError extends Error {
   constructor(readonly status: 'divergent' | 'inconclusive', message: string) { super(message); this.name = 'SemanticGroundingError'; }
@@ -263,7 +270,7 @@ export async function compileBusinessIntent(value: BusinessIntentV1 | Json, opti
         addSuggestion(`A atividade “${activity.name}” não tem suporte literal suficiente e não foi incluída no fluxo confirmado.`, activity.evidence);
         if (grounding && grounding.status !== 'equivalent') throw new SemanticGroundingError(grounding.status, grounding.reason);
         ask(`A atividade “${activity.name}” deve fazer parte deste processo?`, `activity:${activity.name}`);
-        throw new IntentCompilationError(`A atividade “${activity.name}” não está sustentada por uma citação literal suficiente da conversa. Confirme se ela deve compor o fluxo.`);
+        throw unsupportedElement('activity', activity.name);
       }
       if (activity.kind === 'integration') {
         if (activitySource && !technicalIntent(activitySource)) throw new IntentCompilationError(`A atividade “${activity.name}” foi interpretada como integração técnica sem solicitação explícita. Confirme se há uma integração ou uma tarefa humana.`);
@@ -361,6 +368,13 @@ export const normalized = (value: string) => value.normalize('NFD').replace(/[\u
 function isRejectionReasonField(name: string): boolean {
   return /(?:motivo|reason|justific\w*|raz[aã]o).{0,40}(?:reprov|rejei)|(?:reprov|rejei).{0,40}(?:motivo|reason|justific\w*|raz[aã]o)/i.test(name);
 }
+/** One honest yes/no question per element without literal support, bound to the element so the answer counts. */
+function unsupportedElement(kind: ConfirmationSubject['kind'], name: string): IntentCompilationError {
+  const label = kind === 'activity' ? 'A etapa' : kind === 'field' ? 'O campo' : 'O participante';
+  const question = `${label} “${name}” não aparece com essas palavras no seu pedido. Ela deve fazer parte do processo? Responda sim ou não, ou descreva com suas palavras.`
+    .replace('Ela deve', kind === 'activity' ? 'Ela deve' : 'Ele deve');
+  return new IntentCompilationError(question, question, 'model-divergence', { kind, name });
+}
 const containsQuote = (context: string, quote: string) => normalized(context).includes(normalized(quote));
 function adequateQuote(context: string, quote?: string): boolean {
   if (!quote || !containsQuote(context, quote)) return false;
@@ -406,7 +420,7 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
   for (const actor of intent.actors as Json[]) {
     const key = normalized(actor.name);
     if (!key || roleIndex.has(key)) throw new IntentCompilationError(`Há mais de um ator chamado “${actor.name}”. Esclareça qual tarefa pertence a cada ator.`);
-    if (roleEvidenceText && !roleNameSupported(actor.name, roleEvidenceText)) throw new IntentCompilationError(`O papel “${actor.name}” não aparece na descrição das atividades. Ele corresponde a qual pessoa ou equipe descrita pelo solicitante?`);
+    if (roleEvidenceText && !roleNameSupported(actor.name, roleEvidenceText)) throw unsupportedElement('actor', actor.name);
     if (roleEvidenceText && actor.resolution !== 'requester' && initiatesRequest(actor.name, roleEvidenceText)) {
       actor.resolution = 'requester';
       const index = normalized(roleEvidenceText).indexOf(normalized(actor.name));
@@ -445,7 +459,7 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
     if (!selectedInputs.length) return undefined;
     if (activitySourceText) for (const input of selectedInputs) {
       if (!input.evidence && ['Decisão', 'Motivo da rejeição'].includes(input.name)) continue;
-      if (!input.evidence || !containsQuote(activitySourceText, input.evidence)) throw new IntentCompilationError(`O campo “${input.name}” não foi solicitado com clareza. Ele deve ser coletado neste formulário?`);
+      if (!input.evidence || !containsQuote(activitySourceText, input.evidence)) throw unsupportedElement('field', input.name);
     }
     const fields = selectedInputs.map(input => {
       const specType = fieldTypes[input.type];
@@ -476,9 +490,9 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
   const walk = (steps: StepIntent[]) => {
     for (const step of steps) {
       if (activitySourceText && (!step.evidence || !containsQuote(activitySourceText, step.evidence))) {
-        throw new IntentCompilationError(`A etapa “${step.name}” não está claramente descrita na solicitação. Ela deve existir como atividade do processo?`);
+        throw unsupportedElement('activity', step.name);
       }
-      if (activitySourceText && !stepEvidenceMatchesName(step.name, step.evidence)) throw new IntentCompilationError(`O trecho apresentado não confirma que a etapa “${step.name}” foi solicitada. Confirme a atividade ou corrija sua descrição.`);
+      if (activitySourceText && !stepEvidenceMatchesName(step.name, step.evidence)) throw unsupportedElement('activity', step.name);
       if (options.sourceText && step.evidence && step.actor && !containsQuote(step.evidence, step.actor)) {
         throw new IntentCompilationError(`A solicitação não liga “${step.actor}” à atividade “${step.name}”. Qual papel deve executá-la?`);
       }
