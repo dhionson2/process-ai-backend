@@ -47,3 +47,22 @@ cd process-ai-extension && cp .env.example .env && npm install && npm run build
 - Seletores da extensão presos à versão atual do Modeler (`input.editor-file-input`, `.editor-control-status`, `.editor-dialog-backdrop`, `indicadorNaoSalvo`); o E2E é o alarme.
 - `attachment` do ProcessSpec vira `filepicker`, que o Modeler não admite; o critério «importável» acusa se um cenário gerar esse tipo (nenhum do corpus gera).
 - URL do Modeler em HML, política corporativa de extensões e chave da API Anthropic continuam pendentes (SDD §12).
+
+
+---
+
+## Atualização 23/10/2026 — chat flutuante, ajuste por replanejamento e canal do Modeler
+
+| Onda | O que mudou | Evidência |
+| --- | --- | --- |
+| A · Extensão | Chat ↔ aba do Modeler por `postMessage` (sem service worker no caminho) | fim do «Crio um para você?» repetido |
+| B · Backend | Ajuste = replanejamento completo com preservação (nada some sem pergunta); citação tolera erro de digitação; confirmações em UMA rodada; decisão «Aprovado/Rejeitado» conta como aprovação | placar **18/18**, ajustes **4/4**, 100% importável, US$ 0,35; `tests/refinement-replan.test.ts` |
+| C · Backend | Layout automático com ELK (layered), setas ortogonais, rótulos de data/hora corretos no form-js | exemplos regenerados; replay verde |
+| D · Modeler (branch `feat/process-ai-assistant-bridge`, commit `1fbb16a`, SEM merge) | ADR-0019: canal do assistente na própria janela — `get-state`, `get-xml`, `apply-xml`, `apply-form`, `apply-patch` (renomear/documentar/remover com Ctrl+Z); flag `VITE_BPM_DESIGN_ASSISTANT_CHANNEL=on` | 2.523 testes, lint, build com `verify:bundle`; gates emendados nominalmente (G-8, build-env, premature-consumer-guard) |
+| E · Extensão | Cliente próprio tipado pelo OpenAPI (sem importar o frontend), `npm run pack`, README de distribuição (`ExtensionInstallForcelist`) e identidade | `verify` verde; `release/process-ai-extension-0.2.0.zip` |
+
+Ensaio real com o Claude pelo canal do Modeler (23/10): descrição → fluxo criado pelo chat e desenhado (9,9 s) → ajuste «antes do pagamento, o financeiro confere a justificativa» redesenhado no mesmo fluxo, sem pergunta (18,9 s no total; 17 → 19 elementos). Capturas em `process-ai-extension/e2e/capturas/`.
+
+Para a demo com o canal: Modeler da branch com `VITE_BPM_DESIGN_ASSISTANT_CHANNEL=on` (ex.: porta 5194) e `VITE_MODELER_ORIGINS` da extensão incluindo essa origem. Sem a flag, tudo funciona pela porta «Abrir» (formulário por download).
+
+Pendências: MR da branch do Modeler para o time revisar (ADR-0019); rollout da flag; `apply-patch` com inserção/ligação (vocabulário de posição); identidade 1Doc no backend (ADC-154 do lado do Process AI).
