@@ -51,10 +51,10 @@
     }
   ],
   "checksums": {
-    "process.bpmn": "5b30c861cd34ab243850448cbbc4a91373381e6c3e7c1c4ec8e33b957cd1dddd",
-    "form_inicio.form.json": "a5d669c18c4b872aec86ae9669c10be02a45e5b10b1d8e9648053d9dfb0e2496",
-    "form_gestor.form.json": "39dbbf8d8610944801c8f8bb77d06646697929c8666936a9474047802b11fc83",
-    "form_rh.form.json": "5de17dac807086df14df65ceb03b342122a990271f97bb0fd9dc2ef432277c1f"
+    "process.bpmn": "10c84e760ac22383d53cfc0e068a60e0111687defa6bdcfde635c51f81cae7bf",
+    "form_inicio.form.json": "a6e4724592175a76dc421622263a7f7e7bc991d676b04547d91e6008eda52573",
+    "form_gestor.form.json": "c984f6eaea1d0efedcd6c041223f588c0e2a431dab2520357fb9ffdac5b46d4b",
+    "form_rh.form.json": "89c0502142a7eb56c108c6d6ee7ef6d07f29f846fdb83ce0a346ee8abe77eaa7"
   },
   "notes": [
     "Artefatos destinados a modelagem e prévia; service tasks permanecem declarativas e não executáveis.",

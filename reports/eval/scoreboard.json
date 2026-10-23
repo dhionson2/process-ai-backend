@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-23T00:12:37.030Z",
+  "generatedAt": "2026-10-23T01:17:30.336Z",
   "corpus": [
     {
       "id": "S01-ferias",
@@ -100,6 +100,7 @@
         "passed": 13,
         "passRate": 0.9285714285714286,
         "validRate": 1,
+        "importableRate": 1,
         "meanCoverage": 0.9880952380952381,
         "inventedElements": 0,
         "repeatedQuestions": 0,
@@ -499,7 +500,9 @@
           "forbiddenHits": [],
           "unexpectedTasks": [
             "Informar o motivo ao servidor"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S02-compra",
@@ -886,7 +889,9 @@
           "forbiddenHits": [],
           "unexpectedTasks": [
             "Receber justificativa"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S03-reembolso-duas-aprovacoes",
@@ -1362,7 +1367,9 @@
           "unexpectedTasks": [
             "Informar colaborador da reprovação",
             "Informar colaborador da reprovação"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S04-ferias-incompleto",
@@ -1770,7 +1777,9 @@
             "Registrar férias",
             "Informar motivo da reprovação ao servidor",
             "Solicitar férias"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S05-correcao-ciclo",
@@ -2101,7 +2110,9 @@
             "ratio": 1
           },
           "forbiddenHits": [],
-          "unexpectedTasks": []
+          "unexpectedTasks": [],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S06-contratacao",
@@ -2596,7 +2607,9 @@
           "forbiddenHits": [],
           "unexpectedTasks": [
             "Solicitar abertura de vaga"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S07-viagem",
@@ -2973,7 +2986,9 @@
           "forbiddenHits": [],
           "unexpectedTasks": [
             "Avisar servidor da reprovação"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S08-acesso-sistema",
@@ -3360,7 +3375,9 @@
           "forbiddenHits": [],
           "unexpectedTasks": [
             "Receber a negativa"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S09-sem-decisao",
@@ -3633,7 +3650,9 @@
             "ratio": 1
           },
           "forbiddenHits": [],
-          "unexpectedTasks": []
+          "unexpectedTasks": [],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S10-compra-vaga",
@@ -4041,7 +4060,9 @@
             "Providenciar a compra",
             "Receber a justificativa",
             "Solicitar a compra"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S11-manutencao",
@@ -4422,7 +4443,9 @@
             "ratio": 1
           },
           "forbiddenHits": [],
-          "unexpectedTasks": []
+          "unexpectedTasks": [],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S12-treinamento",
@@ -4792,7 +4815,9 @@
           "unexpectedTasks": [
             "Entrar em lista de espera",
             "Inscrever-se em treinamento"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S13-orcamento-ajuste",
@@ -5115,7 +5140,9 @@
           "forbiddenHits": [],
           "unexpectedTasks": [
             "Pedir orçamento"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         },
         {
           "id": "S14-manutencao-predial",
@@ -5510,7 +5537,9 @@
           "unexpectedTasks": [
             "Avisar morador do motivo da recusa",
             "Abrir chamado de manutenção"
-          ]
+          ],
+          "importable": true,
+          "importProblems": []
         }
       ]
     }

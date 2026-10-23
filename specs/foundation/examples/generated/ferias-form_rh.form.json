@@ -1,5 +1,7 @@
 {
   "type": "default",
+  "id": "Form_form_rh",
+  "schemaVersion": 19,
   "components": [
     {
       "type": "checkbox",

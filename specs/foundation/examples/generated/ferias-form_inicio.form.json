@@ -1,5 +1,7 @@
 {
   "type": "default",
+  "id": "Form_form_inicio",
+  "schemaVersion": 19,
   "components": [
     {
       "type": "datetime",

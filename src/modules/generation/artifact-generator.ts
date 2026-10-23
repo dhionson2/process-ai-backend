@@ -12,7 +12,11 @@ const NS = {
   dc: 'http://www.omg.org/spec/DD/20100524/DC',
   di: 'http://www.omg.org/spec/DD/20100524/DI',
   xsi: 'http://www.w3.org/2001/XMLSchema-instance',
+  // Same targetNamespace bpmn-js writes; the Modeler («Abrir») imports the file as any hand-made diagram.
+  target: 'http://bpmn.io/schema/bpmn',
 };
+/** form-js schema version the Modeler's vendored form-js (1.24.x) writes; older or missing versions are migrated on import. */
+export const FORM_SCHEMA_VERSION = 19;
 
 const xml = (value: unknown): string => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
 const stable = (value: unknown): string => JSON.stringify(value, (_key, item) => {
@@ -65,7 +69,7 @@ function generateBpmn(spec: Dict): string {
   }
   const lines = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    `<bpmn:definitions xmlns:bpmn="${NS.bpmn}" xmlns:bpmndi="${NS.bpmndi}" xmlns:dc="${NS.dc}" xmlns:di="${NS.di}" xmlns:xsi="${NS.xsi}" xmlns:process-ai="urn:process-ai:preview" xmlns:flowable="http://flowable.org/bpmn" id="Definitions_${xml(spec.id)}" targetNamespace="urn:process-design:preview">`,
+    `<bpmn:definitions xmlns:bpmn="${NS.bpmn}" xmlns:bpmndi="${NS.bpmndi}" xmlns:dc="${NS.dc}" xmlns:di="${NS.di}" xmlns:xsi="${NS.xsi}" xmlns:flowable="http://flowable.org/bpmn" id="Definitions_${xml(spec.id)}" targetNamespace="${NS.target}">`,
     `  <bpmn:process id="${xml(spec.id)}" name="${xml(spec.name)}" isExecutable="false">`,
   ];
   for (const node of spec.nodes) {
@@ -136,7 +140,7 @@ function compileForm(form: Dict): Record<string, unknown> {
     return component;
   });
   components.push({ type: 'button', key: 'submit', label: 'Enviar', action: 'submit', id: `Submit_${form.id}` });
-  return { type: 'default', components };
+  return { type: 'default', id: `Form_${form.id}`, schemaVersion: FORM_SCHEMA_VERSION, components };
 }
 
 async function writeExamples(): Promise<void> {

@@ -23,6 +23,8 @@ import { readEnvironment, type Environment } from '../../src/config/env.js';
 import { configuredProvider } from '../../src/modules/ai/provider.factory.js';
 import { InMemoryConversationRepository } from '../../src/modules/projects/conversation.repository.js';
 import { ProviderFailure, type ModelProvider, type ProviderUsage, type StructuredRequest, type StructuredResponse } from '../../src/modules/providers/model-provider.js';
+import { generateArtifacts } from '../../src/modules/generation/artifact-generator.js';
+import { assessModelerImportability } from '../../src/modules/generation/modeler-compat.js';
 import { scenarios, type EvalScenario } from './scenarios.js';
 
 type CallRecord = { latencyMs: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; costUsd?: number; failed?: string };
@@ -33,9 +35,20 @@ type ScenarioResult = {
   forbiddenHits: string[]; unexpectedTasks: string[];
   calls: number; latencyMs: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; costUsd: number | null;
   errorCode?: string;
+  /** "Importável no Modeler": the generated BPMN and forms pass the Modeler's import rules (modeler-compat.ts). */
+  importable?: boolean; importProblems?: string[];
   /** Kept so the scoreboard can be re-scored offline. Synthetic content only. */
   spec?: unknown;
 };
+
+/** Generates the artifacts for a validated spec and judges them by the Modeler's rules; re-runnable offline from a saved spec. */
+export async function importability(spec: unknown): Promise<Pick<ScenarioResult, 'importable' | 'importProblems'>> {
+  if (!spec) return {};
+  const artifacts = await generateArtifacts(spec);
+  if (artifacts.diagnostics.some(item => item.severity === 'error')) return { importable: false, importProblems: artifacts.diagnostics.filter(item => item.severity === 'error').map(item => `${item.code}: ${item.message}`) };
+  const report = await assessModelerImportability(artifacts);
+  return { importable: report.importable, importProblems: report.problems };
+}
 
 const argv = process.argv.slice(2);
 const option = (name: string) => { const index = argv.indexOf(`--${name}`); return index >= 0 ? argv[index + 1] : undefined; };
@@ -154,7 +167,7 @@ async function runScenario(app: Awaited<ReturnType<typeof buildApp>>, recorder: 
     const latest = Math.max(...revisions.map(item => item.revision));
     spec = (await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}/revisions/${latest}` })).json().processSpec;
   }
-  return scoreResult(scenario, { id: scenario.id, title: scenario.title, outcome, clarificationRounds: rounds, questionsAsked: asked.length, repeatedQuestions, askedFirst, ...usage, ...(body.code ? { errorCode: body.code } : {}), spec });
+  return scoreResult(scenario, { id: scenario.id, title: scenario.title, outcome, clarificationRounds: rounds, questionsAsked: asked.length, repeatedQuestions, askedFirst, ...usage, ...(body.code ? { errorCode: body.code } : {}), spec, ...(await importability(spec)) });
 }
 
 type RawResult = Omit<ScenarioResult, 'pass' | 'failureReasons' | 'coverage' | 'forbiddenHits' | 'unexpectedTasks'>;
@@ -168,6 +181,7 @@ export function scoreResult(scenario: EvalScenario, raw: RawResult): ScenarioRes
   if (score?.forbiddenHits.length) failureReasons.push(`inventou: ${score.forbiddenHits.join(', ')}`);
   if (scenario.expectsClarification && !raw.askedFirst) failureReasons.push('não perguntou antes de gerar');
   if (raw.repeatedQuestions > 0) failureReasons.push(`${raw.repeatedQuestions} pergunta(s) repetida(s)`);
+  if (raw.importable === false) failureReasons.push(`não importável no Modeler: ${(raw.importProblems ?? []).join('; ')}`);
   return {
     ...raw, pass: failureReasons.length === 0, failureReasons,
     coverage: score?.coverage ?? { activities: '-', roles: '-', decisions: '-', ratio: 0 },
@@ -185,6 +199,7 @@ export function summarize(results: ScenarioResult[]) {
     passed: results.filter(result => result.pass).length,
     passRate: results.length ? results.filter(result => result.pass).length / results.length : 0,
     validRate: results.length ? valid.length / results.length : 0,
+    importableRate: results.length ? results.filter(result => result.importable === true).length / results.length : 0,
     meanCoverage: results.length ? results.reduce((total, result) => total + result.coverage.ratio, 0) / results.length : 0,
     inventedElements: results.reduce((total, result) => total + result.forbiddenHits.length, 0),
     repeatedQuestions: results.reduce((total, result) => total + result.repeatedQuestions, 0),
@@ -207,7 +222,8 @@ async function rebuildScoreboard() {
     const run = JSON.parse(await readFile(resolve(runsDirectory, file), 'utf8'));
     // Partial runs (--only) are smoke checks; the scoreboard compares full-corpus runs only.
     if (scenarios.some(scenario => !run.scenarioIds?.includes(scenario.id))) continue;
-    run.results = run.results.map((result: ScenarioResult) => { const scenario = scenarios.find(item => item.id === result.id); return scenario ? scoreResult(scenario, result) : result; });
+    // Importability is judged by today's generator and rules, so an old run is re-scored against the current Modeler contract.
+    run.results = await Promise.all(run.results.map(async (result: ScenarioResult) => { const scenario = scenarios.find(item => item.id === result.id); return scenario ? scoreResult(scenario, { ...result, ...(await importability(result.spec)) }) : result; }));
     run.summary = summarize(run.results);
     latest.set(`${run.provider}|${run.model}|${run.label ?? ''}`, run);
   }
@@ -217,18 +233,18 @@ async function rebuildScoreboard() {
   const lines = [
     '# Placar de avaliação — Process AI Studio', '',
     `Gerado em ${scoreboard.generatedAt}. Corpus sintético de ${scenarios.length} cenários (\`scripts/eval/scenarios.ts\`). Cada linha é a execução mais recente de um provider/modelo.`, '',
-    '| Provider | Modelo | Rótulo | Aprovados | Válidos | Cobertura média | Invenções | Perguntas repetidas | Latência média | Tokens/cenário | Custo total | Custo por processo válido |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|',
-    ...runs.map(run => `| ${run.provider} | ${run.model} | ${run.label ?? '—'} | ${run.summary.passed}/${run.summary.scenarios} (${percent(run.summary.passRate)}) | ${percent(run.summary.validRate)} | ${percent(run.summary.meanCoverage)} | ${run.summary.inventedElements} | ${run.summary.repeatedQuestions} | ${(run.summary.meanLatencyMs / 1000).toFixed(1)} s | ${run.summary.tokensPerScenario} | ${usd(run.summary.totalCostUsd)} | ${usd(run.summary.costPerValidProcessUsd)} |`),
+    '| Provider | Modelo | Rótulo | Aprovados | Válidos | Importáveis no Modeler | Cobertura média | Invenções | Perguntas repetidas | Latência média | Tokens/cenário | Custo total | Custo por processo válido |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    ...runs.map(run => `| ${run.provider} | ${run.model} | ${run.label ?? '—'} | ${run.summary.passed}/${run.summary.scenarios} (${percent(run.summary.passRate)}) | ${percent(run.summary.validRate)} | ${percent(run.summary.importableRate ?? 0)} | ${percent(run.summary.meanCoverage)} | ${run.summary.inventedElements} | ${run.summary.repeatedQuestions} | ${(run.summary.meanLatencyMs / 1000).toFixed(1)} s | ${run.summary.tokensPerScenario} | ${usd(run.summary.totalCostUsd)} | ${usd(run.summary.costPerValidProcessUsd)} |`),
     '', '## Detalhe por cenário', '',
-    ...runs.flatMap(run => [`### ${run.provider} / ${run.model}${run.label ? ` (${run.label})` : ''} — ${run.startedAt}`, '', '| Cenário | Resultado | Atividades | Papéis | Decisões | Perguntas | Chamadas | Latência | Falhas |', '|---|---|---|---|---|---|---|---|---|',
-      ...run.results.map((result: ScenarioResult) => `| ${result.id} | ${result.pass ? '✅' : '❌'} ${result.outcome} | ${result.coverage.activities} | ${result.coverage.roles} | ${result.coverage.decisions} | ${result.questionsAsked} | ${result.calls} | ${(result.latencyMs / 1000).toFixed(1)} s | ${result.failureReasons.join('; ') || '—'} |`), '']),
+    ...runs.flatMap(run => [`### ${run.provider} / ${run.model}${run.label ? ` (${run.label})` : ''} — ${run.startedAt}`, '', '| Cenário | Resultado | Importável | Atividades | Papéis | Decisões | Perguntas | Chamadas | Latência | Falhas |', '|---|---|---|---|---|---|---|---|---|---|',
+      ...run.results.map((result: ScenarioResult) => `| ${result.id} | ${result.pass ? '✅' : '❌'} ${result.outcome} | ${result.importable === true ? '✅' : result.importable === false ? '❌' : '—'} | ${result.coverage.activities} | ${result.coverage.roles} | ${result.coverage.decisions} | ${result.questionsAsked} | ${result.calls} | ${(result.latencyMs / 1000).toFixed(1)} s | ${result.failureReasons.join('; ') || '—'} |`), '']),
   ];
   await writeFile(resolve(evalDirectory, 'SCOREBOARD.md'), `${lines.join('\n')}\n`);
   return scoreboard;
 }
 
-export type GateThresholds = { minPassed: number; minValidRate: number; maxInvented: number; maxRepeatedQuestions: number };
+export type GateThresholds = { minPassed: number; minValidRate: number; minImportableRate?: number; maxInvented: number; maxRepeatedQuestions: number };
 
 /** Gate failures for a run summary; an empty list means the gate passes. */
 export function checkGate(summary: ReturnType<typeof summarize>, gate: GateThresholds, stalePrompts = 0): string[] {
@@ -236,6 +252,7 @@ export function checkGate(summary: ReturnType<typeof summarize>, gate: GateThres
   if (stalePrompts > 0) failures.push(`${stalePrompts} prompt(s) mudaram desde a gravação da cassete: rode uma avaliação real (npm run eval:claude) para regravar e medir o efeito`);
   if (summary.passed < gate.minPassed) failures.push(`aprovados ${summary.passed}/${summary.scenarios} < mínimo ${gate.minPassed}`);
   if (summary.validRate < gate.minValidRate) failures.push(`válidos ${percent(summary.validRate)} < mínimo ${percent(gate.minValidRate)}`);
+  if (gate.minImportableRate !== undefined && summary.importableRate < gate.minImportableRate) failures.push(`importáveis no Modeler ${percent(summary.importableRate)} < mínimo ${percent(gate.minImportableRate)}`);
   if (summary.inventedElements > gate.maxInvented) failures.push(`${summary.inventedElements} invenção(ões) > máximo ${gate.maxInvented}`);
   if (summary.repeatedQuestions > gate.maxRepeatedQuestions) failures.push(`${summary.repeatedQuestions} pergunta(s) repetida(s) > máximo ${gate.maxRepeatedQuestions}`);
   return failures;
