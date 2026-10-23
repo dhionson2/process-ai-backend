@@ -51,8 +51,8 @@
     }
   ],
   "checksums": {
-    "process.bpmn": "10c84e760ac22383d53cfc0e068a60e0111687defa6bdcfde635c51f81cae7bf",
-    "form_inicio.form.json": "a6e4724592175a76dc421622263a7f7e7bc991d676b04547d91e6008eda52573",
+    "process.bpmn": "eba53eb0d88c1f7341063f24f519a5814ef81cb430d2ffd06cfeeb16303b6b41",
+    "form_inicio.form.json": "aa2d99d973db6209e4a093358aa723be6c08d20c43d73159cf37baf7378c21ef",
     "form_gestor.form.json": "c984f6eaea1d0efedcd6c041223f588c0e2a431dab2520357fb9ffdac5b46d4b",
     "form_rh.form.json": "89c0502142a7eb56c108c6d6ee7ef6d07f29f846fdb83ce0a346ee8abe77eaa7"
   },

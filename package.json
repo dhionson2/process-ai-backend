@@ -34,6 +34,7 @@
     "@opentelemetry/exporter-trace-otlp-http": "0.223.0",
     "@opentelemetry/sdk-node": "0.223.0",
     "ajv": "^8.17.1",
+    "elkjs": "^0.12.0",
     "fastify": "^5.0.0",
     "jose": "6.2.12",
     "pg": "^8.23.1"

@@ -32,7 +32,7 @@
   "delegatedRules": [],
   "pendingQuestions": [],
   "checksums": {
-    "process.bpmn": "dcb77bb09ac4a7b133671e8f9f6cafce3a7f66c76c36a26aee8c7e0ff9e88581",
+    "process.bpmn": "c77cf754e28e4c14ec1d589eefbbd22df250bb1111f227c8a3b1ad2fefae9a85",
     "frm_param.form.json": "7b429c99c379421cd61719a163212de828e2f53e6510ecaa829dc95cabb91035",
     "frm_approve.form.json": "56b74114e872d5a53531e4bb0ae65a0a711f96cf26de92bbdd34c77055e7a615"
   },

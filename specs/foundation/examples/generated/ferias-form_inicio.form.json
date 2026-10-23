@@ -6,22 +6,22 @@
     {
       "type": "datetime",
       "key": "startDate",
-      "label": "Início das férias",
       "id": "Field_form_inicio_0",
       "validate": {
         "required": true
       },
-      "subtype": "date"
+      "subtype": "date",
+      "dateLabel": "Início das férias"
     },
     {
       "type": "datetime",
       "key": "endDate",
-      "label": "Fim das férias",
       "id": "Field_form_inicio_1",
       "validate": {
         "required": true
       },
-      "subtype": "date"
+      "subtype": "date",
+      "dateLabel": "Fim das férias"
     },
     {
       "type": "textarea",

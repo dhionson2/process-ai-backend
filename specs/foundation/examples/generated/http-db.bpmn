@@ -42,18 +42,18 @@
   </bpmn:process>
   <bpmndi:BPMNDiagram id="Diagram_processo_integracao">
     <bpmndi:BPMNPlane id="Plane_processo_integracao" bpmnElement="processo_integracao">
-      <bpmndi:BPMNShape id="Shape_inicio" bpmnElement="inicio"><dc:Bounds x="110" y="130" width="36" height="36" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_fetch" bpmnElement="fetch"><dc:Bounds x="320" y="130" width="140" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_human" bpmnElement="human"><dc:Bounds x="530" y="130" width="140" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_route" bpmnElement="route"><dc:Bounds x="740" y="130" width="50" height="50" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_update" bpmnElement="update"><dc:Bounds x="950" y="40" width="140" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Shape_fim" bpmnElement="fim"><dc:Bounds x="950" y="220" width="36" height="36" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Edge_f_1" bpmnElement="f_1"><di:waypoint x="146" y="148" /><di:waypoint x="233" y="148" /><di:waypoint x="233" y="170" /><di:waypoint x="320" y="170" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_f_2" bpmnElement="f_2"><di:waypoint x="460" y="170" /><di:waypoint x="530" y="170" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_f_3" bpmnElement="f_3"><di:waypoint x="670" y="170" /><di:waypoint x="705" y="170" /><di:waypoint x="705" y="155" /><di:waypoint x="740" y="155" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_f_4" bpmnElement="f_4"><di:waypoint x="790" y="155" /><di:waypoint x="870" y="155" /><di:waypoint x="870" y="80" /><di:waypoint x="950" y="80" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_f_5" bpmnElement="f_5"><di:waypoint x="790" y="155" /><di:waypoint x="870" y="155" /><di:waypoint x="870" y="238" /><di:waypoint x="950" y="238" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Edge_f_6" bpmnElement="f_6"><di:waypoint x="1090" y="80" /><di:waypoint x="1020" y="80" /><di:waypoint x="1020" y="238" /><di:waypoint x="950" y="238" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Shape_inicio" bpmnElement="inicio"><dc:Bounds x="110" y="90" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_fetch" bpmnElement="fetch"><dc:Bounds x="216" y="68" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_human" bpmnElement="human"><dc:Bounds x="426" y="68" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_route" bpmnElement="route"><dc:Bounds x="636" y="83" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_update" bpmnElement="update"><dc:Bounds x="756" y="60" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_fim" bpmnElement="fim"><dc:Bounds x="966" y="88" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_f_1" bpmnElement="f_1"><di:waypoint x="146" y="108" /><di:waypoint x="216" y="108" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_f_2" bpmnElement="f_2"><di:waypoint x="356" y="108" /><di:waypoint x="426" y="108" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_f_3" bpmnElement="f_3"><di:waypoint x="566" y="108" /><di:waypoint x="636" y="108" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_f_4" bpmnElement="f_4"><di:waypoint x="686" y="100" /><di:waypoint x="756" y="100" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_f_5" bpmnElement="f_5"><di:waypoint x="686" y="117" /><di:waypoint x="696" y="117" /><di:waypoint x="696" y="170" /><di:waypoint x="906" y="170" /><di:waypoint x="906" y="112" /><di:waypoint x="966" y="112" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_f_6" bpmnElement="f_6"><di:waypoint x="896" y="100" /><di:waypoint x="966" y="100" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>
