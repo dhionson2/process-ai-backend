@@ -229,7 +229,7 @@ test('BusinessIntent não mascara decisão descrita que o modelo omitiu do fluxo
 test('evidência de uma palavra não confirma atividade só por coincidência literal', async () => {
   const text = 'O gestor aprova ou reprova o pedido.';
   const intent = groundedIntent(text, [{ kind: 'approval', name: 'Gestor aprova ou reprova', actor: 'gestor', evidence: 'Gestor' }], [{ name: 'gestor', evidence: 'O gestor aprova ou reprova' }]);
-  await assert.rejects(() => compileBusinessIntent(intent, { ...options, sourceText: text, activitySourceText: text }), /citação literal suficiente/i);
+  await assert.rejects(() => compileBusinessIntent(intent, { ...options, sourceText: text, activitySourceText: text }), /não aparece com essas palavras no seu pedido/i);
 });
 
 test('flag de motivo condicional do modelo não cria regra de negócio sem evidência', async () => {

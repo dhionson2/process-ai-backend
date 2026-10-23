@@ -2,6 +2,33 @@
 
 Orquestração conversacional, seleção de conhecimento versionado, propostas, correções limitadas e refinamentos por operações tipadas. Não executa actions nem publica processos.
 
+## Pipeline de um turno
+
+`orchestrator.ts` só compõe; cada etapa fica em `pipeline/`:
+
+```
+turn-context  → monta histórico, fatos, conhecimento, schema e prompt (estável primeiro, volátil por último)
+interpret     → chamada ao modelo + normalização + 1 correção estrutural
+recoverRepeatedQuestion → pergunta já respondida volta ao modelo, nunca ao usuário
+readiness     → gate determinístico antes da 1ª proposta (readiness.ts)
+compile       → compilador; omissão do modelo recebe 1 correção dirigida
+validate      → Validation Engine; 1 correção se nenhuma correção semântica rodou
+finalize      → artefatos BPMN/Form ou pergunta orientada pelos diagnósticos
+```
+
+Todas as chamadas passam por `ModelCalls`, que acumula latência, tokens, cache e custo. A política de correções fica em `RepairBudget` (`pipeline/types.ts`), no máximo uma estrutural e uma semântica por turno. O GraphIR (`AI_GRAPH_IR_MODE=controlled`) é um caminho experimental e opt-in; o BusinessIntent é o caminho suportado.
+
+## Providers, cascata e observabilidade
+
+- `AI_PROVIDER=anthropic`: Messages API pelo SDK oficial, com saída estruturada (`output_config.format`) sobre uma projeção do contrato (`oneOf`→`anyOf`, sem restrições de tamanho, envelope `response`). Cache no system prompt e no prefixo estável do prompt (perfil e conhecimento), que os reparos reaproveitam. Sem parâmetros de amostragem; a profundidade vem de `ANTHROPIC_EFFORT`. Fallback de recusa no servidor (`fallbacks: "default"`) nos modelos que o aceitam. O custo do run é estimado pelo preço de tabela.
+- `AI_PROVIDER=claude-cli`: Claude Code CLI local, só para demo.
+- `AI_REPAIR_MODEL`: cascata. A chamada principal usa `AI_MODEL` e as correções escalam para este modelo. O cache de prompt é por modelo, então meça no placar antes de adotar.
+- OpenTelemetry: com `OTEL_EXPORTER_OTLP_ENDPOINT`, cada turno vira o span `process_ai.turn`, com um evento por etapa e atributos de provider, modelo, tokens, cache, custo e resultado. Nunca leva prompt nem texto do usuário.
+
+## Gate de qualidade
+
+`npm run eval:claude` roda o corpus sintético contra o modelo real e grava uma cassete em `reports/eval/cassettes/`. O `npm test` (`tests/eval-gate.test.ts`) e o `npm run eval:replay` reexecutam o corpus contra a cassete, de forma determinística e sem rede, e cobram os limites de `scripts/eval/gate.json`. Um prompt alterado torna a cassete desatualizada e reprova o gate até uma nova gravação real.
+
 Geração usa uma saída estruturada interna `BusinessIntent`, com atores, atividades, decisões, campos, regras, sugestões, evidências e configuração pendente, sem IDs BPMN ou sequence flows. O backend verifica citações literais de pelo menos duas palavras informativas contra a mensagem do usuário ou respostas confirmadas; conhecimento e inferências nunca confirmam fatos do processo. Sugestões não são compiladas. Uma decisão descrita que não apareça como aprovação/decisão no plano bloqueia a prévia. A biblioteca genérica de padrões compõe o grafo BPMN, variáveis e formulários; ProcessSpec v1 segue sendo validado pelo Validation Engine canônico. Papéis conhecidos sem identidade ou grupo configurado podem compor uma prévia `needs-input`, com pergunta vinculada ao nó. BPMN omite `candidateGroups` nesse caso e a publicação permanece bloqueada. Regras condicionais explícitas, como motivo em caso de reprovação, permanecem no ProcessSpec e não dependem da validação do form-js. O contrato limita atores, campos e itens por ramo; o orquestrador também limita o plano inteiro a 60 atividades e oito níveis de decisão.
 
 Refinamentos usam operações de domínio permitidas, preservam o restante do ProcessSpec e aceitam `baseRevision`. `insertApprovalBefore` exige uma atividade-alvo e um destino explícito para reprovação. Quando a segunda aprovação exige justificativa e o destino notifica o usuário, o compilador preserva a notificação anterior e cria uma projeção declarativa ligada à nova justificativa.
@@ -14,4 +41,4 @@ O schema usa migrations SQL versionadas em `migrations/`, aplicadas somente pelo
 
 Grounding semântico controlado é opt-in via `AI_SEMANTIC_GROUNDING_MODE=controlled`; `legacy` continua sendo o padrão para comparação. O modo controlado exige proveniência literal válida e compara ação, objeto, papel explicitamente citado e polaridade. Só morfologia de ação comum pode normalizar (por exemplo, infinitivo/nominalização); sinônimos não são assumidos. Casos não analisáveis falham fechados como inconclusivos. Perguntas persistem internamente com `questionId`, `requirementId`, `semanticSlot` e estado, e respostas associam `sourceId` ao turno salvo; esses metadados não integram a resposta pública atual. Correção numérica entre turnos é reconciliada somente quando há exatamente um limite explicitamente identificado; com vários candidatos, o resultado é ambíguo e nenhum valor é promovido. Eventos numéricos reconciliados são adicionados ao array `confirmed_facts` JSONB existente com estados `superseded`/`confirmed` e referências de origem; o histórico original continua armazenado. Não há nova tabela ou migration. A reconciliação linguística fora dos slots controlados segue inconclusiva e a reconciliação ampla/durável fica para V2-02C.
 
-O contrato REST público mantém OpenAPI 1.1.0; os schemas de intenção/refinamento são internos ao AI Gateway e não substituem nem enfraquecem o ProcessSpec. Integrações permanecem declarativas e publicação continua bloqueada. Uma saída estruturalmente válida não basta: os testes com Ollama e a fidelidade ao pedido são gates de aceite separados dos testes simulados. Para desenvolvimento local, `AI_MAX_OUTPUT_TOKENS=2048` reduz o custo máximo por resposta estruturada; aumente apenas se medições com o modelo e hardware de destino mostrarem truncamento legítimo.
+O contrato REST público mantém OpenAPI 1.3.0 (aditiva sobre 1.1.0: recovery, understanding, telemetry e evaluation/scoreboard em 1.2.0; turnos assíncronos com SSE em 1.3.0; ledger, diff e restauração em 1.4.0; segurança para piloto em 1.5.0); os schemas de intenção/refinamento são internos ao AI Gateway e não substituem nem enfraquecem o ProcessSpec. Integrações permanecem declarativas e publicação continua bloqueada. Uma saída estruturalmente válida não basta: os testes com Ollama e a fidelidade ao pedido são gates de aceite separados dos testes simulados. Para desenvolvimento local, `AI_MAX_OUTPUT_TOKENS=2048` reduz o custo máximo por resposta estruturada; aumente apenas se medições com o modelo e hardware de destino mostrarem truncamento legítimo.

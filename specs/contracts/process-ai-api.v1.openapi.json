@@ -2,9 +2,10 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Process AI Backend API",
-    "version": "1.1.0",
+    "version": "1.5.0",
     "description": "API versionada para ProcessSpec, geração, validação e modelagem conversacional. Não executa conectores nem publica processos."
   },
+  "security": [{ "bearerAuth": [] }, {}],
   "servers": [
     {
       "url": "http://127.0.0.1:3333"
@@ -395,7 +396,8 @@
               "type": "string",
               "format": "uuid"
             }
-          }
+          },
+          { "$ref": "#/components/parameters/PreferAsync" }
         ],
         "requestBody": {
           "required": true,
@@ -437,6 +439,7 @@
           }
         },
         "responses": {
+          "202": { "description": "Turno aceito para processamento assíncrono (somente com Prefer: respond-async). Acompanhe por GET /api/v1/generation-runs/{runId}/events.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenerationAccepted" } } } },
           "200": {
             "description": "Resultado do turno conversacional",
             "content": {
@@ -551,7 +554,8 @@
               "type": "string",
               "format": "uuid"
             }
-          }
+          },
+          { "$ref": "#/components/parameters/PreferAsync" }
         ],
         "requestBody": {
           "required": true,
@@ -597,6 +601,7 @@
           }
         },
         "responses": {
+          "202": { "description": "Turno aceito para processamento assíncrono (somente com Prefer: respond-async). Acompanhe por GET /api/v1/generation-runs/{runId}/events.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenerationAccepted" } } } },
           "200": {
             "description": "Resultado do turno conversacional",
             "content": {
@@ -704,7 +709,8 @@
               "type": "string",
               "format": "uuid"
             }
-          }
+          },
+          { "$ref": "#/components/parameters/PreferAsync" }
         ],
         "requestBody": {
           "required": true,
@@ -755,6 +761,7 @@
           }
         },
         "responses": {
+          "202": { "description": "Turno aceito para processamento assíncrono (somente com Prefer: respond-async). Acompanhe por GET /api/v1/generation-runs/{runId}/events.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenerationAccepted" } } } },
           "200": {
             "description": "Resultado do turno conversacional",
             "content": {
@@ -848,6 +855,90 @@
               }
             }
           }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/understanding": {
+      "get": {
+        "summary": "O que o sistema entendeu e o que ainda falta",
+        "description": "Projeção somente leitura: fatos confirmados, perguntas pendentes e visão de negócio da revisão mais recente (participantes, etapas, decisões, campos, origem de cada item e pendências). Não altera a sessão.",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Entendimento atual da sessão",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SessionUnderstanding" } } }
+          },
+          "404": { "description": "Sessão inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/telemetry": {
+      "get": {
+        "summary": "Custo, tokens, latência e etapas por turno da sessão",
+        "description": "Construído somente a partir das métricas persistidas dos generation runs; não contém prompts nem respostas do modelo. costUsd é null quando o provedor não informa custo.",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Telemetria da sessão", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SessionTelemetry" } } } },
+          "404": { "description": "Sessão inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/v1/evaluation/scoreboard": {
+      "get": {
+        "summary": "Placar da avaliação offline por provider/modelo",
+        "description": "Resultado de `npm run eval` sobre o corpus sintético versionado em scripts/eval/scenarios.ts. Somente leitura; os ProcessSpecs gerados são omitidos.",
+        "responses": {
+          "200": { "description": "Placar", "content": { "application/json": { "schema": { "type": "object", "required": ["generatedAt", "corpus", "runs"], "properties": { "generatedAt": { "type": "string" }, "corpus": { "type": "array", "items": { "type": "object" } }, "runs": { "type": "array", "items": { "type": "object", "additionalProperties": true } } } } } } },
+          "404": { "description": "Nenhuma avaliação registrada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/requirements/{requirementId}": {
+      "put": {
+        "summary": "Veredito do solicitante sobre um item do ledger",
+        "description": "confirmed: o item entra como fato no próximo turno; rejected: o item entra como restrição e uma proposta que ainda o contenha recebe uma correção dirigida ao modelo; proposed: remove o veredito.",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "requirementId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["state"], "properties": { "state": { "type": "string", "enum": ["proposed", "confirmed", "rejected"] } } } } } },
+        "responses": {
+          "200": { "description": "Item atualizado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LedgerItem" } } } },
+          "400": { "description": "Estado inválido", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } },
+          "404": { "description": "Sessão ou item inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/revisions/{revision}/diff": {
+      "get": {
+        "summary": "O que mudou entre duas revisões, em termos de negócio",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "revision", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } },
+          { "name": "against", "in": "query", "required": false, "description": "Revisão de comparação; padrão: a revisão base.", "schema": { "type": "integer", "minimum": 0 } }
+        ],
+        "responses": {
+          "200": { "description": "Diferenças", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionDiff" } } } },
+          "404": { "description": "Sessão ou revisão inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/v1/design-sessions/{sessionId}/revisions/{revision}/restore": {
+      "post": {
+        "summary": "Desfazer sem perder histórico: propõe uma nova revisão igual a uma anterior",
+        "parameters": [
+          { "name": "sessionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "revision", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["baseRevision"], "properties": { "baseRevision": { "type": "integer", "minimum": 0 } } } } } },
+        "responses": {
+          "200": { "description": "Nova revisão proposta (aceite continua explícito)", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": true } } } },
+          "404": { "description": "Sessão ou revisão inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } },
+          "409": { "description": "Revisão base desatualizada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
         }
       }
     },
@@ -1246,6 +1337,19 @@
         }
       }
     },
+    "/api/v1/generation-runs/{runId}/events": {
+      "get": {
+        "summary": "Progresso de um turno em Server-Sent Events",
+        "description": "Eventos `stage` ({type, stage, status}) enquanto o pipeline avança, seguidos de um único `result` (mesmo corpo da resposta síncrona do turno) ou `error` (ApiError com recovery). Quem conecta depois recebe a sequência inteira enquanto o run estiver retido em memória; fora disso, o resultado vem do run persistido, ou um evento `status` quando o run ainda não terminou. Barramento de eventos em processo: uma única instância nesta POC.",
+        "parameters": [
+          { "name": "runId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Fluxo SSE", "content": { "text/event-stream": { "schema": { "type": "string" } } } },
+          "404": { "description": "Run inexistente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
     "/api/v1/generation-runs/{runId}": {
       "get": {
         "parameters": [
@@ -1285,6 +1389,18 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT", "description": "1.5.0: com AUTH_MODE=oidc, todas as rotas /api/v1 exigem token do emissor configurado; o tenant vem da claim configurada (OIDC_TENANT_CLAIM) e POST/PUT podem exigir OIDC_WRITE_ROLE. Respostas: 401 (AUTH_REQUIRED, AUTH_INVALID, AUTH_TENANT_MISSING), 403 (FORBIDDEN) e 429 (TURN_RATE_LIMITED nas rotas de geração), sempre com recovery. Com AUTH_MODE=off (desenvolvimento local) nenhum token é exigido." }
+    },
+    "parameters": {
+      "PreferAsync": {
+        "name": "Prefer",
+        "in": "header",
+        "required": false,
+        "description": "Envie `respond-async` para receber 202 assim que o generation run existir; sem o cabeçalho o turno é síncrono, como no contrato 1.x anterior.",
+        "schema": { "type": "string", "examples": ["respond-async"] }
+      }
+    },
     "schemas": {
       "ProcessSpec": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2549,6 +2665,9 @@
               "repairAttempts": {
                 "type": "integer",
                 "maximum": 1
+              },
+              "recovery": {
+                "$ref": "#/components/schemas/RecoveryGuidance"
               }
             }
           }
@@ -2685,7 +2804,133 @@
             "items": {
               "$ref": "#/components/schemas/Diagnostic"
             }
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/RecoveryGuidance"
           }
+        }
+      },
+      "UnderstandingItem": {
+        "type": "object",
+        "required": ["label", "origin", "confirmed"],
+        "properties": {
+          "label": { "type": "string" },
+          "detail": { "type": "string" },
+          "origin": { "type": "string", "enum": ["user", "confirmed-answer", "inference", "unknown"] },
+          "confirmed": { "type": "boolean" }
+        }
+      },
+      "SessionUnderstanding": {
+        "type": "object",
+        "required": ["sessionId", "currentRevision", "confirmedFacts", "pendingQuestions", "proposal", "requirements"],
+        "properties": {
+          "requirements": { "type": "array", "description": "Ledger persistido da sessão (1.4.0).", "items": { "$ref": "#/components/schemas/LedgerItem" } },
+          "sessionId": { "type": "string", "format": "uuid" },
+          "currentRevision": { "type": "integer", "minimum": 0 },
+          "confirmedFacts": { "type": "array", "items": { "type": "object", "required": ["question", "answer", "state"], "properties": { "question": { "type": "string" }, "answer": { "type": "string" }, "state": { "type": "string" }, "confirmedAt": { "type": "string" } } } },
+          "pendingQuestions": { "type": "array", "items": { "type": "object", "required": ["question", "blocking"], "properties": { "question": { "type": "string" }, "blocking": { "type": "boolean" } } } },
+          "proposal": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "required": ["revision", "status", "processName", "actors", "activities", "decisions", "fields", "pending", "provenance"],
+                "properties": {
+                  "revision": { "type": "integer", "minimum": 1 },
+                  "status": { "type": "string" },
+                  "processName": { "type": "string" },
+                  "actors": { "type": "array", "items": { "$ref": "#/components/schemas/UnderstandingItem" } },
+                  "activities": { "type": "array", "items": { "$ref": "#/components/schemas/UnderstandingItem" } },
+                  "decisions": { "type": "array", "items": { "type": "object", "required": ["label", "outcomes"], "properties": { "label": { "type": "string" }, "outcomes": { "type": "array", "items": { "type": "string" } } } } },
+                  "fields": { "type": "array", "items": { "type": "object", "required": ["form", "label", "type", "required"], "properties": { "form": { "type": "string" }, "label": { "type": "string" }, "type": { "type": "string" }, "required": { "type": "boolean" } } } },
+                  "pending": { "type": "array", "items": { "type": "string" } },
+                  "provenance": { "type": "object", "required": ["user", "confirmedAnswer", "inference", "unconfirmed"], "properties": { "user": { "type": "integer" }, "confirmedAnswer": { "type": "integer" }, "inference": { "type": "integer" }, "unconfirmed": { "type": "integer" } } }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "SessionTelemetry": {
+        "type": "object",
+        "required": ["sessionId", "runs", "totals"],
+        "properties": {
+          "sessionId": { "type": "string", "format": "uuid" },
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "status", "createdAt", "latencyMs", "calls", "inputTokens", "cachedInputTokens", "outputTokens", "costUsd", "repairAttempts", "stages"],
+              "properties": {
+                "id": { "type": "string", "format": "uuid" },
+                "status": { "type": "string" },
+                "provider": { "type": "string" },
+                "model": { "type": "string" },
+                "createdAt": { "type": "string" },
+                "latencyMs": { "type": "integer", "minimum": 0 },
+                "calls": { "type": "integer", "minimum": 0 },
+                "inputTokens": { "type": "integer", "minimum": 0 },
+                "cachedInputTokens": { "type": "integer", "minimum": 0 },
+                "outputTokens": { "type": "integer", "minimum": 0 },
+                "costUsd": { "type": ["number", "null"] },
+                "repairAttempts": { "type": "integer", "minimum": 0 },
+                "stages": { "type": "array", "items": { "type": "object", "required": ["stage", "status"], "properties": { "stage": { "type": "string" }, "status": { "type": "string" } } } },
+                "errorCode": { "type": "string" }
+              }
+            }
+          },
+          "totals": {
+            "type": "object",
+            "required": ["runs", "validated", "calls", "latencyMs", "inputTokens", "cachedInputTokens", "outputTokens", "cacheHitRate", "costUsd"],
+            "properties": {
+              "runs": { "type": "integer" }, "validated": { "type": "integer" }, "calls": { "type": "integer" }, "latencyMs": { "type": "integer" },
+              "inputTokens": { "type": "integer" }, "cachedInputTokens": { "type": "integer" }, "outputTokens": { "type": "integer" },
+              "cacheHitRate": { "type": "number", "minimum": 0, "maximum": 1 }, "costUsd": { "type": ["number", "null"] }
+            }
+          }
+        }
+      },
+      "GenerationAccepted": {
+        "type": "object",
+        "required": ["generationRunId", "status"],
+        "properties": {
+          "generationRunId": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "const": "generating" }
+        }
+      },
+      "LedgerItem": {
+        "type": "object",
+        "required": ["id", "kind", "label", "origin", "state"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "kind": { "type": "string", "enum": ["actor", "activity", "decision", "field"] },
+          "label": { "type": "string" },
+          "origin": { "type": "string", "enum": ["user", "confirmed-answer", "inference", "unknown"] },
+          "state": { "type": "string", "enum": ["proposed", "confirmed", "rejected"] },
+          "inLatestRevision": { "type": "boolean" }
+        }
+      },
+      "RevisionDiff": {
+        "type": "object",
+        "required": ["from", "to", "changes", "totals"],
+        "properties": {
+          "from": { "type": "integer", "minimum": 0 },
+          "to": { "type": "integer", "minimum": 1 },
+          "changes": { "type": "array", "items": { "type": "object", "required": ["kind", "area", "description"], "properties": { "kind": { "type": "string", "enum": ["added", "removed", "changed"] }, "area": { "type": "string", "enum": ["etapa", "decisão", "papel", "campo", "caminho"] }, "description": { "type": "string" } } } },
+          "totals": { "type": "object", "required": ["added", "removed", "changed"], "properties": { "added": { "type": "integer" }, "removed": { "type": "integer" }, "changed": { "type": "integer" } } }
+        }
+      },
+      "RecoveryGuidance": {
+        "type": "object",
+        "description": "Orientação de recuperação para a pessoa usuária. O campo code continua sendo o contrato para máquinas; nenhum gate é relaxado.",
+        "required": ["category", "title", "message", "actions", "preserved"],
+        "properties": {
+          "category": { "type": "string", "enum": ["missing-information", "interpretation-divergence", "model-output-invalid", "input-too-large", "provider-unavailable", "configuration", "conflict", "invalid-request", "unexpected"] },
+          "title": { "type": "string" },
+          "message": { "type": "string" },
+          "actions": { "type": "array", "items": { "type": "string", "enum": ["answer", "rephrase", "retry", "wait", "shorten", "reload", "contact-admin"] } },
+          "preserved": { "type": "boolean", "description": "Texto enviado e revisão atual foram preservados." },
+          "retryAfterMs": { "type": "integer", "minimum": 0 }
         }
       },
       "ProposalResult": {

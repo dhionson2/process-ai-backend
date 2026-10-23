@@ -649,7 +649,7 @@ test('provider simulado percorre o orquestrador e mantém Verificação de compl
   };
   for (const mode of ['legacy', 'controlled'] as const) {
     const provider = new QueueProvider([intent]);
-    const result = await new AiOrchestrator(provider, 'local-model', environment({ aiSemanticGroundingMode: mode })).generate({ text: evidence, history: [] });
+    const result = await new AiOrchestrator(provider, 'local-model', environment({ aiReadinessGate: 'off', aiSemanticGroundingMode: mode })).generate({ text: evidence, history: [] });
     assert.equal(result.kind, 'proposed_spec', `${mode} must produce the explicitly requested activity`);
     if (result.kind === 'proposed_spec') {
       assert.ok(result.spec.nodes.some((node: any) => node.type === 'userTask' && node.name === 'Verificação de completude da solicitação'));
@@ -680,7 +680,7 @@ test('orquestrador audita Ledger completo em shadow: atividade inventada rejeita
     rules: [], suggestions: [], pendingConfiguration: [],
   };
   const provider = new QueueProvider([intent]);
-  const generated = await new AiOrchestrator(provider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: source, sourceMessageId: messageId, history: [], requirementLedger: ledger });
+  const generated = await new AiOrchestrator(provider, 'local-model', environment({ aiReadinessGate: 'off', aiSemanticGroundingMode: 'controlled' })).generate({ text: source, sourceMessageId: messageId, history: [], requirementLedger: ledger });
   assert.equal(generated.kind, 'proposed_spec');
   const shadow = generated.diagnostics?.find(item => item.stage === 'requirement-coverage-shadow');
   assert.equal(shadow?.details.extractionComplete, true);
@@ -692,7 +692,7 @@ test('orquestrador audita Ledger completo em shadow: atividade inventada rejeita
   inventedIntent.activities.push({ kind: 'task', name: 'Autorizar pagamento', actor: 'Gestor', evidence: activityQuote });
   const inventedProvider = new QueueProvider([inventedIntent]);
   await assert.rejects(
-    () => new AiOrchestrator(inventedProvider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: source, sourceMessageId: messageId, history: [], requirementLedger: { ...ledger, requirements: [ledger.requirements[0]] } }),
+    () => new AiOrchestrator(inventedProvider, 'local-model', environment({ aiReadinessGate: 'off', aiSemanticGroundingMode: 'controlled' })).generate({ text: source, sourceMessageId: messageId, history: [], requirementLedger: { ...ledger, requirements: [ledger.requirements[0]] } }),
     (error: any) => {
       assert.equal(error.code, 'SEMANTIC_GROUNDING_DIVERGENT');
       const rawIntentAudit = error.diagnostics?.find((item: any) => item.stage === 'requirement-coverage-shadow');
@@ -713,7 +713,7 @@ test('orquestrador controlado aceita o papel correto com paráfrase e rejeita pa
     rules: [], suggestions: [], pendingConfiguration: [],
   };
   const validProvider = new QueueProvider([base]);
-  const valid = await new AiOrchestrator(validProvider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: source, history: [] });
+  const valid = await new AiOrchestrator(validProvider, 'local-model', environment({ aiReadinessGate: 'off', aiSemanticGroundingMode: 'controlled' })).generate({ text: source, history: [] });
   assert.equal(valid.kind, 'proposed_spec');
   assert.equal(validProvider.prompts.length, 1);
 
@@ -725,7 +725,7 @@ test('orquestrador controlado aceita o papel correto com paráfrase e rejeita pa
     const candidate = structuredClone(base);
     mutate(candidate);
     const provider = new QueueProvider([candidate]);
-    await assert.rejects(() => new AiOrchestrator(provider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: source, history: [] }));
+    await assert.rejects(() => new AiOrchestrator(provider, 'local-model', environment({ aiReadinessGate: 'off', aiSemanticGroundingMode: 'controlled' })).generate({ text: source, history: [] }));
     assert.equal(provider.prompts.length, 1);
   }
   const deniedSource = 'O Gestor não aprova a solicitação.';
@@ -734,7 +734,7 @@ test('orquestrador controlado aceita o papel correto com paráfrase e rejeita pa
   deniedIntent.actors[0].evidence = deniedSource;
   deniedIntent.activities[0].evidence = deniedSource;
   const deniedProvider = new QueueProvider([deniedIntent]);
-  await assert.rejects(() => new AiOrchestrator(deniedProvider, 'local-model', environment({ aiSemanticGroundingMode: 'controlled' })).generate({ text: deniedSource, history: [] }));
+  await assert.rejects(() => new AiOrchestrator(deniedProvider, 'local-model', environment({ aiReadinessGate: 'off', aiSemanticGroundingMode: 'controlled' })).generate({ text: deniedSource, history: [] }));
   assert.equal(deniedProvider.prompts.length, 1, 'explicit source negation cannot confirm the positive activity');
 });
 

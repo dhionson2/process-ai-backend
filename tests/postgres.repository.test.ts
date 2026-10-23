@@ -118,9 +118,31 @@ test('PostgreSQL persiste sessões e revisões com isolamento tenant e controle 
     assert.deepEqual(await repository.listConfirmedFacts(tenant, created.sessionId), [fact]);
     assert.equal((await repository.getRun(tenant, run.id))?.status, 'validated');
     assert.equal((await repository.listRevisions(tenant, created.sessionId)).length, 2);
+    assert.deepEqual((await repository.listRuns(tenant, created.sessionId)).map(item => [item.id, item.metrics]), [[run.id, { latencyMs: 11, usage: { inputTokens: 20, outputTokens: 10 } }]]);
+    assert.deepEqual(await repository.listRuns(`${tenant}-other`, created.sessionId), [], 'runs isolados por tenant');
+    await repository.syncRequirements(tenant, created.sessionId, 1, [{ kind: 'activity', label: 'Aprovar', origin: 'user' }, { kind: 'actor', label: 'Gestor', origin: 'inference' }]);
+    await repository.syncRequirements(tenant, created.sessionId, 2, [{ kind: 'activity', label: 'Aprovar', origin: 'inference' }]);
+    const ledger = await repository.listRequirements(tenant, created.sessionId);
+    const approve = ledger.find(item => item.label === 'Aprovar')!;
+    assert.deepEqual([approve.origin, approve.firstRevision, approve.lastRevision, approve.state], ['user', 1, 2, 'proposed'], 'origem declarada nunca rebaixa para inferência');
+    assert.equal((await repository.setRequirementState(tenant, created.sessionId, approve.id, 'rejected')).state, 'rejected');
+    await repository.syncRequirements(tenant, created.sessionId, 3, [{ kind: 'activity', label: 'Aprovar', origin: 'user' }]);
+    assert.equal((await repository.listRequirements(tenant, created.sessionId)).find(item => item.id === approve.id)?.state, 'rejected', 'sincronização nunca apaga o veredito');
+    await assert.rejects(() => repository.setRequirementState(`${tenant}-other`, created.sessionId, approve.id, 'confirmed'));
+    await repository.saveAcceptedExample(tenant, created.sessionId, 1, 'pedido sintético', 'resumo');
+    await repository.saveAcceptedExample(tenant, created.sessionId, 1, 'pedido sintético', 'resumo');
+    assert.equal((await repository.listAcceptedExamples(tenant, 10)).length, 1, 'exemplo idempotente por revisão');
+    assert.deepEqual(await repository.listAcceptedExamples(`${tenant}-other`, 10), [], 'exemplos isolados por tenant');
+    await repository.appendAudit({ tenantId: tenant, subject: 'ana', action: 'POST /api/v1/projects', sessionId: created.sessionId, statusCode: 201, details: { revision: '1' } });
+    const audit = await repository.listAudit(tenant, 10);
+    assert.deepEqual(audit.map(event => [event.subject, event.action, event.statusCode, event.sessionId]), [['ana', 'POST /api/v1/projects', 201, created.sessionId]]);
+    assert.deepEqual(await repository.listAudit(`${tenant}-other`, 10), [], 'auditoria isolada por tenant');
   } finally {
+    await pool.query('DELETE FROM process_ai_audit_events WHERE tenant_id=$1', [tenant]);
     await pool.query('DELETE FROM process_ai_generation_runs WHERE tenant_id=$1', [tenant]);
     await pool.query('DELETE FROM process_ai_messages WHERE tenant_id=$1', [tenant]);
+    await pool.query('DELETE FROM process_ai_requirements WHERE tenant_id=$1', [tenant]);
+    await pool.query('DELETE FROM process_ai_accepted_examples WHERE tenant_id=$1', [tenant]);
     await pool.query('DELETE FROM process_ai_revisions WHERE tenant_id=$1', [tenant]);
     await pool.query('DELETE FROM process_ai_sessions WHERE tenant_id=$1', [tenant]);
     await pool.query('DELETE FROM process_ai_projects WHERE tenant_id=$1', [tenant]);
@@ -182,6 +204,8 @@ test('PostgreSQL grava turno e fatos atomicamente, rejeita perguntas antigas, se
     const cleanup = new Pool({ connectionString: isolatedTestDatabase });
     await cleanup.query('DELETE FROM process_ai_generation_runs WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_messages WHERE tenant_id=$1', [tenant]);
+    await cleanup.query('DELETE FROM process_ai_requirements WHERE tenant_id=$1', [tenant]);
+    await cleanup.query('DELETE FROM process_ai_accepted_examples WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_revisions WHERE tenant_id=$1', [tenant]);
     if (created) await cleanup.query('DELETE FROM process_ai_sessions WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_projects WHERE tenant_id=$1', [tenant]);
@@ -283,6 +307,8 @@ test('PostgreSQL reverte proposta, mensagem e run na falha de conclusão e permi
     if (created) {
       await admin.query('DELETE FROM process_ai_generation_runs WHERE tenant_id=$1', [tenant]);
       await admin.query('DELETE FROM process_ai_messages WHERE tenant_id=$1', [tenant]);
+      await admin.query('DELETE FROM process_ai_requirements WHERE tenant_id=$1', [tenant]);
+      await admin.query('DELETE FROM process_ai_accepted_examples WHERE tenant_id=$1', [tenant]);
       await admin.query('DELETE FROM process_ai_revisions WHERE tenant_id=$1', [tenant]);
       await admin.query('DELETE FROM process_ai_sessions WHERE tenant_id=$1', [tenant]);
       await admin.query('DELETE FROM process_ai_projects WHERE tenant_id=$1', [tenant]);
@@ -323,6 +349,8 @@ test('PostgreSQL retry durante run ativo e após interrupção não chama provid
     await app.close();
     await admin.query('DELETE FROM process_ai_generation_runs WHERE tenant_id=$1', [tenant]);
     await admin.query('DELETE FROM process_ai_messages WHERE tenant_id=$1', [tenant]);
+    await admin.query('DELETE FROM process_ai_requirements WHERE tenant_id=$1', [tenant]);
+    await admin.query('DELETE FROM process_ai_accepted_examples WHERE tenant_id=$1', [tenant]);
     await admin.query('DELETE FROM process_ai_revisions WHERE tenant_id=$1', [tenant]);
     if (sessionId) await admin.query('DELETE FROM process_ai_sessions WHERE tenant_id=$1', [tenant]);
     await admin.query('DELETE FROM process_ai_projects WHERE tenant_id=$1', [tenant]);
@@ -357,6 +385,8 @@ test('PostgreSQL repete o mesmo operationId quando a falha comprovadamente ocorr
     await app.close();
     await admin.query('DELETE FROM process_ai_generation_runs WHERE tenant_id=$1', [tenant]);
     await admin.query('DELETE FROM process_ai_messages WHERE tenant_id=$1', [tenant]);
+    await admin.query('DELETE FROM process_ai_requirements WHERE tenant_id=$1', [tenant]);
+    await admin.query('DELETE FROM process_ai_accepted_examples WHERE tenant_id=$1', [tenant]);
     await admin.query('DELETE FROM process_ai_revisions WHERE tenant_id=$1', [tenant]);
     if (sessionId) await admin.query('DELETE FROM process_ai_sessions WHERE tenant_id=$1', [tenant]);
     await admin.query('DELETE FROM process_ai_projects WHERE tenant_id=$1', [tenant]);
@@ -414,6 +444,8 @@ test('PostgreSQL replay de answers após resposta perdida devolve resultado, con
     const cleanup = new Pool({ connectionString: isolatedTestDatabase });
     await cleanup.query('DELETE FROM process_ai_generation_runs WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_messages WHERE tenant_id=$1', [tenant]);
+    await cleanup.query('DELETE FROM process_ai_requirements WHERE tenant_id=$1', [tenant]);
+    await cleanup.query('DELETE FROM process_ai_accepted_examples WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_revisions WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_sessions WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_projects WHERE tenant_id=$1', [tenant]);
@@ -456,6 +488,8 @@ test('PostgreSQL preserva resposta confirmada após falha do provider e permite 
     const cleanup = new Pool({ connectionString: isolatedTestDatabase });
     await cleanup.query('DELETE FROM process_ai_generation_runs WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_messages WHERE tenant_id=$1', [tenant]);
+    await cleanup.query('DELETE FROM process_ai_requirements WHERE tenant_id=$1', [tenant]);
+    await cleanup.query('DELETE FROM process_ai_accepted_examples WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_revisions WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_sessions WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_projects WHERE tenant_id=$1', [tenant]);
@@ -522,6 +556,8 @@ test('API recupera projeto, mensagens, run, revisão e artefatos do PostgreSQL a
     const cleanup = new Pool({ connectionString: isolatedTestDatabase });
     await cleanup.query('DELETE FROM process_ai_generation_runs WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_messages WHERE tenant_id=$1', [tenant]);
+    await cleanup.query('DELETE FROM process_ai_requirements WHERE tenant_id=$1', [tenant]);
+    await cleanup.query('DELETE FROM process_ai_accepted_examples WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_revisions WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_sessions WHERE tenant_id=$1', [tenant]);
     await cleanup.query('DELETE FROM process_ai_projects WHERE tenant_id=$1', [tenant]);

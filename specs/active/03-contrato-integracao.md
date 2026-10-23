@@ -24,9 +24,22 @@ Base URL desenvolvimento: `http://127.0.0.1:3333`
 | GET | `/api/v1/design-sessions/:id/revisions/:revision` | ProcessSpec e artefatos | Recupera revisão |
 | POST | `/api/v1/design-sessions/:id/revisions/:revision/accept` | revisão aceita | Controle otimista; 409 se `baseRevision` ficou obsoleta |
 | GET | `/api/v1/generation-runs/:id` | estado, resultado e métricas | Geração e uso persistidos |
-| GET | `/openapi.json` | OpenAPI 3.1, `info.version=1.1.0` | Fonte em `specs/contracts/process-ai-api.v1.openapi.json`; injeta schema ProcessSpec canônico |
+| GET | `/api/v1/design-sessions/:id/understanding` | fatos confirmados, perguntas pendentes, visão de negócio da revisão mais recente | Somente leitura (1.2.0); origem de cada item via `requirementProvenance` |
+| GET | `/api/v1/design-sessions/:id/telemetry` | custo, tokens, cache, latência e etapas por turno | Somente leitura (1.2.0); sem prompts; `costUsd` null quando o provedor não informa |
+| GET | `/api/v1/evaluation/scoreboard` | placar da avaliação offline por provider/modelo | Somente leitura (1.2.0); 404 sem avaliação; specs omitidos |
+| GET | `/api/v1/generation-runs/:id/events` | SSE: `stage`, depois `result` ou `error` | 1.3.0; usado com `Prefer: respond-async` nos POSTs de turno (202); barramento em processo, instância única |
+| PUT | `/api/v1/design-sessions/:id/requirements/:requirementId` | item do ledger | 1.4.0; veredito `confirmed`/`rejected`/`proposed` |
+| GET | `/api/v1/design-sessions/:id/revisions/:revision/diff` | `{from, to, changes, totals}` | 1.4.0; diff de negócio; `?against=` opcional |
+| POST | `/api/v1/design-sessions/:id/revisions/:revision/restore` | nova revisão proposta | 1.4.0; desfazer sem apagar histórico; exige `baseRevision` |
+| GET | `/openapi.json` | OpenAPI 3.1, `info.version=1.5.0` | Fonte em `specs/contracts/process-ai-api.v1.openapi.json`; injeta schema ProcessSpec canônico |
 
 `POST /api/v1/generate` retorna 200 para ProcessSpec válido e gera prévia mesmo quando há `requiredWhen`: o Form JSON mantém o campo opcional para form-js e aplica `conditional.hide` apenas à apresentação. A resposta inclui aviso `EXTERNAL_FORM_VALIDATION_REQUIRED` e manifest que marca artefato válido para prévia, validação externa necessária e publicação inelegível. A regra canônica continua em ProcessSpec e deve ser aplicada por `POST /api/v1/validate-form` antes de aceitar cada submissão. `@bpmn-io/form-js-viewer` 2.1.1 não garante `requiredWhen`.
+
+Desde 1.5.0, com `AUTH_MODE=oidc`, toda rota `/api/v1` exige `Authorization: Bearer <JWT>` do emissor configurado. O tenant vem da claim do token, nunca do navegador. As rotas de geração têm limite por pessoa (`TURN_RATE_LIMIT_PER_MINUTE`, resposta 429 `TURN_RATE_LIMITED`). Dados pessoais (CPF, CNPJ, e-mail, telefone) são mascarados na entrada (`PII_MASKING=on` por padrão). Toda chamada POST/PUT é auditada sem conteúdo em `process_ai_audit_events`.
+
+Desde 1.3.0, `POST /messages`, `/answers` e `/refinements` aceitam `Prefer: respond-async`: respondem 202 `{generationRunId, status: 'generating'}` assim que o run existe e o progresso segue por SSE. Sem o cabeçalho continuam síncronos.
+
+Desde 1.2.0, erros (`ApiError`) e turnos `validation-failed` trazem `recovery` opcional: categoria, título, mensagem para a pessoa usuária e ações sugeridas (`answer`, `rephrase`, `retry`, `wait`, `shorten`, `reload`, `contact-admin`). O campo `code` continua sendo o contrato para máquinas.
 
 `POST /api/v1/publication/validate` é somente uma simulação de guarda. Recebe `spec` e `runtimeCapabilities.conditionalFormValidation`; responde 422 se houver regra `requiredWhen` sem garantia declarada pelo runtime. Não publica processos. A publicação real está desabilitada nesta fase.
 

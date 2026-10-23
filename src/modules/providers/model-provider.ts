@@ -1,6 +1,7 @@
 import { ProviderCallBudgetLedger } from './call-budget-ledger.js';
 
-export type ProviderUsage = { inputTokens?: number; outputTokens?: number };
+/** `cachedInputTokens` and `costUsd` are reported only by providers that expose them. */
+export type ProviderUsage = { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; costUsd?: number };
 export type StructuredRequest = {
   model: string;
   system: string;
@@ -10,6 +11,8 @@ export type StructuredRequest = {
   contextTokens: number;
   maxOutputTokens: number;
   temperature?: number;
+  /** Length of the prompt's stable prefix (profile + knowledge); providers with prompt caching cache it separately. */
+  cacheablePrefixChars?: number;
   dataClassification?: 'synthetic' | 'public';
   captureDiagnosticResponse?: boolean;
   onTransportMetrics?: (metrics: { jsonBytes: number; messageCount: number; systemChars: number; systemBytes: number; promptChars: number; promptBytes: number; schemaChars: number; schemaBytes: number; estimatedInputTokens: number }) => void;

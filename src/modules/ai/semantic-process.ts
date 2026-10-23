@@ -1,3 +1,4 @@
+import type { ConfirmationSubject } from './confirmations.js';
 import { createHash } from 'node:crypto';
 import { readFoundationJson } from '../../shared/files.js';
 import { businessPatternForActivity } from './business-patterns.js';
@@ -151,8 +152,16 @@ export function semanticRefinementSchema(): Json {
   return { $schema: 'https://json-schema.org/draft/2020-12/schema', oneOf: [clarification, refinement] };
 }
 
+/**
+ * Who should resolve a compilation gap:
+ * - `needs-user`: information only the requester has;
+ * - `model-omission`: the requester stated it and the interpretation dropped it;
+ * - `model-divergence`: the interpretation added or named an element without literal support. The model is
+ *   corrected first; if that fails, the requester answers a yes/no question bound to `subject`.
+ */
+export type IntentGapOrigin = 'needs-user' | 'model-omission' | 'model-divergence';
 export class IntentCompilationError extends Error {
-  constructor(readonly question: string, message = question) { super(message); this.name = 'IntentCompilationError'; }
+  constructor(readonly question: string, message = question, readonly origin: IntentGapOrigin = 'needs-user', readonly subject?: ConfirmationSubject) { super(message); this.name = 'IntentCompilationError'; }
 }
 export class SemanticGroundingError extends Error {
   constructor(readonly status: 'divergent' | 'inconclusive', message: string) { super(message); this.name = 'SemanticGroundingError'; }
@@ -261,7 +270,7 @@ export async function compileBusinessIntent(value: BusinessIntentV1 | Json, opti
         addSuggestion(`A atividade “${activity.name}” não tem suporte literal suficiente e não foi incluída no fluxo confirmado.`, activity.evidence);
         if (grounding && grounding.status !== 'equivalent') throw new SemanticGroundingError(grounding.status, grounding.reason);
         ask(`A atividade “${activity.name}” deve fazer parte deste processo?`, `activity:${activity.name}`);
-        throw new IntentCompilationError(`A atividade “${activity.name}” não está sustentada por uma citação literal suficiente da conversa. Confirme se ela deve compor o fluxo.`);
+        throw unsupportedElement('activity', activity.name);
       }
       if (activity.kind === 'integration') {
         if (activitySource && !technicalIntent(activitySource)) throw new IntentCompilationError(`A atividade “${activity.name}” foi interpretada como integração técnica sem solicitação explícita. Confirme se há uma integração ou uma tarefa humana.`);
@@ -305,7 +314,7 @@ export async function compileBusinessIntent(value: BusinessIntentV1 | Json, opti
   const activities = await normalizeActivities(intent.activities || []);
   if (!activities.length) throw new IntentCompilationError('O modelo não identificou nenhuma atividade do processo que possa ser confirmada na descrição. Quais tarefas ou decisões devem fazer parte do fluxo?');
   if (hasExplicitDecision(activitySource) && !containsDecision(activities)) {
-    throw new IntentCompilationError('A descrição contém uma decisão explícita, mas o BusinessIntent não a representou como aprovação ou decisão com alternativas. Confirme como estruturar os ramos antes de gerar a prévia.');
+    { const question = 'A descrição contém uma decisão explícita, mas o BusinessIntent não a representou como aprovação ou decisão com alternativas. Confirme como estruturar os ramos antes de gerar a prévia.'; throw new IntentCompilationError(question, question, 'model-omission'); }
   }
   assertConditionalCoverage(activities, activitySource);
   const normalizedIntent = { kind: 'process_intent', name: intent.name, purpose: intent.purpose, actors: [...actors.values()], startFields, steps: activities };
@@ -355,9 +364,16 @@ export async function allowedOperationsSummary(): Promise<string> {
     `- ${connector.connectorId}/${operation.operationId}: capability=${operation.capability}, sideEffect=${operation.sideEffectLevel}`)).join('\n');
 }
 
-const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+export const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 function isRejectionReasonField(name: string): boolean {
   return /(?:motivo|reason|justific\w*|raz[aã]o).{0,40}(?:reprov|rejei)|(?:reprov|rejei).{0,40}(?:motivo|reason|justific\w*|raz[aã]o)/i.test(name);
+}
+/** One honest yes/no question per element without literal support, bound to the element so the answer counts. */
+function unsupportedElement(kind: ConfirmationSubject['kind'], name: string): IntentCompilationError {
+  const label = kind === 'activity' ? 'A etapa' : kind === 'field' ? 'O campo' : 'O participante';
+  const question = `${label} “${name}” não aparece com essas palavras no seu pedido. Ela deve fazer parte do processo? Responda sim ou não, ou descreva com suas palavras.`
+    .replace('Ela deve', kind === 'activity' ? 'Ela deve' : 'Ele deve');
+  return new IntentCompilationError(question, question, 'model-divergence', { kind, name });
 }
 const containsQuote = (context: string, quote: string) => normalized(context).includes(normalized(quote));
 function adequateQuote(context: string, quote?: string): boolean {
@@ -404,7 +420,7 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
   for (const actor of intent.actors as Json[]) {
     const key = normalized(actor.name);
     if (!key || roleIndex.has(key)) throw new IntentCompilationError(`Há mais de um ator chamado “${actor.name}”. Esclareça qual tarefa pertence a cada ator.`);
-    if (roleEvidenceText && !roleNameSupported(actor.name, roleEvidenceText)) throw new IntentCompilationError(`O papel “${actor.name}” não aparece na descrição das atividades. Ele corresponde a qual pessoa ou equipe descrita pelo solicitante?`);
+    if (roleEvidenceText && !roleNameSupported(actor.name, roleEvidenceText)) throw unsupportedElement('actor', actor.name);
     if (roleEvidenceText && actor.resolution !== 'requester' && initiatesRequest(actor.name, roleEvidenceText)) {
       actor.resolution = 'requester';
       const index = normalized(roleEvidenceText).indexOf(normalized(actor.name));
@@ -443,7 +459,7 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
     if (!selectedInputs.length) return undefined;
     if (activitySourceText) for (const input of selectedInputs) {
       if (!input.evidence && ['Decisão', 'Motivo da rejeição'].includes(input.name)) continue;
-      if (!input.evidence || !containsQuote(activitySourceText, input.evidence)) throw new IntentCompilationError(`O campo “${input.name}” não foi solicitado com clareza. Ele deve ser coletado neste formulário?`);
+      if (!input.evidence || !containsQuote(activitySourceText, input.evidence)) throw unsupportedElement('field', input.name);
     }
     const fields = selectedInputs.map(input => {
       const specType = fieldTypes[input.type];
@@ -474,9 +490,9 @@ export async function compileProcessIntent(intent: Json, options: { targetProfil
   const walk = (steps: StepIntent[]) => {
     for (const step of steps) {
       if (activitySourceText && (!step.evidence || !containsQuote(activitySourceText, step.evidence))) {
-        throw new IntentCompilationError(`A etapa “${step.name}” não está claramente descrita na solicitação. Ela deve existir como atividade do processo?`);
+        throw unsupportedElement('activity', step.name);
       }
-      if (activitySourceText && !stepEvidenceMatchesName(step.name, step.evidence)) throw new IntentCompilationError(`O trecho apresentado não confirma que a etapa “${step.name}” foi solicitada. Confirme a atividade ou corrija sua descrição.`);
+      if (activitySourceText && !stepEvidenceMatchesName(step.name, step.evidence)) throw unsupportedElement('activity', step.name);
       if (options.sourceText && step.evidence && step.actor && !containsQuote(step.evidence, step.actor)) {
         throw new IntentCompilationError(`A solicitação não liga “${step.actor}” à atividade “${step.name}”. Qual papel deve executá-la?`);
       }
@@ -678,14 +694,14 @@ function assertConditionalCoverage(activities: Json[], source: string): void {
     if (!match || !/receb|inform|comunic|registr|encaminh|envi|notific|analis|verific|aprova/i.test(match[2])) continue;
     const side = /^aprov/i.test(match[1]) ? 'approved' : 'rejected';
     const represented = evidenceByBranch[side].some(quote => adequateQuote(source, quote) && (containsQuote(match[2], quote) || containsQuote(quote, match[2]))) || (side === 'rejected' && rejectionReasonRepresented && /motivo|justific|raz[aã]o/i.test(match[2]) && /obrigatori|mandatory/i.test(match[2]));
-    if (!represented) throw new IntentCompilationError(`A consequência explícita do ramo ${side === 'approved' ? 'aprovado' : 'reprovado'} não foi preservada: “${match[2].trim()}”. Represente essa atividade no ramo correspondente.`);
+    if (!represented) { const question = `A consequência explícita do ramo ${side === 'approved' ? 'aprovado' : 'reprovado'} não foi preservada: “${match[2].trim()}”. Represente essa atividade no ramo correspondente.`; throw new IntentCompilationError(question, question, 'model-omission'); }
   }
 }
 function hasExplicitDecision(text: string): boolean {
   const choices = text.match(/\b(aprov(?:a|am|ar|ado|ada|ados|adas)|reprov(?:a|am|ar|ado|ada|ados|adas)|rejeit(?:a|am|ar|ado|ada|ados|adas)|approve[sd]?|reject(?:s|ed)?|accept(?:s|ed)?|decline[sd]?)\b/gi) || [];
   return choices.length >= 2;
 }
-function initiatesRequest(name: string, sourceText: string): boolean {
+export function initiatesRequest(name: string, sourceText: string): boolean {
   const role = normalized(name);
   const clause = sourceText.split(/[.!?;]/).map(normalized).find(candidate => candidate.includes(role));
   if (!role || !clause) return false;

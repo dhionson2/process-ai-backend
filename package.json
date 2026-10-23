@@ -20,12 +20,22 @@
     "generate:examples": "node --import tsx src/modules/generation/artifact-generator.ts",
     "evaluate:ollama": "node --env-file-if-exists=.env --import tsx scripts/evaluate-local-ollama.ts",
     "evaluate:business-intent": "node --env-file-if-exists=.env --import tsx scripts/evaluate-business-intent-ollama.ts",
-    "benchmark:groq": "node --env-file-if-exists=.env --import tsx scripts/benchmark-groq.ts"
+    "benchmark:groq": "node --env-file-if-exists=.env --import tsx scripts/benchmark-groq.ts",
+    "eval": "node --env-file-if-exists=.env --import tsx scripts/eval/run-eval.ts",
+    "eval:claude": "node --env-file-if-exists=.env --import tsx scripts/eval/run-eval.ts --provider claude-cli --model sonnet --approve-external",
+    "eval:scoreboard": "node --import tsx scripts/eval/run-eval.ts --rebuild",
+    "eval:replay": "node --import tsx scripts/eval/run-eval.ts --replay reports/eval/cassettes/claude-cli_sonnet.json --gate"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.132.1",
     "@fastify/cors": "^10.0.0",
+    "@fastify/rate-limit": "11.2.1",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "0.223.0",
+    "@opentelemetry/sdk-node": "0.223.0",
     "ajv": "^8.17.1",
     "fastify": "^5.0.0",
+    "jose": "6.2.12",
     "pg": "^8.23.1"
   },
   "devDependencies": {
