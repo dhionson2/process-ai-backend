@@ -490,27 +490,20 @@ test('orquestrador pergunta lacunas, valida ProcessSpec, gera artefatos e limita
   assert.ok(shadow?.details.coverage);
   assert.equal(Object.hasOwn(shadow!.details, 'findings'), false, 'shadow diagnostic retains aggregates only');
 
-  const refined = structuredClone(spec); refined.name = 'Solicitação de férias revisada';
-  const refineProvider = new QueueProvider([{ kind: 'refinement', changeSummary: 'Renomear mantendo o restante', operations: [{ kind: 'renameProcess', name: refined.name }] }]);
-  const refinement = await new AiOrchestrator(refineProvider, 'local-model', environment()).generate({ text: 'Renomeie o processo', history: [], currentSpec: spec });
-  assert.equal(refinement.kind, 'proposed_spec');
+  // Refinements replan the whole process from the same BusinessIntent contract; the current process is described in the prompt.
+  const renamedIntent = semanticVacationIntent(); renamedIntent.name = 'Solicitação de férias revisada';
+  const refineProvider = new QueueProvider([renamedIntent]);
+  const refinement = await new AiOrchestrator(refineProvider, 'local-model', environment()).generate({ text: 'Renomeie o processo para “Solicitação de férias revisada”', history: [], currentSpec: generated.spec, originalSource: { id: 'm1', text: supportedVacationRequest }, authoritativeUserMessages: [{ id: 'm1', text: supportedVacationRequest }] });
+  assert.equal(refinement.kind, 'proposed_spec', JSON.stringify(refinement));
   if (refinement.kind !== 'proposed_spec') throw new Error('Esperava proposta refinada');
-  assert.equal(refinement.spec.name, refined.name);
-  assert.deepEqual(refinement.spec.nodes, spec.nodes);
-  assert.deepEqual(refinement.spec.description, spec.description);
-  assert.equal((refineProvider.prompts[0].outputSchema as any).oneOf[1].properties.operations.items.oneOf.length, 4);
-
-  const unknownRole = new QueueProvider([{ kind: 'refinement', changeSummary: 'Aprovação adicional', operations: [{ kind: 'insertTaskAfter', afterActivity: 'Registrar férias no RH', task: { name: 'Segunda aprovação', actor: { name: 'Segundo gestor' } } }] }]);
-  const unresolved = await new AiOrchestrator(unknownRole, 'local-model', environment()).generate({ text: 'Adicionar segunda aprovação', history: [], currentSpec: spec });
-  assert.equal(unresolved.kind, 'need_clarification');
-  if (unresolved.kind !== 'need_clarification') throw new Error('Papel não resolvido deveria bloquear como pergunta');
-  assert.equal(unresolved.questions[0].blocking, true);
-
-  const ambiguousBranch = new QueueProvider([{ kind: 'refinement', changeSummary: 'Aprovação adicional', operations: [{ kind: 'insertTaskAfter', afterActivity: 'Analisar solicitação', task: { name: 'Segunda aprovação', actor: { name: 'Gestor aprovador', resolution: 'manager-of-requester' } } }] }]);
-  const ambiguous = await new AiOrchestrator(ambiguousBranch, 'local-model', environment()).generate({ text: 'Adicionar segunda aprovação', history: [], currentSpec: spec });
-  assert.equal(ambiguous.kind, 'need_clarification');
-  if (ambiguous.kind !== 'need_clarification') throw new Error('Inserção ramificada deveria bloquear como pergunta');
-  assert.match(ambiguous.questions[0].question, /ponto exato|ramificada/);
+  assert.equal(refinement.spec.name, 'Solicitação de férias revisada');
+  const stepNames = (value: any) => (value.nodes as any[]).filter(node => node.type !== 'startEvent').map(node => node.name);
+  assert.deepEqual(stepNames(refinement.spec), stepNames(generated.spec), 'replanejamento preserva as etapas (o evento inicial leva o nome do processo)');
+  assert.equal((refineProvider.prompts[0].outputSchema as any).oneOf[1].properties.kind.const, 'business_intent', 'mesmo contrato da primeira versão');
+  assert.match(refineProvider.prompts[0].prompt, /AJUSTE DE UM PROCESSO EXISTENTE/);
+  assert.match(refineProvider.prompts[0].prompt, /Processo atual, como está no editor/);
+  assert.match(refineProvider.prompts[0].prompt, /Descrição original do processo/);
+  assert.doesNotMatch(refineProvider.prompts[0].prompt, /"nodes":/, 'o processo atual vai resumido, não como JSON');
 
   const invalidSpec = structuredClone(spec); invalidSpec.flows[0].target = 'missing';
   const oneCall = new QueueProvider([semanticVacationIntent()]);
@@ -536,7 +529,8 @@ test('API persiste conversas, perguntas, runs e revisões; refinamento mantém a
   const spec = await fixture();
   const manuallyEdited = structuredClone(spec); manuallyEdited.description = 'Descrição manual preservada';
   const refined = structuredClone(manuallyEdited); refined.name = 'Solicitação de férias refinada';
-  const provider = new QueueProvider([clarification, semanticVacationIntent(), { kind: 'refinement', changeSummary: 'Nome refinado; descrição manual preservada', operations: [{ kind: 'renameProcess', name: refined.name }] }]);
+  const renamedIntent = semanticVacationIntent(); renamedIntent.name = refined.name;
+  const provider = new QueueProvider([clarification, semanticVacationIntent(), renamedIntent]);
   const repository = new InMemoryConversationRepository();
   const app = await buildApp(environment(), { conversationRepository: repository, modelProvider: provider });
   try {
@@ -565,13 +559,16 @@ test('API persiste conversas, perguntas, runs e revisões; refinamento mantém a
     assert.equal(accepted.json().status, 'accepted');
     assert.equal((await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}` })).json().status, 'accepted');
 
+    // The manual edit happens on the generated process (what the person sees), not on an unrelated spec.
+    const generatedSpec = (await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}/revisions/1` })).json().processSpec;
+    Object.assign(manuallyEdited, structuredClone(generatedSpec), { description: 'Descrição manual preservada' });
     const manual = await app.inject({ method: 'PUT', url: `/api/v1/design-sessions/${sessionId}/draft`, payload: { baseRevision: 1, processSpec: manuallyEdited } });
     assert.equal(manual.statusCode, 200);
     const acceptedManual = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/revisions/2/accept`, payload: { baseRevision: 1 } });
     assert.equal(acceptedManual.json().status, 'accepted');
     const refinement = await app.inject({ method: 'POST', url: `/api/v1/design-sessions/${sessionId}/refinements`, payload: { text: 'Renomeie o processo', baseRevision: 2 } });
-    assert.equal(refinement.statusCode, 200);
-    assert.equal(refinement.json().revision, 3);
+    assert.equal(refinement.statusCode, 200, refinement.body);
+    assert.equal(refinement.json().revision, 3, JSON.stringify(refinement.json()).slice(0, 600));
     const proposed = await app.inject({ method: 'GET', url: `/api/v1/design-sessions/${sessionId}/revisions/3` });
     assert.equal(proposed.json().processSpec.description, 'Descrição manual preservada');
     assert.equal(proposed.json().processSpec.name, 'Solicitação de férias refinada');

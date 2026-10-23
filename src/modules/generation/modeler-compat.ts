@@ -28,7 +28,29 @@ export const MODELER_COMPONENT_TYPES: ReadonlySet<string> = new Set([
   'checkbox', 'text', 'spacer', 'separator', 'table', 'group', 'dynamiclist', 'button',
 ]);
 
-export type ImportabilityReport = { importable: boolean; problems: string[] };
+export type ImportabilityReport = { importable: boolean; problems: string[]; notes: string[] };
+
+/**
+ * What the assistant hands to the Modeler's form editor. form-js itself renders `filepicker`, but the Modeler's
+ * remote-definition allowlist does not admit it (no upload in that product yet), so an attachment becomes a text
+ * field that says so. The extension applies the same projection before `apply-form`; keep both in step.
+ */
+export function projectFormForModeler(schema: unknown): { schema: unknown; notes: string[] } {
+  const notes: string[] = [];
+  const visit = (component: unknown): unknown => {
+    if (!component || typeof component !== 'object') return component;
+    const item = { ...(component as Record<string, unknown>) };
+    if (item.type === 'filepicker') {
+      notes.push(`campo de anexo “${String(item.label ?? item.key ?? '')}” entregue como texto: o editor de formulário do Modeler não aceita upload`);
+      item.type = 'textfield';
+      item.description = [item.description, 'Anexo (o upload será configurado no runtime; neste editor o campo é texto).'].filter(Boolean).join(' ');
+      delete item.multiple; delete item.accept;
+    }
+    if (Array.isArray(item.components)) item.components = item.components.map(visit);
+    return item;
+  };
+  return { schema: visit(schema), notes };
+}
 
 const moddle: Moddle = new (BpmnModdle as unknown as new () => Moddle)();
 
@@ -85,6 +107,11 @@ export function assessFormImportability(schema: unknown): string[] {
 /** One verdict for a whole revision: the BPMN plus every form must pass for the revision to be importable. */
 export async function assessModelerImportability(artifacts: Pick<GeneratedArtifacts, 'bpmnXml' | 'forms'>): Promise<ImportabilityReport> {
   const problems = (await assessBpmnImportability(artifacts.bpmnXml)).map(problem => `process.bpmn: ${problem}`);
-  for (const form of artifacts.forms) problems.push(...assessFormImportability(form.json).map(problem => `${form.id}.form.json: ${problem}`));
-  return { importable: problems.length === 0, problems };
+  const notes: string[] = [];
+  for (const form of artifacts.forms) {
+    const projected = projectFormForModeler(form.json);
+    notes.push(...projected.notes.map(note => `${form.id}.form.json: ${note}`));
+    problems.push(...assessFormImportability(projected.schema).map(problem => `${form.id}.form.json: ${problem}`));
+  }
+  return { importable: problems.length === 0, problems, notes };
 }

@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { buildApp } from '../src/app.js';
 import { readEnvironment } from '../src/config/env.js';
 import { FORM_SCHEMA_VERSION, generateArtifacts } from '../src/modules/generation/artifact-generator.js';
-import { assessBpmnImportability, assessFormImportability, assessModelerImportability, MAX_FORM_DEPTH } from '../src/modules/generation/modeler-compat.js';
+import { assessBpmnImportability, assessFormImportability, assessModelerImportability, MAX_FORM_DEPTH, projectFormForModeler } from '../src/modules/generation/modeler-compat.js';
 import { InMemoryConversationRepository } from '../src/modules/projects/conversation.repository.js';
 
 const example = async (id: string) => JSON.parse(await readFile(resolve('specs/foundation/examples', `${id}.json`), 'utf8'));
@@ -15,7 +15,7 @@ test('artefatos gerados são importáveis no Modeler: BPMN pela porta «Abrir»,
     const artifacts = await generateArtifacts(await example(id));
     assert.equal(artifacts.diagnostics.filter(item => item.severity === 'error').length, 0, id);
     const report = await assessModelerImportability(artifacts);
-    assert.deepEqual(report, { importable: true, problems: [] }, id);
+    assert.deepEqual(report, { importable: true, problems: [], notes: [] }, id);
     assert.match(artifacts.bpmnXml, /targetNamespace="http:\/\/bpmn\.io\/schema\/bpmn"/);
     assert.doesNotMatch(artifacts.bpmnXml, /xmlns:process-ai/, 'namespace de prévia não vai mais ao Modeler');
     assert.match(artifacts.bpmnXml, /xmlns:flowable="http:\/\/flowable\.org\/bpmn"/, 'flowable atravessa a validação do Modeler intacto');
@@ -40,6 +40,21 @@ test('regras do Modeler recusam o que o Modeler recusaria', async () => {
   for (let depth = 0; depth < MAX_FORM_DEPTH + 1; depth += 1) nested = { type: 'group', components: [nested] };
   assert.ok(assessFormImportability({ type: 'default', components: [nested] }).some(problem => /profundidade/.test(problem)));
   assert.deepEqual(assessFormImportability({ type: 'default', schemaVersion: 19, components: [{ type: 'textfield', key: 'a' }, { type: 'button', action: 'submit' }] }), []);
+});
+
+test('anexo (filepicker) vira texto na projeção para o Modeler, com nota; o resto do formulário não muda', async () => {
+  const schema = { type: 'default', schemaVersion: 19, components: [{ type: 'textfield', key: 'valor', label: 'Valor' }, { type: 'filepicker', key: 'comprovante', label: 'Comprovante', multiple: true }, { type: 'group', components: [{ type: 'filepicker', key: 'nf', label: 'Nota' }] }] };
+  const projected = projectFormForModeler(schema) as { schema: any; notes: string[] };
+  assert.equal(projected.notes.length, 2);
+  assert.equal(projected.schema.components[1].type, 'textfield');
+  assert.match(projected.schema.components[1].description, /Anexo/);
+  assert.equal(projected.schema.components[1].multiple, undefined);
+  assert.equal(projected.schema.components[2].components[0].type, 'textfield');
+  assert.equal(projected.schema.components[0].type, 'textfield');
+  assert.equal((schema.components[1] as any).type, 'filepicker', 'o original não é alterado');
+  const report = await assessModelerImportability({ bpmnXml: '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D"><bpmn:process id="P"/></bpmn:definitions>', forms: [{ id: 'f', json: schema }] });
+  assert.equal(report.importable, true, report.problems.join('; '));
+  assert.equal(report.notes.length, 2);
 });
 
 test('CORS: a origem fixa da extensão do Chrome é liberada quando listada em CORS_ORIGIN, inclusive no preflight com Prefer', async () => {
